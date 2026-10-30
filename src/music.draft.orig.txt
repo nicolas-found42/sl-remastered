@@ -1,0 +1,151 @@
+#pragma once
+
+#include "audio.hpp"
+
+#include <array>
+#include <filesystem>
+#include <memory>
+#include <string>
+#include <vector>
+
+// Call update regularly while a set is playing. Set numbers follow Sound.MUSIC_SET_*.
+class MusicPlayer {
+public:
+	static std::unique_ptr<MusicPlayer> create(const std::filesystem::path& dataRoot, std::string& error);
+	~MusicPlayer();
+	bool select(int set, std::string& error);
+	bool next(std::string& error);
+	bool previous(std::string& error);
+	bool setVolume(float volume, std::string& error);
+	bool update(std::string& error);
+	int selectedSet() const { return selected_; }
+	const std::filesystem::path* currentTrack() const;
+private:
+	struct Decoder;
+	MusicPlayer(std::unique_ptr<AudioOutput> output) : output_(std::move(output)) {}
+	bool openTrack(std::string& error);
+	std::unique_ptr<AudioOutput> output_;
+	std::unique_ptr<Decoder> decoder_;
+	std::array<std::vector<std::filesystem::path>, 4> tracks_;
+	std::array<size_t, 4> indices_{};
+	int selected_ = -1;
+	float volume_ = 1.0f;
+};
+#include "music.hpp"
+
+#include <AudioToolbox/AudioToolbox.h>
+#include <algorithm>
+#include <cctype>
+#include <cmath>
+#include <system_error>
+
+struct MusicPlayer::Decoder {
+	ExtAudioFileRef file = nullptr;
+	~Decoder() { if (file) ExtAudioFileDispose(file); }
+};
+
+MusicPlayer::~MusicPlayer() = default;
+
+std::unique_ptr<MusicPlayer> MusicPlayer::create(const std::filesystem::path& root, std::string& error) {
+	auto output = AudioOutput::create(error);
+	if (!output) return nullptr;
+	auto player = std::unique_ptr<MusicPlayer>(new MusicPlayer(std::move(output)));
+	const char* folders[] = {"Garage_Shop", "Roam_ride", "Race_chase", "Main_menu"};
+	for (size_t i = 0; i < player->tracks_.size(); ++i) {
+		std::error_code ec;
+		const auto folder = root / "music" / folders[i];
+		if (!std::filesystem::exists(folder, ec)) {
+			if (ec) { error = ec.message(); return nullptr; }
+			continue;
+		}
+		for (std::filesystem::directory_iterator it(folder, ec), end; !ec && it != end; it.increment(ec)) {
+			if (!it->is_regular_file(ec)) continue;
+			std::string ext = it->path().extension().string();
+			std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+			if (ext == ".mp3") player->tracks_[i].push_back(it->path());
+		}
+		if (ec) { error = ec.message(); return nullptr; }
+		std::sort(player->tracks_[i].begin(), player->tracks_[i].end());
+	}
+	error.clear();
+	return player;
+}
+
+const std::filesystem::path* MusicPlayer::currentTrack() const {
+	if (selected_ < 0 || tracks_[selected_].empty()) return nullptr;
+	return &tracks_[selected_][indices_[selected_]];
+}
+
+bool MusicPlayer::openTrack(std::string& error) {
+	decoder_.reset();
+	if (!output_->clear(error)) return false;
+	const auto* path = currentTrack();
+	if (!path || volume_ < 0.01f) { error.clear(); return true; }
+	auto decoder = std::make_unique<Decoder>();
+	const std::string name = path->string();
+	CFURLRef url = CFURLCreateFromFileSystemRepresentation(nullptr, reinterpret_cast<const UInt8*>(name.data()), static_cast<CFIndex>(name.size()), false);
+	if (!url) { error = "cannot create music file URL"; return false; }
+	OSStatus status = ExtAudioFileOpenURL(url, &decoder->file);
+	CFRelease(url);
+	if (status != noErr) { error = "cannot open music file: " + name; return false; }
+	AudioStreamBasicDescription format{};
+	format.mSampleRate = 48000;
+	format.mFormatID = kAudioFormatLinearPCM;
+	format.mFormatFlags = kAudioFormatFlagIsFloat | kAudioFormatFlagIsPacked;
+	format.mBytesPerPacket = format.mBytesPerFrame = 2 * sizeof(float);
+	format.mFramesPerPacket = 1;
+	format.mChannelsPerFrame = 2;
+	format.mBitsPerChannel = 32;
+	status = ExtAudioFileSetProperty(decoder->file, kExtAudioFileProperty_ClientDataFormat, sizeof(format), &format);
+	if (status != noErr) { error = "cannot decode music file: " + name; return false; }
+	decoder_ = std::move(decoder);
+	return output_->resume(error);
+}
+
+bool MusicPlayer::select(int set, std::string& error) {
+	if (set < 0 || set >= static_cast<int>(tracks_.size())) set = -1;
+	if (set == selected_) { error.clear(); return true; }
+	selected_ = set;
+	return openTrack(error);
+}
+
+bool MusicPlayer::next(std::string& error) {
+	if (selected_ < 0 || tracks_[selected_].empty()) { error.clear(); return true; }
+	indices_[selected_] = (indices_[selected_] + 1) % tracks_[selected_].size();
+	return openTrack(error);
+}
+
+bool MusicPlayer::previous(std::string& error) {
+	if (selected_ < 0 || tracks_[selected_].empty()) { error.clear(); return true; }
+	auto& index = indices_[selected_];
+	index = index == 0 ? tracks_[selected_].size() - 1 : index - 1;
+	return openTrack(error);
+}
+
+bool MusicPlayer::setVolume(float volume, std::string& error) {
+	if (!std::isfinite(volume)) { error = "invalid music volume"; return false; }
+	const bool wasMuted = volume_ < 0.01f;
+	volume_ = volume;
+	if (wasMuted != (volume_ < 0.01f)) return openTrack(error);
+	error.clear();
+	return true;
+}
+
+bool MusicPlayer::update(std::string& error) {
+	if (!decoder_) { error.clear(); return true; }
+	size_t queued = 0;
+	if (!output_->queuedSamples(queued, error)) return false;
+	if (queued > AudioOutput::maxQueuedSamples - 8192) { error.clear(); return true; }
+	float samples[8192];
+	AudioBufferList buffer{};
+	buffer.mNumberBuffers = 1;
+	buffer.mBuffers[0].mNumberChannels = 2;
+	buffer.mBuffers[0].mDataByteSize = sizeof(samples);
+	buffer.mBuffers[0].mData = samples;
+	UInt32 frames = 4096;
+	if (ExtAudioFileRead(decoder_->file, &frames, &buffer) != noErr) { error = "music decode failed"; return false; }
+	if (!frames) return next(error);
+	const size_t count = static_cast<size_t>(frames) * 2;
+	for (size_t i = 0; i < count; ++i) samples[i] *= volume_;
+	return output_->queue(samples, count, error);
+}

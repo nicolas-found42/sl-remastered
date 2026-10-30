@@ -1,0 +1,9 @@
+# Prelaunch game-data manifest
+
+`tools/parity/run_native.py` and `tools/wine/capture/run_capture.sh` now attempt a game-data manifest before starting the game. Native captures scan the supplied game root. Stock captures scan their private game copy after it is prepared. Each run stores `game-data-manifest.json` and records its SHA-256 and completion status in the launch metadata. Stock packaging checks that the stored manifest still matches its launch hash; it does not rescan or launch Wine.
+
+The manifest hashes every regular file encountered in the tree, excluding the top-level writable `save/`, capture `dumps/`, runtime logs, injected proxy DLLs, and the stock executable names. Exclusions and reasons are listed. Save data and the executed program have separate identities. Symlinks, non-regular files, read errors, observed changes, and limit hits are listed as errors and make `complete` false. Limits are 50,000 files, 20,000 directories, 2 GiB per file and 8 GiB total. The scan compares file identity, size and timestamps before and after reading and checks directories afterward; it is not an atomic filesystem snapshot and cannot prove the data did not change after launch. It is a prelaunch tree identity, not a trace of files the game actually read, nor a claim about files outside the game root.
+
+Run the standalone tool with `python3 -I tools/parity/diagnostic-data.py GAME_ROOT NEW_OUTPUT.json`. The output must not exist and must be outside both the game root and `ref/`. If a launch cannot capture a manifest, its metadata says unavailable; an incomplete scan says incomplete. Older runs cannot recover an initial data identity after the fact. Ordinary direct `startup_probe` runs do not yet capture this manifest: use the two scenario launchers above. Hashing once adds startup I/O; it is never done per frame.
+
+Run `python3 -I tools/parity/test_diagnostic_data.py` for the bounded scan and refusal checks.

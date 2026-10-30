@@ -1,0 +1,5 @@
+# Nearest crossing comparison
+
+Run `tools/parity/road-nearest/run.sh` from the repository root. It checks the reference fence before and after, creates a fresh `local/verify/road-nearest-docker.*` directory, checks the original executable fingerprint, and runs the original functions under Docker Wine. The helper checks the relevant code bytes before relocation, replaces the original reallocator, sets the x87 control word to `0x007f`, and uses synthetic pool and index structures.
+
+The city cases load both crossing pools from the real city road file using `0057ba20` and call `00581a00`. The edge cases supply synthetic crossing positions to test large finite distances, a near tie, a height boundary and an exact tie. Both sets compare the original selected index with the native function. They do not execute the top-level loader, a live ground event, or a complete game. This is a bounded comparison, not proof for all inputs. The native reader explicitly rejects non-finite coordinates and inputs; stock behavior for those values is not established here.

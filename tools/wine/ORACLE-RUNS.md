@@ -1,0 +1,9 @@
+# Original-code oracle evidence
+
+Each `tools/wine/*_oracle.sh` creates a fresh `local/verify/<name>.<random>` directory and prints it on standard error. It never reuses the old evidence directory. The core-pair script still reads the existing `local/verify/core-pair-oracle/corpus-data` fixture and manifest, copies them to the fresh run, and does not modify the source corpus. Mesh-mass builds in its run directory.
+
+`run_original_oracle.sh` creates a fresh `attempt.*` for each invocation and records the exact command, start time, process ID, timeout, status, return code, input hashes and output hashes in `attempt.*/run/status.json`. Raw helper stdout and stderr are retained there and forwarded to the caller after the process finishes. Existing wrapper redirections therefore still receive the helper's original output. Failed attempts and their data remain in place. The output directory must be outside `ref/`.
+
+The default deadline is 120 seconds; set `SLRR_ORACLE_TIMEOUT_SECONDS` to a positive number below 86400 to change it. On timeout the controller sends signals only to the helper's newly created process group and returns 124. Docker attempts additionally use a private container ID file and attempt to remove only that specific container. A process stuck in an uninterruptible system call may survive SIGKILL; `termination_pending` reports that state and the attempt must be treated as incomplete. Output may continue changing if such a process survives. No global Wine server or unrelated process is stopped. Native Wine boot also uses the controller; an existing prefix is reused only inside the caller's output directory.
+
+Run `python3 -I tests/oracle_controller_test.py` for fake success, failure, timeout, unrelated-process and reference-fence checks. `SLRR_ORACLE_BACKEND=docker` chooses Docker Wine; its results are not automatically equivalent to native Wine. The log records the Docker command and image tag, not an image digest.

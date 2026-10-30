@@ -1,0 +1,9 @@
+# Timed input for build/startup_probe --script. Seconds are measured from the start of the frame loop.
+# Window points (640x480 content area). The Free Ride label spans about x 345-447 at y 126.
+10 move 420 127
+12 shot @run/fr-hover.bmp
+13 down
+13.5 up
+16 shot @run/fr-after-03s.bmp
+25 shot @run/fr-after-12s.bmp
+40 shot @run/fr-after-27s.bmp

@@ -1,0 +1,225 @@
+#pragma once
+
+#include "car_config.hpp"
+#include "car_geometry.hpp"
+#include "car_wheel_geometry.hpp"
+#include "car_physics.hpp"
+#include <optional>
+#include "car_sfx_table.hpp"
+#include "owner_links.hpp"
+#include "resource_id.hpp"
+
+#include <array>
+#include <memory>
+#include <string>
+#include <string_view>
+#include <vector>
+
+class ResourceWorld;
+class GameWorld;
+struct ScriptNode;
+struct VmObject;
+
+struct CarResourceBinding {
+  CarResourceRequest request;
+  uint32_t id = 0;
+  OwnerLink owner;
+  ~CarResourceBinding();
+};
+
+enum class CarPrototypeStage { Initializing, PhysicsGeometryReady };
+
+struct CarCameraSettings {
+  float distanceScale;
+  float fieldOfViewScale;
+};
+
+struct CarPrototype {
+  OwnerLink source;
+  ~CarPrototype();
+  CarConfig config;
+  std::optional<CarCameraSettings> cameraSettings;
+  std::vector<std::unique_ptr<CarResourceBinding>> resources;
+  CarSfxTable engineUp, engineDown, exhaust;
+  std::vector<CarGeometryPrototype> geometry;
+  std::vector<CarWheelPrototype> wheels;
+  std::optional<CarGeometryPrototype> clickGeometry;
+  CarPrototypeStage stage = CarPrototypeStage::Initializing;
+  std::string configPath;
+  bool isCar = true;
+};
+
+struct RuntimeSlotState {
+  RuntimeSlotState() = default;
+  RuntimeSlotState(const RuntimeSlotState&) = delete;
+  RuntimeSlotState& operator=(const RuntimeSlotState&) = delete;
+  int32_t id = 0;
+  PartSlotState transform{};
+  CarVec3 orientation{};
+  int32_t slotType = 0;
+  int32_t damageMode = -1;
+  float deform = 1.0f;
+  uint32_t flags = 0;
+  OwnerLink attachedNode;
+  int32_t attachedSlotId = 0;
+  std::string damage;
+  ~RuntimeSlotState();
+};
+
+struct CarWheelExtraState {
+  float drive = 0.0f;
+  float steer = 0.0f;
+  float radius = 0.3f;
+  float friction = 1.0f;
+  float frictionX = 1.0f;
+  float sliction = 1.0f;
+  float stiffness = 10.0f;
+  float rollResistance = 0.015f;
+  float bearing = 0.0f;
+  float maxLoad = 8000.0f;
+  float loadSmooth = 0.5f;
+  std::array<float, 16> pacejka{};
+  float springForce = 20000.0f;
+  float dampingBump = 2000.0f;
+  float dampingRebound = 2000.0f;
+  float restLength = 0.3f;
+  float minLength = 0.1f;
+  float maxLength = 0.5f;
+  float brake = 0.0f;
+  float handBrake = 0.0f;
+  float width = 0.2f;
+  std::array<float, 3> contactPatch{};
+  std::array<float, 7> arm{};
+  std::array<float, 10> hub{};
+  int32_t oppositeWheel = -1;
+  std::array<float, 6> instantCenter{};
+  std::string damage;
+};
+
+struct CarSeat {
+  // Stock seat +0. FUN_00449680 uses this as the driver-camera record index.
+  int32_t cameraPreset = 0;
+  OwnerLink player, camera, renderInstance, osd;
+  // Stock seat +0x70. FUN_00449680 walks 0x40 of these. An empty slot has a
+  // null owner, and that is the only case where stock clears the cached id.
+  std::array<OwnerLink, 0x40> links{};
+  ~CarSeat();
+};
+
+// The look, move, and zoom FUN_0048ce30 queues on the seat camera.
+struct SeatCameraPose {
+  uint32_t target = 0;
+  std::array<float, 3> lookOffset{};
+  float lookValue = -1.0f;
+  std::array<float, 3> moveOffset{};
+  float moveDistance = 0;
+  std::array<float, 3> moveRotation{};
+  bool hasZoom = false;
+  float zoom = 0;
+};
+
+struct CarControlSnapshot {
+  // 0044e690 reads these floating axes before the integer axes.
+  std::array<float, 4> continuous{}; // axes 1, 0x1c, 0x1d, 0x30
+  std::array<int32_t, 7> digital{};  // axes 0x31, 0x1f, 0x32, 0x36, 7, 0x27, 0x28
+};
+std::optional<CarControlSnapshot> sampleCarControls(GameWorld& world, const CarSeat& seat);
+
+struct CarRuntimeInstance {
+  bool isCar = false;
+  OwnerLink prototypeSource;
+  OwnerLink carLink;
+  OwnerLink physicsRoot;
+  OwnerLink installParentLink;
+  // One stable seat per stock driver/controller record.
+  std::vector<std::unique_ptr<CarSeat>> seats;
+  // FUN_00448e60 writes these on the car. The mode is +0x1f30. The seat
+  // index (+0x1f34) and marker (+0x1f38) are written only when the mode is 1.
+  int32_t seatCameraMode = 0;
+  int32_t seatCameraSeat = 0;
+  int32_t seatCameraMarker = 0;
+  // Present after FUN_0048ce30 stores the pose. Empty until then.
+  std::optional<SeatCameraPose> seatCameraPose;
+  // FUN_00449680 writes 0 here, at car +0x1edc, after the osd branch.
+  int32_t activateInfo = 0;
+  // Stock car +0x13cc. FUN_0048ce30 writes this id into the look and move commands.
+  uint32_t cameraPoseTarget = 0;
+  CarSeat* findSeat(uint32_t playerId) const;
+  CarSeat* selectSeat(uint32_t playerId) const;
+  const VmObject* chassisObject = nullptr;
+  int32_t stateMode = 3;
+  int32_t wheelId = -1;
+  uint32_t partFlags = 0;
+  uint32_t usedSlots = 0;
+  int32_t colorIndex = 0;
+  uint32_t renderType = 0;
+  uint32_t textureId = 0;
+  uint32_t meshId = 0;
+  float wear = 1.0f;
+  float damageMultiplier = 1.0f;
+  float tear = 1.0f;
+  float maxWear = 1.0f;
+  float dynamicPrice = 0.0f;
+  float totalMass = 0.0f;
+  float driveTorque = 0.0f;
+  float sfxLoopParamA = 0.0f;
+  float sfxLoopParamB = 0.0f;
+  std::array<float, 3> cooling{};
+  float hornPitch = 1.0f;
+  int32_t hornIndex = 0;
+  float nitroPitch = 1.0f;
+  float sfxExhaustMinVol = 0.0f;
+  float steerWheelRadius = 0.2f;
+  float steerWheelLock = 1.0f;
+  float ackermann = 1.0f;
+  float crimeLevel = 0.0f;
+  bool cruiseControl = false;
+  std::array<float, 3> position{0.0f, 0.0f, 0.0f};
+  std::array<float, 3> ypr{0.0f, 0.0f, 0.0f};
+  std::array<float, 9> rotation{1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 1.0f};
+  std::array<float, 3> linearVelocity{0.0f, 0.0f, 0.0f};
+  std::array<float, 3> angularVelocity{0.0f, 0.0f, 0.0f};
+  std::vector<std::unique_ptr<RuntimeSlotState>> slots;
+  std::vector<std::unique_ptr<OwnerLink>> attachedParts;
+  std::unique_ptr<PartPhysics> partPhysics;
+  std::shared_ptr<CarPhysics> carPhysics;
+  int32_t suspendUpdate = 0;
+  float mileage = 0.0f;
+  std::array<float, 2> torqueScale{1.0f, 1.0f};
+  int32_t hornOn = 0;
+  int32_t transmissionMode = 0;
+  float steerHelp = 0.0f;
+  float asr = 0.0f;
+  float abs = 0.0f;
+  float diffLock = 0.0f;
+  float steeringState = 0.0f;
+  float brakeState = 0.0f;
+  float handbrakeState = 0.0f;
+  float throttleState = 0.0f;
+  float clutchState = 0.0f;
+  int32_t currentGear = 0;
+  float engineRpm = 0.0f;
+  float nitrous = 0.0f;
+  int32_t coolingFan = 0;
+  int32_t headlightsOn = 0;
+  int32_t flareState = 0;
+  CarSfxTable sfxEngineUp, sfxEngineDown, sfxExhaust;
+  std::array<const VmObject*, 16> wheelRefs{};
+  std::array<CarWheel, 16> wheelStates{};
+  std::array<CarWheelExtraState, 16> wheelExtras{};
+  std::array<float, 16> wheelSteeringAngles{};
+  ~CarRuntimeInstance();
+};
+
+// 0044f4e0 angle calculation only. A present wheel runtime represents the
+// stock suspension object, independent of whether a tire is fitted. Missing
+// suspension objects preserve the previous angle. No bodies are rotated or
+// woken by this isolated calculation.
+std::optional<std::array<float, 16>> calculateCarSteeringAngles(
+    const CarRuntimeInstance& car, const CarConfig& chassis);
+
+// Keeps successfully linked requests in result even when a later request is
+// unsupported. A false return never represents a usable complete car.
+bool loadCarPrototype(ResourceWorld& world, ScriptNode& source, const ResourceIdMapping& mapping,
+                      std::string_view text, std::unique_ptr<CarPrototype>& result,
+                      std::string& error, bool isCar = true);

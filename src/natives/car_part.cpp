@@ -1,0 +1,1422 @@
+#include "natives/car_part.hpp"
+
+#include "car_runtime.hpp"
+#include "natives/game_type.hpp"
+#include "natives/lang_string.hpp"
+#include "natives/resource_ref.hpp"
+#include "resource_world.hpp"
+#include "world_model.hpp"
+
+#include <algorithm>
+#include <array>
+#include <cmath>
+
+namespace {
+
+int32_t objectPtrHandle(const VmObject* object, VmArena* arena) {
+	if (!object || !arena) return 0;
+	for (const auto& field : object->fields)
+		if (field.name == "ptr" && field.descriptor == "I")
+			if (const auto* val = std::get_if<int32_t>(&field.value)) return *val;
+	return 0;
+}
+
+LinkOwner* linkedOwnerForObject(const VmObject* object, VmArena* arena) {
+	if (!object || !arena || !arena->gameState) return nullptr;
+	const int32_t handle = objectPtrHandle(object, arena);
+	if (handle <= 0) return nullptr;
+	const auto it = arena->gameState->bindings.find(handle);
+	return it == arena->gameState->bindings.end() || !it->second ? nullptr : it->second->link.owner;
+}
+
+WorldNode* worldNodeForObject(const VmObject* object, VmArena* arena) {
+	if (!arena || !arena->gameState || !arena->gameState->world) return nullptr;
+	auto& world = *arena->gameState->world;
+	if (auto* node = world.nodeFor(linkedOwnerForObject(object, arena))) return node;
+	return world.findByReceiver(object);
+}
+
+const CarPrototype* nodePrototype(const WorldNode* node, GameWorld& world) {
+	if (!node || !node->carInstance) return nullptr;
+	const uint32_t scriptId = node->carInstance->prototypeSource.cachedValue
+	                              ? node->carInstance->prototypeSource.cachedValue
+	                              : node->scriptLink.cachedValue;
+	if (auto* script = world.findScript(scriptId)) return script->car.get();
+	return nullptr;
+}
+
+float prototypeMass(const CarPrototype* proto) {
+	if (!proto) return 0.0f;
+	if (proto->config.centerMass > 0.0f) return proto->config.centerMass;
+	float sum = 0.0f;
+	for (const auto& body : proto->config.bodies)
+		if (body.kind == CarBodyRecord::Body && body.shape.mass > 0.0f) sum += body.shape.mass;
+	return sum;
+}
+
+struct PartAndCarNodes {
+	WorldNode* partNode = nullptr;
+	WorldNode* carNode = nullptr;
+	CarRuntimeInstance* partInst = nullptr;
+	CarRuntimeInstance* carInst = nullptr;
+};
+
+PartAndCarNodes resolvePartAndCar(const VmObject* receiver, VmArena* arena) {
+	PartAndCarNodes out;
+	if (!receiver || !arena || !arena->gameState || !arena->gameState->world) return out;
+	auto& world = *arena->gameState->world;
+	WorldNode* node = worldNodeForObject(receiver, arena);
+	if (!node) {
+		for (const auto& field : receiver->fields) {
+			if (field.name == "chassis" || field.name == "car") {
+				if (const auto* obj = std::get_if<const VmObject*>(&field.value); obj && *obj) {
+					node = worldNodeForObject(*obj, arena);
+					if (node) break;
+				}
+			}
+		}
+	}
+	if (!node) return out;
+	out.partNode = node;
+	out.partInst = node->carInstance.get();
+	if (node->nativeDevice == "car") {
+		out.carNode = node;
+		out.carInst = node->carInstance.get();
+		if (out.carInst && out.carInst->chassisObject) {
+			if (auto* chNode = worldNodeForObject(out.carInst->chassisObject, arena)) {
+				out.partNode = chNode;
+				out.partInst = chNode->carInstance.get();
+			}
+		}
+	} else {
+		const uint32_t carId = out.partInst ? out.partInst->carLink.cachedValue : 0;
+		if (carId != 0) out.carNode = world.findInstance(carId);
+		if (!out.carNode) out.carNode = world.nodeFor(node->sectorLink.owner);
+		if (!out.carNode) out.carNode = node;
+		out.carInst = out.carNode ? out.carNode->carInstance.get() : out.partInst;
+	}
+	return out;
+}
+
+const std::string* findInternedString(const VmArena* arena, const VmObject* obj) {
+	if (!arena || !obj) return nullptr;
+	for (const auto& entry : arena->strings)
+		if (entry.second == obj) return &entry.first;
+	return nullptr;
+}
+
+bool readVec3Object(const VmObject* obj, std::array<float, 3>& out) {
+	if (!obj) return false;
+	for (const auto& f : obj->fields) {
+		const auto* val = std::get_if<float>(&f.value);
+		if (!val) continue;
+		if (f.name == "x") out[0] = *val;
+		else if (f.name == "y") out[1] = *val;
+		else if (f.name == "z") out[2] = *val;
+	}
+	return true;
+}
+
+bool readYprObject(const VmObject* obj, std::array<float, 3>& out) {
+	if (!obj) return false;
+	for (const auto& f : obj->fields) {
+		const auto* val = std::get_if<float>(&f.value);
+		if (!val) continue;
+		if (f.name == "y") out[0] = *val;
+		else if (f.name == "p") out[1] = *val;
+		else if (f.name == "r") out[2] = *val;
+	}
+	return true;
+}
+
+const TufaClass* findClassByName(const std::vector<const TufaClass*>* classes, std::string_view name) {
+	if (!classes) return nullptr;
+	for (const auto* candidate : *classes)
+		if (candidate && candidate->name == name) return candidate;
+	return nullptr;
+}
+
+VmObject* allocateObjectWithPtr(std::string_view className, uint32_t word0, uint32_t word1, VmArena* arena,
+                                const std::vector<const TufaClass*>* classes) {
+	if (!arena || arena->objects.size() >= arena->limit) return nullptr;
+	if (arena->ensureClass) (void)arena->ensureClass(std::string(className));
+	const TufaClass* cls = findClassByName(classes, className);
+	auto obj = std::make_unique<VmObject>();
+	obj->runtimeClass = cls;
+	arena->resourceStates.push_back({obj.get(), {word0, word1, 0, 0}});
+	const auto handle = static_cast<int32_t>(arena->resourceStates.size());
+	obj->fields.push_back({"ptr", handle, "I"});
+	VmObject* raw = obj.get();
+	arena->objects.push_back(std::move(obj));
+	return raw;
+}
+
+struct ResolvedWheel {
+	CarWheel* wheel = nullptr;
+	CarWheelExtraState* extra = nullptr;
+};
+
+ResolvedWheel resolveWheel(const VmObject* receiver, VmArena* arena) {
+	ResolvedWheel out;
+	if (!receiver || !arena || !arena->gameState || !arena->gameState->world) return out;
+	const auto* state = nativeResourceState(receiver, arena);
+	if (!state) return out;
+	const uint32_t instanceId = state->words[0];
+	const uint32_t wheelIdx = state->words[1];
+	if (wheelIdx >= 16) return out;
+	WorldNode* node = arena->gameState->world->findInstance(instanceId);
+	if (!node || !node->carInstance) return out;
+	out.wheel = &node->carInstance->wheelStates[wheelIdx];
+	out.extra = &node->carInstance->wheelExtras[wheelIdx];
+	return out;
+}
+
+CarSfxTable* resolveSfxTable(const VmObject* receiver, VmArena* arena) {
+	if (!receiver || !arena || !arena->gameState || !arena->gameState->world) return nullptr;
+	const auto* state = nativeResourceState(receiver, arena);
+	if (!state) return nullptr;
+	const uint32_t instanceId = state->words[0];
+	const uint32_t tableIdx = state->words[1];
+	WorldNode* node = arena->gameState->world->findInstance(instanceId);
+	if (!node || !node->carInstance) return nullptr;
+	if (tableIdx == 0) return &node->carInstance->sfxEngineUp;
+	if (tableIdx == 1) return &node->carInstance->sfxEngineDown;
+	if (tableIdx == 2) return &node->carInstance->sfxExhaust;
+	return nullptr;
+}
+
+float getFloatField(const VmObject* obj, std::string_view name, float fallback = 0.0f) {
+	if (!obj) return fallback;
+	for (const auto& f : obj->fields) {
+		if (f.name == name) {
+			if (const auto* fv = std::get_if<float>(&f.value)) return *fv;
+			if (const auto* iv = std::get_if<int32_t>(&f.value)) return static_cast<float>(*iv);
+		}
+	}
+	return fallback;
+}
+
+void setFloatField(const VmObject* obj, std::string_view name, float value) {
+	if (!obj) return;
+	for (auto& f : obj->fields) {
+		if (f.name == name) {
+			if (f.descriptor == "I") f.value = static_cast<int32_t>(value);
+			else f.value = value;
+			return;
+		}
+	}
+}
+
+const VmObject* getObjectField(const VmObject* obj, std::string_view name) {
+	if (!obj) return nullptr;
+	for (const auto& f : obj->fields)
+		if (f.name == name)
+			if (const auto* ov = std::get_if<const VmObject*>(&f.value)) return *ov;
+	return nullptr;
+}
+
+} // namespace
+
+// --- java.game.parts.Part ---
+
+// 004684a0: java.game.parts.Part.getSlots ()I
+NativeResult partGetSlots(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                          const std::vector<const TufaClass*>*) {
+	if (!args.empty()) return std::string{"invalid Part.getSlots arguments"};
+	const auto resolved = resolvePartAndCar(receiver, arena);
+	if (!resolved.partInst) return VmValue{int32_t{0}};
+	return VmValue{static_cast<int32_t>(resolved.partInst->slots.size())};
+}
+
+// 00468570: java.game.parts.Part.getSlotID (I)I
+NativeResult partGetSlotId(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                           const std::vector<const TufaClass*>*) {
+	if (args.size() != 1 || !std::holds_alternative<int32_t>(args[0]))
+		return std::string{"invalid Part.getSlotID arguments"};
+	const int32_t index = std::get<int32_t>(args[0]);
+	const auto resolved = resolvePartAndCar(receiver, arena);
+	if (!resolved.partInst) return VmValue{int32_t{0}};
+	const auto& slots = resolved.partInst->slots;
+	if (index < 0) {
+		for (const auto& slot : slots)
+			if (slot && (slot->flags & 1u) != 0) return VmValue{slot->id};
+		return VmValue{int32_t{0}};
+	}
+	if (static_cast<size_t>(index) < slots.size() && slots[static_cast<size_t>(index)])
+		return VmValue{slots[static_cast<size_t>(index)]->id};
+	return VmValue{int32_t{0}};
+}
+
+// 004686e0: java.game.parts.Part.getSlotIndex (I)I
+NativeResult partGetSlotIndex(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                              const std::vector<const TufaClass*>*) {
+	if (args.size() != 1 || !std::holds_alternative<int32_t>(args[0]))
+		return std::string{"invalid Part.getSlotIndex arguments"};
+	const int32_t slotId = std::get<int32_t>(args[0]);
+	const auto resolved = resolvePartAndCar(receiver, arena);
+	if (!resolved.partInst) return VmValue{int32_t{0}};
+	const auto& slots = resolved.partInst->slots;
+	for (size_t i = 0; i < slots.size(); ++i)
+		if (slots[i] && slots[i]->id == slotId) return VmValue{static_cast<int32_t>(i)};
+	return VmValue{int32_t{0}};
+}
+
+// 004687f0: java.game.parts.Part.partOnSlot (I)Ljava.game.parts.Part;
+NativeResult partPartOnSlot(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                            const std::vector<const TufaClass*>*) {
+	if (args.size() != 1 || !std::holds_alternative<int32_t>(args[0]))
+		return std::string{"invalid Part.partOnSlot arguments"};
+	const int32_t slotId = std::get<int32_t>(args[0]);
+	const auto resolved = resolvePartAndCar(receiver, arena);
+	if (!resolved.partNode || !resolved.partInst || !arena->gameState || !arena->gameState->world)
+		return VmValue{static_cast<const VmObject*>(nullptr)};
+	if (slotId == -1) return VmValue{resolved.partNode->scriptReceiver};
+	for (const auto& slot : resolved.partInst->slots) {
+		if (slot && slot->id == slotId) {
+			if (auto* otherNode = arena->gameState->world->nodeFor(slot->attachedNode.owner))
+				return VmValue{otherNode->scriptReceiver};
+			break;
+		}
+	}
+	return VmValue{static_cast<const VmObject*>(nullptr)};
+}
+
+// 00468990: java.game.parts.Part.slotIDOnSlot (I)I
+NativeResult partSlotIdOnSlot(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                              const std::vector<const TufaClass*>*) {
+	if (args.size() != 1 || !std::holds_alternative<int32_t>(args[0]))
+		return std::string{"invalid Part.slotIDOnSlot arguments"};
+	const int32_t slotId = std::get<int32_t>(args[0]);
+	const auto resolved = resolvePartAndCar(receiver, arena);
+	if (!resolved.partInst) return VmValue{int32_t{0}};
+	for (const auto& slot : resolved.partInst->slots)
+		if (slot && slot->id == slotId) return VmValue{slot->attachedSlotId};
+	return VmValue{int32_t{0}};
+}
+
+// 00468ab0: java.game.parts.Part.getSlotDamage (I)Ljava.lang.String;
+NativeResult partGetSlotDamage(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                               const std::vector<const TufaClass*>* classes) {
+	if (args.size() != 1 || !std::holds_alternative<int32_t>(args[0]))
+		return std::string{"invalid Part.getSlotDamage arguments"};
+	const int32_t index = std::get<int32_t>(args[0]);
+	const auto resolved = resolvePartAndCar(receiver, arena);
+	if (!resolved.partInst || index < 0 || static_cast<size_t>(index) >= resolved.partInst->slots.size() ||
+	    !resolved.partInst->slots[static_cast<size_t>(index)])
+		return VmValue{static_cast<const VmObject*>(nullptr)};
+	const auto& dmg = resolved.partInst->slots[static_cast<size_t>(index)]->damage;
+	if (dmg.empty()) return VmValue{static_cast<const VmObject*>(nullptr)};
+	return internStringResult(dmg, arena, classes);
+}
+
+// 00468c50: java.game.parts.Part.setSlotDamage (ILjava.lang.String;)V
+NativeResult partSetSlotDamage(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                               const std::vector<const TufaClass*>*) {
+	if (args.size() != 2 || !std::holds_alternative<int32_t>(args[0]) ||
+	    !std::holds_alternative<const VmObject*>(args[1]))
+		return std::string{"invalid Part.setSlotDamage arguments"};
+	const int32_t index = std::get<int32_t>(args[0]);
+	const auto* strObj = std::get<const VmObject*>(args[1]);
+	const auto resolved = resolvePartAndCar(receiver, arena);
+	if (resolved.partInst && index >= 0 && static_cast<size_t>(index) < resolved.partInst->slots.size() &&
+	    resolved.partInst->slots[static_cast<size_t>(index)]) {
+		const auto* text = findInternedString(arena, strObj);
+		resolved.partInst->slots[static_cast<size_t>(index)]->damage = text ? *text : "";
+	}
+	return std::monostate{};
+}
+
+// 00468df0: java.game.parts.Part.setSlotPos (ILjava.lang.Vector3;Ljava.lang.Ypr;)V
+NativeResult partSetSlotPos(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                            const std::vector<const TufaClass*>*) {
+	if (args.size() != 3 || !std::holds_alternative<int32_t>(args[0]) ||
+	    !std::holds_alternative<const VmObject*>(args[1]) || !std::holds_alternative<const VmObject*>(args[2]))
+		return std::string{"invalid Part.setSlotPos arguments"};
+	const int32_t slotId = std::get<int32_t>(args[0]);
+	const auto* posObj = std::get<const VmObject*>(args[1]);
+	const auto* yprObj = std::get<const VmObject*>(args[2]);
+	const auto resolved = resolvePartAndCar(receiver, arena);
+	if (!resolved.partInst || !arena->gameState || !arena->gameState->world) return std::monostate{};
+	const auto* proto = nodePrototype(resolved.partNode, *arena->gameState->world);
+	for (size_t i = 0; i < resolved.partInst->slots.size(); ++i) {
+		auto& slot = resolved.partInst->slots[i];
+		if (slot && slot->id == slotId) {
+			if (proto && i < proto->config.slots.size()) {
+				slot->transform = proto->config.slots[i].state;
+				slot->orientation = proto->config.slots[i].orientation;
+			}
+			std::array<float, 3> pos{0.0f, 0.0f, 0.0f};
+			if (readVec3Object(posObj, pos)) {
+				slot->transform.position[0] += pos[0];
+				slot->transform.position[1] += pos[1];
+				slot->transform.position[2] += pos[2];
+			}
+			std::array<float, 3> ypr{0.0f, 0.0f, 0.0f};
+			if (readYprObject(yprObj, ypr)) slot->orientation = ypr;
+			break;
+		}
+	}
+	return std::monostate{};
+}
+
+// 004690a0: java.game.parts.Part.getCar ()I
+NativeResult partGetCar(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                        const std::vector<const TufaClass*>*) {
+	if (!args.empty()) return std::string{"invalid Part.getCar arguments"};
+	const auto resolved = resolvePartAndCar(receiver, arena);
+	if (!resolved.partNode) return VmValue{int32_t{0}};
+	if (resolved.partInst && resolved.partInst->carLink.cachedValue != 0)
+		return VmValue{static_cast<int32_t>(resolved.partInst->carLink.cachedValue)};
+	if (resolved.carNode) return VmValue{static_cast<int32_t>(resolved.carNode->instanceId)};
+	return VmValue{static_cast<int32_t>(resolved.partNode->instanceId)};
+}
+
+// 00469120: java.game.parts.Part.getCarRef ()Ljava.game.parts.Part;
+NativeResult partGetCarRef(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                           const std::vector<const TufaClass*>*) {
+	if (!args.empty()) return std::string{"invalid Part.getCarRef arguments"};
+	const auto resolved = resolvePartAndCar(receiver, arena);
+	if (resolved.carInst && resolved.carInst->chassisObject)
+		return VmValue{resolved.carInst->chassisObject};
+	if (resolved.carNode && resolved.carNode->scriptReceiver)
+		return VmValue{resolved.carNode->scriptReceiver};
+	return VmValue{static_cast<const VmObject*>(nullptr)};
+}
+
+// 004691f0: java.game.parts.Part.getWheelID ()I
+NativeResult partGetWheelId(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                            const std::vector<const TufaClass*>*) {
+	if (!args.empty()) return std::string{"invalid Part.getWheelID arguments"};
+	const auto resolved = resolvePartAndCar(receiver, arena);
+	if (!resolved.partInst) return VmValue{int32_t{-1}};
+	if (resolved.partInst->wheelId >= 0) return VmValue{resolved.partInst->wheelId};
+	for (const auto& slot : resolved.partInst->slots) {
+		if (slot && (slot->flags & 1u) != 0 && slot->attachedSlotId > 100 && slot->attachedSlotId < 401)
+			return VmValue{static_cast<int32_t>((slot->attachedSlotId - 101) % 10)};
+	}
+	return VmValue{int32_t{-1}};
+}
+
+// 00469290: java.game.parts.Part.getMass ()F
+NativeResult partGetMass(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                         const std::vector<const TufaClass*>*) {
+	if (!args.empty()) return std::string{"invalid Part.getMass arguments"};
+	const auto resolved = resolvePartAndCar(receiver, arena);
+	if (resolved.partNode && arena && arena->gameState && arena->gameState->world) {
+		const float m = prototypeMass(nodePrototype(resolved.partNode, *arena->gameState->world));
+		if (m > 0.0f) return VmValue{m};
+	}
+	return VmValue{0.0f};
+}
+
+// 00469340: java.game.parts.Part.getWear ()F
+NativeResult partGetWear(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                         const std::vector<const TufaClass*>*) {
+	if (!args.empty()) return std::string{"invalid Part.getWear arguments"};
+	const auto resolved = resolvePartAndCar(receiver, arena);
+	return VmValue{resolved.partInst ? resolved.partInst->wear : 1.0f};
+}
+
+// 00469420: java.game.parts.Part.setWear (F)F
+NativeResult partSetWear(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                         const std::vector<const TufaClass*>*) {
+	if (args.size() != 1 || !std::holds_alternative<float>(args[0]))
+		return std::string{"invalid Part.setWear arguments"};
+	const float val = std::get<float>(args[0]);
+	const auto resolved = resolvePartAndCar(receiver, arena);
+	if (resolved.partInst) resolved.partInst->wear = val;
+	return VmValue{val};
+}
+
+// 00469500: java.game.parts.Part.setMaxWear (F)V
+NativeResult partSetMaxWear(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                            const std::vector<const TufaClass*>*) {
+	if (args.size() != 1 || !std::holds_alternative<float>(args[0]))
+		return std::string{"invalid Part.setMaxWear arguments"};
+	const float val = std::get<float>(args[0]);
+	const auto resolved = resolvePartAndCar(receiver, arena);
+	if (resolved.partInst) resolved.partInst->maxWear = val;
+	return std::monostate{};
+}
+
+// 004695d0: java.game.parts.Part.getTear ()F
+NativeResult partGetTear(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                         const std::vector<const TufaClass*>*) {
+	if (!args.empty()) return std::string{"invalid Part.getTear arguments"};
+	const auto resolved = resolvePartAndCar(receiver, arena);
+	return VmValue{resolved.partInst ? resolved.partInst->tear : 1.0f};
+}
+
+// 004696a0: java.game.parts.Part.setTear (F)F
+NativeResult partSetTear(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                         const std::vector<const TufaClass*>*) {
+	if (args.size() != 1 || !std::holds_alternative<float>(args[0]))
+		return std::string{"invalid Part.setTear arguments"};
+	const float val = std::get<float>(args[0]);
+	const auto resolved = resolvePartAndCar(receiver, arena);
+	if (resolved.partInst) resolved.partInst->tear = val;
+	return VmValue{val};
+}
+
+// 00469770: java.game.parts.Part.disableSlot (II)V
+NativeResult partDisableSlot(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                             const std::vector<const TufaClass*>*) {
+	if (args.size() != 2 || !std::holds_alternative<int32_t>(args[0]) || !std::holds_alternative<int32_t>(args[1]))
+		return std::string{"invalid Part.disableSlot arguments"};
+	const int32_t slotId = std::get<int32_t>(args[0]);
+	const int32_t mode = std::get<int32_t>(args[1]);
+	const auto resolved = resolvePartAndCar(receiver, arena);
+	if (!resolved.partInst || !arena->gameState || !arena->gameState->world) return std::monostate{};
+	const auto applyMode = [mode](RuntimeSlotState& slot) {
+		slot.flags &= ~0x50u;
+		if (mode == 1) slot.flags |= 0x10u;
+		else if (mode == 2) slot.flags |= 0x50u;
+	};
+	for (auto& slot : resolved.partInst->slots) {
+		if (slot && slot->id == slotId) {
+			applyMode(*slot);
+			if (auto* otherNode = arena->gameState->world->nodeFor(slot->attachedNode.owner)) {
+				if (otherNode->carInstance) {
+					for (auto& otherSlot : otherNode->carInstance->slots)
+						if (otherSlot && otherSlot->id == slot->attachedSlotId) applyMode(*otherSlot);
+				}
+			}
+			break;
+		}
+	}
+	return std::monostate{};
+}
+
+// 00469970: java.game.parts.Part.isSlotDisabled (I)I
+NativeResult partIsSlotDisabled(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                                const std::vector<const TufaClass*>*) {
+	if (args.size() != 1 || !std::holds_alternative<int32_t>(args[0]))
+		return std::string{"invalid Part.isSlotDisabled arguments"};
+	const int32_t slotId = std::get<int32_t>(args[0]);
+	const auto resolved = resolvePartAndCar(receiver, arena);
+	if (!resolved.partInst) return VmValue{int32_t{0}};
+	for (const auto& slot : resolved.partInst->slots) {
+		if (slot && slot->id == slotId) {
+			if ((slot->flags & 0x40u) != 0) return VmValue{int32_t{2}};
+			if ((slot->flags & 0x10u) != 0) return VmValue{int32_t{1}};
+			return VmValue{int32_t{0}};
+		}
+	}
+	return VmValue{int32_t{0}};
+}
+
+// 00469ab0: java.game.parts.Part.getTexture ()I
+NativeResult partGetTexture(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                            const std::vector<const TufaClass*>*) {
+	if (!args.empty()) return std::string{"invalid Part.getTexture arguments"};
+	const auto resolved = resolvePartAndCar(receiver, arena);
+	return VmValue{resolved.partInst ? static_cast<int32_t>(resolved.partInst->textureId) : int32_t{0}};
+}
+
+// 00469b80: java.game.parts.Part.setTexture (I)I
+NativeResult partSetTexture(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                            const std::vector<const TufaClass*>*) {
+	if (args.size() != 1 || !std::holds_alternative<int32_t>(args[0]))
+		return std::string{"invalid Part.setTexture arguments"};
+	const auto texId = static_cast<uint32_t>(std::get<int32_t>(args[0]));
+	const auto resolved = resolvePartAndCar(receiver, arena);
+	if (resolved.partInst) resolved.partInst->textureId = texId;
+	return VmValue{int32_t{1}};
+}
+
+// 00469cc0: java.game.parts.Part.getMesh ()I
+NativeResult partGetMesh(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                         const std::vector<const TufaClass*>*) {
+	if (!args.empty()) return std::string{"invalid Part.getMesh arguments"};
+	const auto resolved = resolvePartAndCar(receiver, arena);
+	return VmValue{resolved.partInst ? static_cast<int32_t>(resolved.partInst->meshId) : int32_t{0}};
+}
+
+// 00469d90: java.game.parts.Part.setMesh (I)I
+NativeResult partSetMesh(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                         const std::vector<const TufaClass*>*) {
+	if (args.size() != 1 || !std::holds_alternative<int32_t>(args[0]))
+		return std::string{"invalid Part.setMesh arguments"};
+	const auto meshId = static_cast<uint32_t>(std::get<int32_t>(args[0]));
+	const auto resolved = resolvePartAndCar(receiver, arena);
+	if (resolved.partInst) resolved.partInst->meshId = meshId;
+	return VmValue{int32_t{1}};
+}
+
+// 00469ed0: java.game.parts.Part.getRenderType ()I
+NativeResult partGetRenderType(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                               const std::vector<const TufaClass*>*) {
+	if (!args.empty()) return std::string{"invalid Part.getRenderType arguments"};
+	const auto resolved = resolvePartAndCar(receiver, arena);
+	return VmValue{resolved.partInst ? static_cast<int32_t>(resolved.partInst->renderType) : int32_t{0}};
+}
+
+// 00469fa0: java.game.parts.Part.setRenderType (I)I
+NativeResult partSetRenderType(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                               const std::vector<const TufaClass*>*) {
+	if (args.size() != 1 || !std::holds_alternative<int32_t>(args[0]))
+		return std::string{"invalid Part.setRenderType arguments"};
+	const auto renderId = static_cast<uint32_t>(std::get<int32_t>(args[0]));
+	const auto resolved = resolvePartAndCar(receiver, arena);
+	if (resolved.partInst) resolved.partInst->renderType = renderId;
+	return VmValue{int32_t{1}};
+}
+
+// 0046a0e0: java.game.parts.Part.getLogo ()I
+NativeResult partGetLogo(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                         const std::vector<const TufaClass*>*) {
+	if (!args.empty()) return std::string{"invalid Part.getLogo arguments"};
+	const auto resolved = resolvePartAndCar(receiver, arena);
+	if (resolved.partNode && arena && arena->gameState && arena->gameState->world) {
+		if (const auto* proto = nodePrototype(resolved.partNode, *arena->gameState->world)) {
+			for (const auto& res : proto->resources)
+				if (res && res->request.directive == "logo") return VmValue{static_cast<int32_t>(res->id)};
+		}
+	}
+	return VmValue{int32_t{0}};
+}
+
+// 0046a1b0: java.game.parts.Part.setSfxLoopParams (FF)I
+NativeResult partSetSfxLoopParams(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                                  const std::vector<const TufaClass*>*) {
+	if (args.size() != 2 || !std::holds_alternative<float>(args[0]) || !std::holds_alternative<float>(args[1]))
+		return std::string{"invalid Part.setSfxLoopParams arguments"};
+	const auto resolved = resolvePartAndCar(receiver, arena);
+	if (resolved.partInst) {
+		resolved.partInst->sfxLoopParamA = std::get<float>(args[0]);
+		resolved.partInst->sfxLoopParamB = std::get<float>(args[1]);
+	}
+	return VmValue{int32_t{1}};
+}
+
+// 0046a5a0: java.game.parts.Part.flap (I)I
+NativeResult partFlap(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                      const std::vector<const TufaClass*>*) {
+	if (args.size() != 1 || !std::holds_alternative<int32_t>(args[0]))
+		return std::string{"invalid Part.flap arguments"};
+	const auto resolved = resolvePartAndCar(receiver, arena);
+	if (!resolved.partInst) return VmValue{int32_t{-1}};
+	return VmValue{int32_t{0}};
+}
+
+// 0046a680: java.game.parts.Part.install_OK (Ljava.util.resource.GameRef;ILjava.util.resource.GameRef;ILjava.lang.Vector3;)[I
+NativeResult partInstallOk(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                           const std::vector<const TufaClass*>*) {
+	if (args.size() != 5 || !std::holds_alternative<const VmObject*>(args[0]) ||
+	    !std::holds_alternative<int32_t>(args[1]) || !std::holds_alternative<const VmObject*>(args[2]) ||
+	    !std::holds_alternative<int32_t>(args[3]) || !std::holds_alternative<const VmObject*>(args[4]))
+		return std::string{"invalid Part.install_OK arguments"};
+	const auto* targetParentObj = std::get<const VmObject*>(args[0]);
+	const auto* targetOutObj = std::get<const VmObject*>(args[2]);
+	int32_t targetSlotId = std::get<int32_t>(args[3]);
+	if (!targetParentObj || !arena || !arena->gameState || !arena->gameState->world)
+		return VmValue{static_cast<const VmObject*>(nullptr)};
+	const auto resolved = resolvePartAndCar(receiver, arena);
+	WorldNode* parentNode = worldNodeForObject(targetParentObj, arena);
+	if (!resolved.partNode || !parentNode) return VmValue{static_cast<const VmObject*>(nullptr)};
+	WorldNode* actualTarget = parentNode;
+	// 0046a680 reads an optional Vector3 through FUN_0042a560 and passes it to
+	// 00473b10, which keeps the nearest candidate slot instead of the first.
+	std::array<float, 3> preferred{};
+	bool hasPreferred = false;
+	if (const auto* vector = std::get<const VmObject*>(args[4])) {
+		const char* const xyz[] = {"x", "y", "z"};
+		int found = 0;
+		for (size_t i = 0; i < 3; ++i)
+			for (const auto& field : vector->fields)
+				if (field.name == xyz[i] && field.descriptor == "F")
+					if (const auto* value = std::get_if<float>(&field.value)) {
+						preferred[i] = *value;
+						++found;
+					}
+		hasPreferred = found == 3;
+	}
+	const int32_t foundPartSlot = carPartFindCompatibleSlot(
+	    *resolved.partNode, actualTarget, targetSlotId, *arena->gameState->world,
+	    hasPreferred ? &preferred : nullptr);
+	if (foundPartSlot == 0 || !actualTarget) return VmValue{static_cast<const VmObject*>(nullptr)};
+	if (targetOutObj) {
+		if (auto* dstState = nativeResourceState(targetOutObj, arena)) {
+			const auto dstHandle = static_cast<int32_t>(dstState - arena->resourceStates.data()) + 1;
+			auto& slot = arena->gameState->bindings[dstHandle];
+			if (!slot) slot = std::make_unique<ReceiverBinding>();
+			setLinkOwner(slot->link, actualTarget);
+			dstState->words[2] = slot->link.cachedValue;
+		}
+	}
+	if (arena->objects.size() >= arena->limit) return VmValue{static_cast<const VmObject*>(nullptr)};
+	auto arr = std::make_unique<VmObject>();
+	arr->arrayDescriptor = "[I";
+	arr->arrayElements = {VmValue{foundPartSlot}, VmValue{targetSlotId}};
+	const VmObject* raw = arr.get();
+	arena->objects.push_back(std::move(arr));
+	return VmValue{raw};
+}
+
+// --- java.game.parts.DynoData ---
+
+// 0046a960: java.game.parts.DynoData.newNative ()V
+NativeResult dynoDataNewNative(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                               const std::vector<const TufaClass*>*) {
+	if (!args.empty() || !receiver || !arena) return std::string{"invalid DynoData.newNative"};
+	for (auto& field : receiver->fields) {
+		if (field.name == "ptr" && field.descriptor == "I") {
+			if (const auto* h = std::get_if<int32_t>(&field.value); h && *h == 0) {
+				arena->resourceStates.push_back({receiver, {}});
+				field.value = static_cast<int32_t>(arena->resourceStates.size());
+			}
+			break;
+		}
+	}
+	return std::monostate{};
+}
+
+// 0046a9c0: java.game.parts.DynoData.deleteNative ()V
+NativeResult dynoDataDeleteNative(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                                  const std::vector<const TufaClass*>*) {
+	if (!args.empty() || !receiver || !arena) return std::string{"invalid DynoData.deleteNative"};
+	for (auto& field : receiver->fields) {
+		if (field.name == "ptr" && field.descriptor == "I") {
+			field.value = int32_t{0};
+			break;
+		}
+	}
+	return std::monostate{};
+}
+
+// 0046aa20: java.game.parts.DynoData.calcDyno (F)F
+NativeResult dynoDataCalcDyno(const std::vector<VmValue>& args, const VmObject* receiver, VmArena*,
+                              const std::vector<const TufaClass*>*) {
+	if (args.size() != 1 || !std::holds_alternative<float>(args[0]) || !receiver)
+		return std::string{"invalid DynoData.calcDyno arguments"};
+	const float steps = std::max(1.0f, std::get<float>(args[0]));
+	const float cylinders = std::max(1.0f, getFloatField(receiver, "cylinders", 4.0f));
+	const float boreMm = getFloatField(receiver, "bore", 86.0f);
+	const float strokeMm = getFloatField(receiver, "stroke", 86.0f);
+	const float boreM = boreMm * 0.001f;
+	const float strokeM = strokeMm * 0.001f;
+	const float displacement = cylinders * 0.78539816339f * boreM * boreM * strokeM;
+	const float vMin = std::max(1e-6f, getFloatField(receiver, "v_min", displacement / cylinders * 0.1f));
+	const float compression = std::clamp((displacement / cylinders + vMin) / vMin, 7.0f, 15.0f);
+	const float rpmLimit = std::max(1000.0f, getFloatField(receiver, "RPM_limit", 7000.0f));
+	float maxRpm = getFloatField(receiver, "maxRPM", 0.0f);
+	if (maxRpm <= 0.0f) {
+		maxRpm = rpmLimit * 1.15f;
+		setFloatField(receiver, "maxRPM", maxRpm);
+	}
+	float stepSize = maxRpm / steps;
+	if (stepSize <= 1.0f) stepSize = 1.0f;
+	setFloatField(receiver, "table_stepsize", stepSize);
+	setFloatField(receiver, "torque", 1.0f);
+
+	const float turboMax = std::max(0.0f, getFloatField(receiver, "P_turbo_max", 0.0f));
+	const float turboWaste = std::max(0.0f, getFloatField(receiver, "P_turbo_waste", turboMax));
+	const float boostFactor = 1.0f + 0.5f * std::min(turboMax, turboWaste > 0.0f ? turboWaste : turboMax);
+	const float displacementLiters = std::max(0.5f, displacement * 1000.0f);
+	const float peakTorque = displacementLiters * 105.0f * boostFactor;
+	const float rpmPeakTorque = rpmLimit * 0.62f;
+	const float rpmPeakHp = rpmLimit * 0.85f;
+
+	float maxTorqueVal = 0.0f;
+	float maxTorqueRpm = rpmPeakTorque;
+	float maxHpVal = 0.0f;
+	float maxHpRpm = rpmPeakHp;
+
+	const auto* torqueTable = getObjectField(receiver, "torquetable");
+	const auto* hpTable = getObjectField(receiver, "HPtable");
+	const size_t nTorque = torqueTable ? torqueTable->arrayElements.size() : 0;
+	const size_t nHp = hpTable ? hpTable->arrayElements.size() : 0;
+	const size_t count = std::max({static_cast<size_t>(steps), nTorque, nHp, size_t{2}});
+
+	for (size_t i = 0; i < count; ++i) {
+		const float rpm = static_cast<float>(i) * stepSize;
+		float tq = 0.0f;
+		if (rpm > 100.0f && rpm <= maxRpm) {
+			const float norm = (rpm - rpmPeakTorque) / std::max(500.0f, rpmLimit * 0.5f);
+			tq = std::max(10.0f, peakTorque * (1.0f - 0.35f * norm * norm));
+			if (rpm > rpmLimit) tq *= std::max(0.0f, 1.0f - (rpm - rpmLimit) / (maxRpm - rpmLimit + 1.0f));
+		}
+		const float hp = tq * rpm / 7127.0f;
+		if (tq > maxTorqueVal) {
+			maxTorqueVal = tq;
+			maxTorqueRpm = rpm;
+		}
+		if (hp > maxHpVal) {
+			maxHpVal = hp;
+			maxHpRpm = rpm;
+		}
+		if (torqueTable && i < torqueTable->arrayElements.size())
+			torqueTable->arrayElements[i] = VmValue{tq};
+		if (hpTable && i < hpTable->arrayElements.size())
+			hpTable->arrayElements[i] = VmValue{hp};
+	}
+
+	setFloatField(receiver, "Displacement", displacement);
+	setFloatField(receiver, "Compression", compression);
+	setFloatField(receiver, "maxTorque", maxTorqueVal);
+	setFloatField(receiver, "RPM_maxTorque", maxTorqueRpm);
+	setFloatField(receiver, "maxHP", maxHpVal);
+	setFloatField(receiver, "RPM_maxHP", maxHpRpm);
+	return VmValue{0.0f};
+}
+
+// 0046b0f0: java.game.parts.DynoData.getTorque (FF)F
+NativeResult dynoDataGetTorque(const std::vector<VmValue>& args, const VmObject* receiver, VmArena*,
+                               const std::vector<const TufaClass*>*) {
+	if (args.size() != 2 || !std::holds_alternative<float>(args[0]) || !std::holds_alternative<float>(args[1]))
+		return std::string{"invalid DynoData.getTorque arguments"};
+	if (!receiver) return VmValue{0.0f};
+	const float rpm = std::get<float>(args[0]);
+	if (rpm < 0.0f) return VmValue{0.0f};
+	const float stepSize = std::max(1.0f, getFloatField(receiver, "table_stepsize", 250.0f));
+	const auto* table = getObjectField(receiver, "torquetable");
+	if (table && table->arrayElements.size() > 1) {
+		const float idxF = rpm / stepSize;
+		const auto idx = static_cast<size_t>(idxF);
+		if (idx + 1 < table->arrayElements.size()) {
+			const float frac = idxF - static_cast<float>(idx);
+			const auto* v0 = std::get_if<float>(&table->arrayElements[idx]);
+			const auto* v1 = std::get_if<float>(&table->arrayElements[idx + 1]);
+			if (v0 && v1) return VmValue{*v0 + (*v1 - *v0) * frac};
+		}
+	}
+	const float maxTq = getFloatField(receiver, "maxTorque", 200.0f);
+	return VmValue{maxTq};
+}
+
+// 0046b210: java.game.parts.DynoData.getHP (FF)F
+NativeResult dynoDataGetHp(const std::vector<VmValue>& args, const VmObject* receiver, VmArena*,
+                           const std::vector<const TufaClass*>*) {
+	if (args.size() != 2 || !std::holds_alternative<float>(args[0]) || !std::holds_alternative<float>(args[1]))
+		return std::string{"invalid DynoData.getHP arguments"};
+	if (!receiver) return VmValue{0.0f};
+	const float rpm = std::get<float>(args[0]);
+	if (rpm < 0.0f) return VmValue{0.0f};
+	const float stepSize = std::max(1.0f, getFloatField(receiver, "table_stepsize", 250.0f));
+	const auto* table = getObjectField(receiver, "HPtable");
+	if (table && table->arrayElements.size() > 1) {
+		const float idxF = rpm / stepSize;
+		const auto idx = static_cast<size_t>(idxF);
+		if (idx + 1 < table->arrayElements.size()) {
+			const float frac = idxF - static_cast<float>(idx);
+			const auto* v0 = std::get_if<float>(&table->arrayElements[idx]);
+			const auto* v1 = std::get_if<float>(&table->arrayElements[idx + 1]);
+			if (v0 && v1) return VmValue{*v0 + (*v1 - *v0) * frac};
+		}
+	}
+	const float maxHp = getFloatField(receiver, "maxHP", 150.0f);
+	return VmValue{maxHp};
+}
+
+// --- java.game.parts.bodypart.Chassis ---
+
+// 0043c7f0: java.game.parts.bodypart.Chassis.getTorque (FF)F
+NativeResult chassisGetTorque(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                              const std::vector<const TufaClass*>* classes) {
+	if (args.size() != 2 || !std::holds_alternative<float>(args[0]) || !std::holds_alternative<float>(args[1]))
+		return std::string{"invalid Chassis.getTorque arguments"};
+	if (const auto* dyno = getObjectField(receiver, "dyno"))
+		return dynoDataGetTorque(args, dyno, arena, classes);
+	const auto resolved = resolvePartAndCar(receiver, arena);
+	return VmValue{resolved.partInst ? resolved.partInst->driveTorque : 200.0f};
+}
+
+// 0043c930: java.game.parts.bodypart.Chassis.setTorque (F)V
+NativeResult chassisSetTorque(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                              const std::vector<const TufaClass*>*) {
+	if (args.size() != 1 || !std::holds_alternative<float>(args[0]))
+		return std::string{"invalid Chassis.setTorque arguments"};
+	const float val = std::get<float>(args[0]);
+	const auto resolved = resolvePartAndCar(receiver, arena);
+	if (resolved.partInst) resolved.partInst->driveTorque = val;
+	if (resolved.carInst) resolved.carInst->driveTorque = val;
+	return std::monostate{};
+}
+
+// 0043caa0: java.game.parts.bodypart.Chassis.getMass ()F
+NativeResult chassisGetMass(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                            const std::vector<const TufaClass*>*) {
+	if (!args.empty()) return std::string{"invalid Chassis.getMass arguments"};
+	const auto resolved = resolvePartAndCar(receiver, arena);
+	if (resolved.carInst && resolved.carInst->totalMass > 0.0f) return VmValue{resolved.carInst->totalMass};
+	if (resolved.partInst && resolved.partInst->totalMass > 0.0f) return VmValue{resolved.partInst->totalMass};
+	if (resolved.partNode && arena && arena->gameState && arena->gameState->world) {
+		const float m = prototypeMass(nodePrototype(resolved.partNode, *arena->gameState->world));
+		if (m > 0.0f) return VmValue{m};
+	}
+	return VmValue{1200.0f};
+}
+
+// 0043cb80: java.game.parts.bodypart.Chassis.getCM ()Ljava.lang.Vector3;
+NativeResult chassisGetCm(const std::vector<VmValue>& args, const VmObject*, VmArena* arena,
+                          const std::vector<const TufaClass*>* classes) {
+	if (!args.empty()) return std::string{"invalid Chassis.getCM arguments"};
+	return allocateVector3(arena, classes, 0.0f, 0.0f, 0.0f);
+}
+
+// 0043d600: java.game.parts.bodypart.Chassis.getMin ()Ljava.lang.Vector3;
+NativeResult chassisGetMin(const std::vector<VmValue>& args, const VmObject*, VmArena* arena,
+                           const std::vector<const TufaClass*>* classes) {
+	if (!args.empty()) return std::string{"invalid Chassis.getMin arguments"};
+	return allocateVector3(arena, classes, -0.95f, -0.45f, -2.2f);
+}
+
+// 0043d8b0: java.game.parts.bodypart.Chassis.getMax ()Ljava.lang.Vector3;
+NativeResult chassisGetMax(const std::vector<VmValue>& args, const VmObject*, VmArena* arena,
+                           const std::vector<const TufaClass*>* classes) {
+	if (!args.empty()) return std::string{"invalid Chassis.getMax arguments"};
+	return allocateVector3(arena, classes, 0.95f, 0.85f, 2.2f);
+}
+
+// 0043cd70: java.game.parts.bodypart.Chassis.getWheels ()I
+NativeResult chassisGetWheels(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                              const std::vector<const TufaClass*>*) {
+	if (!args.empty()) return std::string{"invalid Chassis.getWheels arguments"};
+	const auto resolved = resolvePartAndCar(receiver, arena);
+	if (arena && arena->gameState && arena->gameState->world) {
+		if (const auto* proto = nodePrototype(resolved.partNode ? resolved.partNode : resolved.carNode,
+		                                      *arena->gameState->world)) {
+			if (!proto->config.wheels.empty()) return VmValue{static_cast<int32_t>(proto->config.wheels.size())};
+		}
+	}
+	return VmValue{int32_t{4}};
+}
+
+// 0043ce30: java.game.parts.bodypart.Chassis.getWheelPos (I)Ljava.lang.Vector3;
+NativeResult chassisGetWheelPos(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                                const std::vector<const TufaClass*>* classes) {
+	if (args.size() != 1 || !std::holds_alternative<int32_t>(args[0]))
+		return std::string{"invalid Chassis.getWheelPos arguments"};
+	const int32_t idx = std::get<int32_t>(args[0]);
+	const auto resolved = resolvePartAndCar(receiver, arena);
+	CarRuntimeInstance* inst = resolved.partInst ? resolved.partInst : resolved.carInst;
+	std::array<float, 3> pos{0.0f, 0.0f, 0.0f};
+	if (inst && idx >= 0 && static_cast<size_t>(idx) < inst->wheelStates.size())
+		pos = inst->wheelStates[static_cast<size_t>(idx)].position;
+	return allocateVector3(arena, classes, pos[0], pos[1], pos[2]);
+}
+
+// 0043d080: java.game.parts.bodypart.Chassis.getWheelDamage (I)Ljava.lang.String;
+NativeResult chassisGetWheelDamage(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                                   const std::vector<const TufaClass*>* classes) {
+	if (args.size() != 1 || !std::holds_alternative<int32_t>(args[0]))
+		return std::string{"invalid Chassis.getWheelDamage arguments"};
+	const int32_t idx = std::get<int32_t>(args[0]);
+	const auto resolved = resolvePartAndCar(receiver, arena);
+	CarRuntimeInstance* inst = resolved.partInst ? resolved.partInst : resolved.carInst;
+	if (!inst || idx < 0 || static_cast<size_t>(idx) >= inst->wheelExtras.size())
+		return VmValue{static_cast<const VmObject*>(nullptr)};
+	const auto& dmg = inst->wheelExtras[static_cast<size_t>(idx)].damage;
+	if (dmg.empty()) return VmValue{static_cast<const VmObject*>(nullptr)};
+	return internStringResult(dmg, arena, classes);
+}
+
+// 0043d280: java.game.parts.bodypart.Chassis.setWheelDamage (ILjava.lang.String;)V
+NativeResult chassisSetWheelDamage(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                                   const std::vector<const TufaClass*>*) {
+	if (args.size() != 2 || !std::holds_alternative<int32_t>(args[0]) ||
+	    !std::holds_alternative<const VmObject*>(args[1]))
+		return std::string{"invalid Chassis.setWheelDamage arguments"};
+	const int32_t idx = std::get<int32_t>(args[0]);
+	const auto* strObj = std::get<const VmObject*>(args[1]);
+	const auto resolved = resolvePartAndCar(receiver, arena);
+	CarRuntimeInstance* inst = resolved.partInst ? resolved.partInst : resolved.carInst;
+	if (inst && idx >= 0 && static_cast<size_t>(idx) < inst->wheelExtras.size()) {
+		const auto* text = findInternedString(arena, strObj);
+		inst->wheelExtras[static_cast<size_t>(idx)].damage = text ? *text : "";
+	}
+	return std::monostate{};
+}
+
+// 00440c80: java.game.parts.bodypart.Chassis.getWheel (I)Ljava.game.parts.WheelRef;
+NativeResult chassisGetWheel(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                             const std::vector<const TufaClass*>* classes) {
+	if (args.size() != 1 || !std::holds_alternative<int32_t>(args[0]))
+		return std::string{"invalid Chassis.getWheel arguments"};
+	const int32_t idx = std::get<int32_t>(args[0]);
+	if (idx < 0 || idx >= 16) return VmValue{static_cast<const VmObject*>(nullptr)};
+	const auto resolved = resolvePartAndCar(receiver, arena);
+	WorldNode* targetNode = resolved.partNode ? resolved.partNode : resolved.carNode;
+	if (!targetNode || !targetNode->carInstance) return VmValue{static_cast<const VmObject*>(nullptr)};
+	auto* wheelObj = allocateObjectWithPtr("java.game.parts.WheelRef", targetNode->instanceId,
+	                                       static_cast<uint32_t>(idx), arena, classes);
+	return VmValue{wheelObj};
+}
+
+// 00442210: java.game.parts.bodypart.Chassis.getSfxTable (I)Ljava.game.parts.SfxTable;
+NativeResult chassisGetSfxTable(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                                const std::vector<const TufaClass*>* classes) {
+	if (args.size() != 1 || !std::holds_alternative<int32_t>(args[0]))
+		return std::string{"invalid Chassis.getSfxTable arguments"};
+	const int32_t idx = std::get<int32_t>(args[0]);
+	if (idx < 0 || idx >= 3) return VmValue{static_cast<const VmObject*>(nullptr)};
+	const auto resolved = resolvePartAndCar(receiver, arena);
+	WorldNode* targetNode = resolved.partNode ? resolved.partNode : resolved.carNode;
+	if (!targetNode || !targetNode->carInstance) return VmValue{static_cast<const VmObject*>(nullptr)};
+	auto* sfxObj = allocateObjectWithPtr("java.game.parts.SfxTable", targetNode->instanceId,
+	                                     static_cast<uint32_t>(idx), arena, classes);
+	return VmValue{sfxObj};
+}
+
+// 0043deb0: java.game.parts.bodypart.Chassis.setCooling (FFF)V
+NativeResult chassisSetCooling(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                               const std::vector<const TufaClass*>*) {
+	if (args.size() != 3 || !std::holds_alternative<float>(args[0]) ||
+	    !std::holds_alternative<float>(args[1]) || !std::holds_alternative<float>(args[2]))
+		return std::string{"invalid Chassis.setCooling arguments"};
+	const auto resolved = resolvePartAndCar(receiver, arena);
+	if (resolved.partInst)
+		resolved.partInst->cooling = {std::get<float>(args[0]), std::get<float>(args[1]), std::get<float>(args[2])};
+	return std::monostate{};
+}
+
+// 0043dc00: java.game.parts.bodypart.Chassis.setHornSFX (Ljava.util.resource.ResourceRef;FI)V
+NativeResult chassisSetHornSfx(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                               const std::vector<const TufaClass*>*) {
+	if (args.size() != 3 || !std::holds_alternative<const VmObject*>(args[0]) ||
+	    !std::holds_alternative<float>(args[1]) || !std::holds_alternative<int32_t>(args[2]))
+		return std::string{"invalid Chassis.setHornSFX arguments"};
+	const auto resolved = resolvePartAndCar(receiver, arena);
+	if (resolved.partInst) {
+		resolved.partInst->hornPitch = std::get<float>(args[1]);
+		resolved.partInst->hornIndex = std::get<int32_t>(args[2]);
+	}
+	return std::monostate{};
+}
+
+// 0043dd70: java.game.parts.bodypart.Chassis.setNitroSFX (Ljava.util.resource.ResourceRef;F)V
+NativeResult chassisSetNitroSfx(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                                const std::vector<const TufaClass*>*) {
+	if (args.size() != 2 || !std::holds_alternative<const VmObject*>(args[0]) ||
+	    !std::holds_alternative<float>(args[1]))
+		return std::string{"invalid Chassis.setNitroSFX arguments"};
+	const auto resolved = resolvePartAndCar(receiver, arena);
+	if (resolved.partInst) resolved.partInst->nitroPitch = std::get<float>(args[1]);
+	return std::monostate{};
+}
+
+// 0043dff0: java.game.parts.bodypart.Chassis.getMileage ()F
+NativeResult chassisGetMileage(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                               const std::vector<const TufaClass*>*) {
+	if (!args.empty()) return std::string{"invalid Chassis.getMileage arguments"};
+	const auto resolved = resolvePartAndCar(receiver, arena);
+	if (resolved.partInst) return VmValue{resolved.partInst->mileage};
+	if (resolved.carInst) return VmValue{resolved.carInst->mileage};
+	return VmValue{0.0f};
+}
+
+// 0043e080: java.game.parts.bodypart.Chassis.setMileage (F)V
+NativeResult chassisSetMileage(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                               const std::vector<const TufaClass*>*) {
+	if (args.size() != 1 || !std::holds_alternative<float>(args[0]))
+		return std::string{"invalid Chassis.setMileage arguments"};
+	const float val = std::get<float>(args[0]);
+	const auto resolved = resolvePartAndCar(receiver, arena);
+	if (resolved.partInst) resolved.partInst->mileage = val;
+	if (resolved.carInst) resolved.carInst->mileage = val;
+	return std::monostate{};
+}
+
+// 0043e110: java.game.parts.bodypart.Chassis.setBuck (IIFFFF)I
+NativeResult chassisSetBuck(const std::vector<VmValue>& args, const VmObject*, VmArena*,
+                            const std::vector<const TufaClass*>*) {
+	if (args.size() != 6) return std::string{"invalid Chassis.setBuck arguments"};
+	return VmValue{int32_t{0}};
+}
+
+// 0043e320: java.game.parts.bodypart.Chassis.forceUpdate ()V
+NativeResult chassisForceUpdate(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                                const std::vector<const TufaClass*>*) {
+	if (!args.empty()) return std::string{"invalid Chassis.forceUpdate arguments"};
+	const auto resolved = resolvePartAndCar(receiver, arena);
+	if (arena && arena->gameState && arena->gameState->world) {
+		if (resolved.carNode) carPartUpdateMass(*resolved.carNode, *arena->gameState->world);
+		else if (resolved.partNode) carPartUpdateMass(*resolved.partNode, *arena->gameState->world);
+	}
+	return std::monostate{};
+}
+
+// 004409d0: java.game.parts.bodypart.Chassis.setSfxExhaustMinVol (F)V
+NativeResult chassisSetSfxExhaustMinVol(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                                        const std::vector<const TufaClass*>*) {
+	if (args.size() != 1 || !std::holds_alternative<float>(args[0]))
+		return std::string{"invalid Chassis.setSfxExhaustMinVol arguments"};
+	const auto resolved = resolvePartAndCar(receiver, arena);
+	if (resolved.partInst) resolved.partInst->sfxExhaustMinVol = std::get<float>(args[0]);
+	return std::monostate{};
+}
+
+// 00440a50: java.game.parts.bodypart.Chassis.setSteerWheel (FF)V
+NativeResult chassisSetSteerWheel(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                                  const std::vector<const TufaClass*>*) {
+	if (args.size() != 2 || !std::holds_alternative<float>(args[0]) || !std::holds_alternative<float>(args[1]))
+		return std::string{"invalid Chassis.setSteerWheel arguments"};
+	const auto resolved = resolvePartAndCar(receiver, arena);
+	if (resolved.partInst) {
+		resolved.partInst->steerWheelRadius = std::get<float>(args[0]);
+		resolved.partInst->steerWheelLock = std::get<float>(args[1]);
+	}
+	return std::monostate{};
+}
+
+// 00440af0: java.game.parts.bodypart.Chassis.setSteerWheelRadius (F)V
+NativeResult chassisSetSteerWheelRadius(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                                        const std::vector<const TufaClass*>*) {
+	if (args.size() != 1 || !std::holds_alternative<float>(args[0]))
+		return std::string{"invalid Chassis.setSteerWheelRadius arguments"};
+	const auto resolved = resolvePartAndCar(receiver, arena);
+	if (resolved.partInst) resolved.partInst->steerWheelRadius = std::get<float>(args[0]);
+	return std::monostate{};
+}
+
+// 00440b70: java.game.parts.bodypart.Chassis.setAckermann (F)V
+NativeResult chassisSetAckermann(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                                 const std::vector<const TufaClass*>*) {
+	if (args.size() != 1 || !std::holds_alternative<float>(args[0]))
+		return std::string{"invalid Chassis.setAckermann arguments"};
+	const auto resolved = resolvePartAndCar(receiver, arena);
+	if (resolved.partInst) resolved.partInst->ackermann = std::get<float>(args[0]);
+	return std::monostate{};
+}
+
+// --- java.game.parts.WheelRef ---
+
+NativeResult wheelRefGetDrive(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                              const std::vector<const TufaClass*>*) {
+	if (!args.empty()) return std::string{"invalid WheelRef.getDrive"};
+	const auto w = resolveWheel(receiver, arena);
+	return VmValue{w.extra ? w.extra->drive : 0.0f};
+}
+
+NativeResult wheelRefSetDrive(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                              const std::vector<const TufaClass*>*) {
+	if (args.size() != 1 || !std::holds_alternative<float>(args[0])) return std::string{"invalid WheelRef.setDrive"};
+	if (auto w = resolveWheel(receiver, arena); w.extra) w.extra->drive = std::get<float>(args[0]);
+	return std::monostate{};
+}
+
+NativeResult wheelRefGetSteer(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                              const std::vector<const TufaClass*>*) {
+	if (!args.empty()) return std::string{"invalid WheelRef.getSteer"};
+	const auto w = resolveWheel(receiver, arena);
+	return VmValue{w.extra ? w.extra->steer : 0.0f};
+}
+
+NativeResult wheelRefSetSteer(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                              const std::vector<const TufaClass*>*) {
+	if (args.size() != 1 || !std::holds_alternative<float>(args[0])) return std::string{"invalid WheelRef.setSteer"};
+	if (auto w = resolveWheel(receiver, arena); w.extra) w.extra->steer = std::get<float>(args[0]);
+	return std::monostate{};
+}
+
+NativeResult wheelRefGetRadius(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                               const std::vector<const TufaClass*>*) {
+	if (!args.empty()) return std::string{"invalid WheelRef.getRadius"};
+	const auto w = resolveWheel(receiver, arena);
+	return VmValue{w.extra ? w.extra->radius : 0.3f};
+}
+
+NativeResult wheelRefSetRadius(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                               const std::vector<const TufaClass*>*) {
+	if (args.size() != 1 || !std::holds_alternative<float>(args[0])) return std::string{"invalid WheelRef.setRadius"};
+	if (auto w = resolveWheel(receiver, arena); w.extra) w.extra->radius = std::get<float>(args[0]);
+	return std::monostate{};
+}
+
+NativeResult wheelRefSetFriction(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                                 const std::vector<const TufaClass*>*) {
+	if (args.size() != 1 || !std::holds_alternative<float>(args[0])) return std::string{"invalid WheelRef.setFriction"};
+	if (auto w = resolveWheel(receiver, arena); w.extra) w.extra->friction = std::get<float>(args[0]);
+	return std::monostate{};
+}
+
+NativeResult wheelRefSetFrictnX(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                                const std::vector<const TufaClass*>*) {
+	if (args.size() != 1 || !std::holds_alternative<float>(args[0])) return std::string{"invalid WheelRef.setFrictn_x"};
+	if (auto w = resolveWheel(receiver, arena); w.extra) w.extra->frictionX = std::get<float>(args[0]);
+	return std::monostate{};
+}
+
+NativeResult wheelRefSetSliction(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                                 const std::vector<const TufaClass*>*) {
+	if (args.size() != 1 || !std::holds_alternative<float>(args[0])) return std::string{"invalid WheelRef.setSliction"};
+	if (auto w = resolveWheel(receiver, arena); w.extra) w.extra->sliction = std::get<float>(args[0]);
+	return std::monostate{};
+}
+
+NativeResult wheelRefSetStiffness(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                                  const std::vector<const TufaClass*>*) {
+	if (args.size() != 1 || !std::holds_alternative<float>(args[0])) return std::string{"invalid WheelRef.setStiffness"};
+	if (auto w = resolveWheel(receiver, arena); w.extra) w.extra->stiffness = std::get<float>(args[0]);
+	return std::monostate{};
+}
+
+NativeResult wheelRefSetRollRes(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                                const std::vector<const TufaClass*>*) {
+	if (args.size() != 1 || !std::holds_alternative<float>(args[0])) return std::string{"invalid WheelRef.setRollRes"};
+	if (auto w = resolveWheel(receiver, arena); w.extra) w.extra->rollResistance = std::get<float>(args[0]);
+	return std::monostate{};
+}
+
+NativeResult wheelRefSetBearing(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                                const std::vector<const TufaClass*>*) {
+	if (args.size() != 1 || !std::holds_alternative<float>(args[0])) return std::string{"invalid WheelRef.setBearing"};
+	if (auto w = resolveWheel(receiver, arena); w.extra) w.extra->bearing = std::get<float>(args[0]);
+	return std::monostate{};
+}
+
+NativeResult wheelRefSetMaxLoad(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                                const std::vector<const TufaClass*>*) {
+	if (args.size() != 1 || !std::holds_alternative<float>(args[0])) return std::string{"invalid WheelRef.setMaxLoad"};
+	if (auto w = resolveWheel(receiver, arena); w.extra) w.extra->maxLoad = std::get<float>(args[0]);
+	return std::monostate{};
+}
+
+NativeResult wheelRefSetLoadSmooth(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                                   const std::vector<const TufaClass*>*) {
+	if (args.size() != 1 || !std::holds_alternative<float>(args[0])) return std::string{"invalid WheelRef.setLoadSmooth"};
+	if (auto w = resolveWheel(receiver, arena); w.extra) w.extra->loadSmooth = std::get<float>(args[0]);
+	return std::monostate{};
+}
+
+NativeResult wheelRefSetPacejka(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                                const std::vector<const TufaClass*>*) {
+	if (args.size() != 2 || !std::holds_alternative<int32_t>(args[0]) || !std::holds_alternative<float>(args[1]))
+		return std::string{"invalid WheelRef.setPacejka"};
+	const int32_t idx = std::get<int32_t>(args[0]);
+	if (auto w = resolveWheel(receiver, arena); w.extra && idx >= 0 && static_cast<size_t>(idx) < w.extra->pacejka.size())
+		w.extra->pacejka[static_cast<size_t>(idx)] = std::get<float>(args[1]);
+	return std::monostate{};
+}
+
+NativeResult wheelRefSetForce(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                              const std::vector<const TufaClass*>*) {
+	if (args.size() != 1 || !std::holds_alternative<float>(args[0])) return std::string{"invalid WheelRef.setForce"};
+	if (auto w = resolveWheel(receiver, arena); w.extra) w.extra->springForce = std::get<float>(args[0]);
+	return std::monostate{};
+}
+
+NativeResult wheelRefSetDamping1(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                                 const std::vector<const TufaClass*>*) {
+	if (args.size() != 1 || !std::holds_alternative<float>(args[0])) return std::string{"invalid WheelRef.setDamping(F)"};
+	if (auto w = resolveWheel(receiver, arena); w.extra) {
+		w.extra->dampingBump = std::get<float>(args[0]);
+		w.extra->dampingRebound = std::get<float>(args[0]);
+	}
+	return std::monostate{};
+}
+
+NativeResult wheelRefSetDamping2(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                                 const std::vector<const TufaClass*>*) {
+	if (args.size() != 2 || !std::holds_alternative<float>(args[0]) || !std::holds_alternative<float>(args[1]))
+		return std::string{"invalid WheelRef.setDamping(FF)"};
+	if (auto w = resolveWheel(receiver, arena); w.extra) {
+		w.extra->dampingBump = std::get<float>(args[0]);
+		w.extra->dampingRebound = std::get<float>(args[1]);
+	}
+	return std::monostate{};
+}
+
+NativeResult wheelRefSetRestLen(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                                const std::vector<const TufaClass*>*) {
+	if (args.size() != 1 || !std::holds_alternative<float>(args[0])) return std::string{"invalid WheelRef.setRestLen"};
+	if (auto w = resolveWheel(receiver, arena); w.extra) w.extra->restLength = std::get<float>(args[0]);
+	return std::monostate{};
+}
+
+NativeResult wheelRefSetMinLen(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                               const std::vector<const TufaClass*>*) {
+	if (args.size() != 1 || !std::holds_alternative<float>(args[0])) return std::string{"invalid WheelRef.setMinLen"};
+	if (auto w = resolveWheel(receiver, arena); w.extra) w.extra->minLength = std::get<float>(args[0]);
+	return std::monostate{};
+}
+
+NativeResult wheelRefSetMaxLen(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                               const std::vector<const TufaClass*>*) {
+	if (args.size() != 1 || !std::holds_alternative<float>(args[0])) return std::string{"invalid WheelRef.setMaxLen"};
+	if (auto w = resolveWheel(receiver, arena); w.extra) w.extra->maxLength = std::get<float>(args[0]);
+	return std::monostate{};
+}
+
+NativeResult wheelRefGetBrake(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                              const std::vector<const TufaClass*>*) {
+	if (!args.empty()) return std::string{"invalid WheelRef.getBrake"};
+	const auto w = resolveWheel(receiver, arena);
+	return VmValue{w.extra ? w.extra->brake : 0.0f};
+}
+
+NativeResult wheelRefSetBrake(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                              const std::vector<const TufaClass*>*) {
+	if (args.size() != 1 || !std::holds_alternative<float>(args[0])) return std::string{"invalid WheelRef.setBrake"};
+	if (auto w = resolveWheel(receiver, arena); w.extra) w.extra->brake = std::get<float>(args[0]);
+	return std::monostate{};
+}
+
+NativeResult wheelRefGetHBrake(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                               const std::vector<const TufaClass*>*) {
+	if (!args.empty()) return std::string{"invalid WheelRef.getHBrake"};
+	const auto w = resolveWheel(receiver, arena);
+	return VmValue{w.extra ? w.extra->handBrake : 0.0f};
+}
+
+NativeResult wheelRefSetHBrake(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                               const std::vector<const TufaClass*>*) {
+	if (args.size() != 1 || !std::holds_alternative<float>(args[0])) return std::string{"invalid WheelRef.setHBrake"};
+	if (auto w = resolveWheel(receiver, arena); w.extra) w.extra->handBrake = std::get<float>(args[0]);
+	return std::monostate{};
+}
+
+NativeResult wheelRefSetWidth(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                              const std::vector<const TufaClass*>*) {
+	if (args.size() != 1 || !std::holds_alternative<float>(args[0])) return std::string{"invalid WheelRef.setWidth"};
+	if (auto w = resolveWheel(receiver, arena); w.extra) w.extra->width = std::get<float>(args[0]);
+	return std::monostate{};
+}
+
+NativeResult wheelRefSetCPatch(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                               const std::vector<const TufaClass*>*) {
+	if (args.size() != 3 || !std::holds_alternative<float>(args[0]) ||
+	    !std::holds_alternative<float>(args[1]) || !std::holds_alternative<float>(args[2]))
+		return std::string{"invalid WheelRef.setCPatch"};
+	if (auto w = resolveWheel(receiver, arena); w.extra)
+		w.extra->contactPatch = {std::get<float>(args[0]), std::get<float>(args[1]), std::get<float>(args[2])};
+	return std::monostate{};
+}
+
+NativeResult wheelRefSetArm(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                            const std::vector<const TufaClass*>*) {
+	if (args.size() != 7) return std::string{"invalid WheelRef.setArm"};
+	if (auto w = resolveWheel(receiver, arena); w.extra) {
+		for (size_t i = 0; i < 7; ++i)
+			if (const auto* fv = std::get_if<float>(&args[i])) w.extra->arm[i] = *fv;
+	}
+	return std::monostate{};
+}
+
+NativeResult wheelRefSetHub(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                            const std::vector<const TufaClass*>*) {
+	if (args.size() != 10) return std::string{"invalid WheelRef.setHub"};
+	if (auto w = resolveWheel(receiver, arena); w.extra) {
+		for (size_t i = 0; i < 10; ++i)
+			if (const auto* fv = std::get_if<float>(&args[i])) w.extra->hub[i] = *fv;
+	}
+	return std::monostate{};
+}
+
+NativeResult wheelRefSetOppWheel(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                                 const std::vector<const TufaClass*>*) {
+	if (args.size() != 1 || !std::holds_alternative<int32_t>(args[0])) return std::string{"invalid WheelRef.setOppWheel"};
+	if (auto w = resolveWheel(receiver, arena); w.extra) w.extra->oppositeWheel = std::get<int32_t>(args[0]);
+	return std::monostate{};
+}
+
+NativeResult wheelRefSetInstantCenter(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                                      const std::vector<const TufaClass*>*) {
+	if (args.size() != 6) return std::string{"invalid WheelRef.setInstantCenter"};
+	if (auto w = resolveWheel(receiver, arena); w.extra) {
+		for (size_t i = 0; i < 6; ++i)
+			if (const auto* fv = std::get_if<float>(&args[i])) w.extra->instantCenter[i] = *fv;
+	}
+	return std::monostate{};
+}
+
+NativeResult wheelRefGetPos(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                            const std::vector<const TufaClass*>* classes) {
+	if (!args.empty()) return std::string{"invalid WheelRef.getPos"};
+	const auto w = resolveWheel(receiver, arena);
+	const std::array<float, 3> p = w.wheel ? w.wheel->position : std::array<float, 3>{0.0f, 0.0f, 0.0f};
+	return allocateVector3(arena, classes, p[0], p[1], p[2]);
+}
+
+NativeResult wheelRefSetPos(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                            const std::vector<const TufaClass*>*) {
+	if (args.size() != 1 || !std::holds_alternative<const VmObject*>(args[0]))
+		return std::string{"invalid WheelRef.setPos"};
+	if (auto w = resolveWheel(receiver, arena); w.wheel)
+		readVec3Object(std::get<const VmObject*>(args[0]), w.wheel->position);
+	return std::monostate{};
+}
+
+NativeResult wheelRefGetYpr(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                            const std::vector<const TufaClass*>* classes) {
+	if (!args.empty()) return std::string{"invalid WheelRef.getYpr"};
+	const auto w = resolveWheel(receiver, arena);
+	const std::array<float, 3> o = w.wheel ? w.wheel->orientation : std::array<float, 3>{0.0f, 0.0f, 0.0f};
+	return allocateYpr(arena, classes, o[0], o[1], o[2]);
+}
+
+NativeResult wheelRefSetYpr(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                            const std::vector<const TufaClass*>*) {
+	if (args.size() != 1 || !std::holds_alternative<const VmObject*>(args[0]))
+		return std::string{"invalid WheelRef.setYpr"};
+	if (auto w = resolveWheel(receiver, arena); w.wheel)
+		readYprObject(std::get<const VmObject*>(args[0]), w.wheel->orientation);
+	return std::monostate{};
+}
+
+// --- java.game.parts.SfxTable ---
+
+// 00442310: java.game.parts.SfxTable.getItems ()I
+NativeResult sfxTableGetItems(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                              const std::vector<const TufaClass*>*) {
+	if (!args.empty()) return std::string{"invalid SfxTable.getItems"};
+	auto* table = resolveSfxTable(receiver, arena);
+	return VmValue{table ? static_cast<int32_t>(table->size()) : int32_t{0}};
+}
+
+// 00442350: java.game.parts.SfxTable.clear ()V
+NativeResult sfxTableClear(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                           const std::vector<const TufaClass*>*) {
+	if (!args.empty()) return std::string{"invalid SfxTable.clear"};
+	if (auto* table = resolveSfxTable(receiver, arena)) table->clear();
+	return std::monostate{};
+}
+
+// 004423e0: java.game.parts.SfxTable.addItem (Ljava.util.resource.ResourceRef;FFFFF)V
+NativeResult sfxTableAddItem(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                             const std::vector<const TufaClass*>*) {
+	if (args.size() != 6 || !std::holds_alternative<const VmObject*>(args[0]) ||
+	    !std::holds_alternative<float>(args[1]) || !std::holds_alternative<float>(args[2]) ||
+	    !std::holds_alternative<float>(args[3]) || !std::holds_alternative<float>(args[4]) ||
+	    !std::holds_alternative<float>(args[5]))
+		return std::string{"invalid SfxTable.addItem"};
+	if (auto* table = resolveSfxTable(receiver, arena)) {
+		LinkOwner* soundOwner = nullptr;
+		if (const auto* refObj = std::get<const VmObject*>(args[0]))
+			soundOwner = linkedOwnerForObject(refObj, arena);
+		table->addItem(soundOwner, std::get<float>(args[1]), std::get<float>(args[2]), std::get<float>(args[3]),
+		               std::get<float>(args[4]), std::get<float>(args[5]));
+	}
+	return std::monostate{};
+}
+
+// --- java.game.Vehicle ---
+
+// 0043db60: java.game.Vehicle.getHorn ()I
+NativeResult vehicleGetHorn(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                            const std::vector<const TufaClass*>*) {
+	if (!args.empty()) return std::string{"invalid Vehicle.getHorn"};
+	const auto resolved = resolvePartAndCar(receiver, arena);
+	if (resolved.carInst && resolved.carInst->hornOn) return VmValue{int32_t{1}};
+	return VmValue{int32_t{0}};
+}
+
+// 00480500: java.game.Vehicle.getSpeedSquare ()F
+NativeResult vehicleGetSpeedSquare(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                                   const std::vector<const TufaClass*>*) {
+	if (!args.empty()) return std::string{"invalid Vehicle.getSpeedSquare"};
+	const auto resolved = resolvePartAndCar(receiver, arena);
+	if (resolved.carInst) {
+		const auto& v = resolved.carInst->linearVelocity;
+		return VmValue{v[0] * v[0] + v[1] * v[1] + v[2] * v[2]};
+	}
+	return VmValue{0.0f};
+}
+
+// 00440bf0: java.game.Vehicle.hasCrime ()F
+NativeResult vehicleHasCrime(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                             const std::vector<const TufaClass*>*) {
+	if (!args.empty()) return std::string{"invalid Vehicle.hasCrime"};
+	const auto resolved = resolvePartAndCar(receiver, arena);
+	return VmValue{resolved.carInst ? resolved.carInst->crimeLevel : 0.0f};
+}

@@ -1,0 +1,2 @@
+FROM slrr-stock-wine-gl
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends xdotool gdb strace libxcomposite1:i386 && apt-get clean && rm -rf /var/lib/apt/lists/*
