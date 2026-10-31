@@ -1,0 +1,16 @@
+# Timed input for build/startup_probe --script. Seconds from the start of the frame loop.
+# Rung 2 dispatch test: open the name dialog, then click OK at its real
+# coordinates (x~258, y~376 in the 640x480 content area) and see whether the
+# click is delivered while host:handleEvent is parked.
+8 move 320 240
+9 move 250 96
+9.5 down
+10 up
+13 shot @run/r2-dialog.bmp
+15 move 258 376
+15.5 down
+16 up
+17 shot @run/r2-after-ok.bmp
+20 shot @run/r2-after-3s.bmp
+24 shot @run/r2-after-7s.bmp
+28 quit

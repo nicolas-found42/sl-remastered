@@ -1,0 +1,22 @@
+# Timed input for build/startup_probe --script. Seconds from the start of the frame loop.
+# Rung 2: reach the main menu, NEW CAREER, type a name, confirm, observe the save flow.
+8 move 320 240
+8.5 shot @run/r2-menu.bmp
+9.5 move 250 96
+10 shot @run/r2-hole-hover.bmp
+10.5 down
+11 up
+13 shot @run/r2-name-dialog.bmp
+14 sdl_type Tester
+15 shot @run/r2-name-typed.bmp
+16 move 256 378
+16.5 down
+17 up
+18 shot @run/r2-after-ok.bmp
+19 move 318 376
+19.5 down
+20 up
+23 shot @run/r2-char-ok-3s.bmp
+28 shot @run/r2-char-ok-8s.bmp
+38 shot @run/r2-char-ok-18s.bmp
+45 quit

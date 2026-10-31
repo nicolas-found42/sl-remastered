@@ -4,6 +4,9 @@
 12 shot @run/fr-hover.bmp
 13 down
 13.5 up
+14.5 shot @run/fr-after-early.bmp
 16 shot @run/fr-after-03s.bmp
+16.5 sdl_keydown Space
+17 sdl_keyup Space
 25 shot @run/fr-after-12s.bmp
 40 shot @run/fr-after-27s.bmp

@@ -1,0 +1,18 @@
+# Free Ride load then drive: throttle, steer, brake, camera shots.
+# Timeline matches free-ride-click.txt (menu click at 13s, world at ~14.5s).
+12 move 420 127
+13 down
+13.5 up
+16.5 sdl_keydown Space
+17 sdl_keyup Space
+25 shot @run/drive-loaded.bmp
+30 sdl_keydown Up
+40 shot @run/drive-ahead-10s.bmp
+45 sdl_keydown Left
+47 sdl_keyup Left
+60 shot @run/drive-ahead-30s.bmp
+62 sdl_keyup Up
+63 sdl_keydown Down
+65 sdl_keyup Down
+66 shot @run/drive-after-brake.bmp
+68 quit

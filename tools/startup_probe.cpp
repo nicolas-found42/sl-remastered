@@ -1,5 +1,6 @@
 #include "audio.hpp"
 #include "camera_frame.hpp"
+#include "car_world_step.hpp"
 #include "class_environment.hpp"
 #include "class_runtime.hpp"
 #include "file_state.hpp"
@@ -10,6 +11,7 @@
 #include "music_control.hpp"
 #include "natives/game_type.hpp"
 #include "natives/registry.hpp"
+#include "object_sound.hpp"
 #include "pack_registry.hpp"
 #include "platform.hpp"
 #include "render2d.hpp"
@@ -30,6 +32,7 @@
 #include <filesystem>
 #include <fstream>
 #include <functional>
+#include <map>
 #include <memory>
 #include <optional>
 #include <set>
@@ -262,6 +265,11 @@ static int probeMain(int argc, char **argv, const std::string &runDir) {
   FrameVisibilityState frameVisibility;
   VmGameState gameState{&packs,  &world,          {}, {}, &resources,
                         nullptr, &frameVisibility};
+  struct ObjectSoundBinding {
+    VmArena &arena;
+    std::unique_ptr<ObjectSoundState> state;
+    ~ObjectSoundBinding() { arena.objectSound = nullptr; }
+  } objectSound{arena, {}};
   std::optional<int32_t> resourceLoadRate;
   std::optional<int32_t> instanceMax, soundMax, textureMax, meshMax;
   arena.gameState = &gameState;
@@ -319,6 +327,26 @@ static int probeMain(int argc, char **argv, const std::string &runDir) {
       return 1;
     }
     sound.effects = soundEffects.get();
+    ObjectSoundState::Config objectSoundConfig;
+    objectSoundConfig.windowClock = [&] {
+      return static_cast<float>(gameState.gameTimeOfDay);
+    };
+    objectSoundConfig.effects = soundEffects.get();
+    objectSoundConfig.masterVolume = [&] { return sound.volumes[0]; };
+    objectSoundConfig.randomState = &mainRandom.state;
+    objectSoundConfig.listener = [&](SoundEffects::Listener &listener,
+                                     std::string &detail) {
+      if (!world.audioListener(listener.position, listener.forward,
+                               listener.up)) {
+        detail = "object sound listener unavailable";
+        return false;
+      }
+      detail.clear();
+      return true;
+    };
+    objectSound.state = std::make_unique<ObjectSoundState>(
+        timers, std::move(objectSoundConfig));
+    arena.objectSound = objectSound.state.get();
     musicOutput = AudioOutput::create(error);
     if (!musicOutput) {
       std::fprintf(stderr, "startup probe: music output: %s\n", error.c_str());
@@ -684,7 +712,7 @@ static int probeMain(int argc, char **argv, const std::string &runDir) {
                       return videoPlayer->draw(
                           arena.performanceMilliseconds() / 1000.0, videoError);
                     },
-                    true))
+                    true, &arena, &states))
               return true;
             renderError += " (at entry: " + std::to_string(viewports.size()) +
                            " active viewports, " + std::to_string(cameras) +
@@ -977,9 +1005,23 @@ static int probeMain(int argc, char **argv, const std::string &runDir) {
             return 1;
           }
           float previousFrameSeconds = 0.0f;
+          bool noCameraFrameLogged = false;
           std::optional<std::array<float, 3>> cursorInput =
               std::array<float, 3>{};
           world.setCursorInput([&]() { return cursorInput; });
+          const auto updateCursorPosition = [&](float x, float y) {
+            int width = 0, height = 0;
+            if (!SDL_GetWindowSize(diagnosticWindow.get(), &width, &height)) {
+              cursorInput.reset();
+              return;
+            }
+            const auto point = normalizeCursorPosition(x, y, width, height);
+            if (point)
+              cursorInput =
+                  std::array<float, 3>{(*point)[0], (*point)[1], 0.0f};
+            else
+              cursorInput.reset();
+          };
           // --script FILE: one action per line, "<seconds since loop start>
           // <action> [args]". Actions: move X Y (window points), down, up,
           // keydown NAME, keyup NAME, shot PATH, quit, fail
@@ -1004,7 +1046,8 @@ static int probeMain(int argc, char **argv, const std::string &runDir) {
               if (!(fields >> action.at >> action.verb) || action.at < 0)
                 continue;
               if (action.verb == "keydown" || action.verb == "keyup" ||
-                  action.verb == "sdl_keydown" || action.verb == "sdl_keyup") {
+                  action.verb == "sdl_keydown" || action.verb == "sdl_keyup" ||
+                  action.verb == "sdl_type") {
                 std::getline(
                     fields >> std::ws,
                     action.a); // names such as "Left Shift" hold a space
@@ -1058,70 +1101,191 @@ static int probeMain(int argc, char **argv, const std::string &runDir) {
             if (cars.count != 1)
               return;
             if (lastCar.valid) {
-              runlog::event(runlog::EventKind::Note,
-                            "card1 {\"v\":1,\"dx\":%.5g,\"dy\":%.5g,\"dz\":%.5g}",
-                            cars.x - lastCar.x, cars.y - lastCar.y, cars.z - lastCar.z);
+              runlog::event(
+                  runlog::EventKind::Note,
+                  "card1 {\"v\":1,\"dx\":%.5g,\"dy\":%.5g,\"dz\":%.5g}",
+                  cars.x - lastCar.x, cars.y - lastCar.y, cars.z - lastCar.z);
             }
             lastCar = {cars.x, cars.y, cars.z, true};
           };
-          const auto recordFailureContext = [&](const std::vector<std::string> &trace) {
-            if (trace.empty())
-              return;
-            std::string cls = trace.back();
-            const auto cut = cls.find(" (tree");
-            if (cut != std::string::npos)
-              cls.resize(cut);
-            if (cls.size() > 72)
-              cls.resize(72);
-            for (char &ch : cls)
-              if (ch == '"' || ch == '\\')
-                ch = '?';
-            runlog::event(runlog::EventKind::Note, "fail1 {\"v\":1,\"cls\":\"%s\"}",
-                          cls.c_str());
+          // Thread dump: one block per scheduler thread with its state, what it
+          // waits on and its script frames. It feeds the `threads` snapshot
+          // (threads.txt, and crash.txt on a signal) and, on a stall or
+          // failure, run.log.
+          const auto formatThreadDump = [&] {
+            std::string text;
+            char head[160];
+            std::snprintf(
+                head, sizeof head, "t=%.1fs frame=%u system_isLoading=%d\n",
+                sinceLoopStart(), static_cast<unsigned>(world.frameCounter()),
+                resources.isLoading() ? 1 : 0);
+            text += head;
+            for (const auto &t : scheduler.snapshot(10)) {
+              char line[400];
+              std::snprintf(
+                  line, sizeof line,
+                  "%-40s %-11s on=%s%s slices=%zu last_slice=f%u flags=0x%x\n",
+                  t.name.c_str(), t.state.c_str(),
+                  t.waitingOn.empty() ? "-" : t.waitingOn.c_str(),
+                  t.hostTask ? " [host task]" : "", t.slices, t.lastSliceFrame,
+                  t.flags);
+              text += line;
+              if (t.state == "sleeping") {
+                std::snprintf(line, sizeof line, "    wakes in %.2fs\n",
+                              t.sleepRemaining);
+                text += line;
+              }
+              for (const auto &frame : t.stack)
+                text += "    at " + frame + "\n";
+            }
+            return text;
           };
+          const auto logThreadDump = [&](const char *why) {
+            runlog::event(runlog::EventKind::Note, "world threads dump (%s)",
+                          why);
+            for (const auto &t : scheduler.snapshot(4)) {
+              std::string stack;
+              for (const auto &frame : t.stack)
+                stack += (stack.empty() ? "" : " < ") + frame;
+              runlog::event(runlog::EventKind::Note,
+                            "world thread \"%s\" %s on=%s slices=%zu f%u %s",
+                            t.name.c_str(), t.state.c_str(),
+                            t.waitingOn.empty() ? "-" : t.waitingOn.c_str(),
+                            t.slices, t.lastSliceFrame, stack.c_str());
+            }
+            runlog::setSnapshot("threads", formatThreadDump());
+            runlog::flushDiagnostics();
+          };
+          double lastStallWatch = 0.0;
+          std::map<std::string, double> waitingSince;
+          std::set<std::string> stallReported;
+          // A host task is the script call a player action waits on (click
+          // handler, button press). One that stays parked on a monitor is the
+          // run's stall: name it once, with every thread's frames.
+          const auto watchStalls = [&] {
+            const double now = sinceLoopStart();
+            if (now - lastStallWatch < 1.0)
+              return;
+            lastStallWatch = now;
+            const auto threads = scheduler.snapshot(10);
+            std::set<std::string> live;
+            bool newStall = false;
+            for (const auto &t : threads) {
+              if (t.state != "waiting")
+                continue;
+              const std::string key = t.name + "|" + t.waitingOn;
+              live.insert(key);
+              const double since =
+                  waitingSince.try_emplace(key, now).first->second;
+              if (t.hostTask && now - since >= 5.0 &&
+                  stallReported.insert(key).second) {
+                runlog::event(runlog::EventKind::Note,
+                              "stall: host task \"%s\" parked on %s for %.1fs "
+                              "(no notify arrived)",
+                              t.name.c_str(), t.waitingOn.c_str(), now - since);
+                newStall = true;
+              }
+            }
+            for (auto it = waitingSince.begin(); it != waitingSince.end();)
+              it = live.count(it->first) ? std::next(it)
+                                         : waitingSince.erase(it);
+            for (auto it = stallReported.begin(); it != stallReported.end();)
+              it = live.count(*it) ? std::next(it) : stallReported.erase(it);
+            if (newStall)
+              logThreadDump("stall");
+            else
+              runlog::setSnapshot("threads", formatThreadDump());
+            const auto cars = world.playerCarNote();
+            char worldText[256];
+            std::snprintf(worldText, sizeof worldText,
+                          "nodes=%zu cars=%u pos=%.3f,%.3f,%.3f spd=%.3f "
+                          "gear=%d rpm=%.0f system_isLoading=%d",
+                          world.nodeCount(), cars.count, cars.x, cars.y, cars.z,
+                          cars.speed, cars.gear, cars.rpm,
+                          resources.isLoading() ? 1 : 0);
+            runlog::setSnapshot("world", worldText);
+          };
+          const auto recordFailureContext =
+              [&](const std::vector<std::string> &trace) {
+                logThreadDump("failure");
+                if (trace.empty())
+                  return;
+                std::string cls = trace.back();
+                const auto cut = cls.find(" (tree");
+                if (cut != std::string::npos)
+                  cls.resize(cut);
+                if (cls.size() > 72)
+                  cls.resize(72);
+                for (char &ch : cls)
+                  if (ch == '"' || ch == '\\')
+                    ch = '?';
+                runlog::event(runlog::EventKind::Note,
+                              "fail1 {\"v\":1,\"cls\":\"%s\"}", cls.c_str());
+              };
           const auto recordWorldSummary = [&] {
             const auto cars = world.playerCarNote();
             char carToken[16] = "unavailable";
             if (cars.count == 1)
-              std::snprintf(carToken, sizeof carToken, "0x%08x", cars.instanceId);
+              std::snprintf(carToken, sizeof carToken, "0x%08x",
+                            cars.instanceId);
             else if (cars.count > 1)
               std::snprintf(carToken, sizeof carToken, "many");
             if (cars.count == 1) {
-              runlog::event(runlog::EventKind::Note,
-                            "world state: nodes=%zu active_threads=%zu cars=%u car=%s "
-                            "pos=%.3f,%.3f,%.3f spd=%.3f gear=%d rpm=%.0f",
-                            world.nodeCount(), scheduler.threadCount(), cars.count,
-                            carToken, cars.x, cars.y, cars.z, cars.speed, cars.gear,
-                            cars.rpm);
+              runlog::event(
+                  runlog::EventKind::Note,
+                  "world state: nodes=%zu active_threads=%zu cars=%u car=%s "
+                  "pos=%.3f,%.3f,%.3f spd=%.3f gear=%d rpm=%.0f",
+                  world.nodeCount(), scheduler.threadCount(), cars.count,
+                  carToken, cars.x, cars.y, cars.z, cars.speed, cars.gear,
+                  cars.rpm);
               recordCarDelta(cars);
             } else {
-              runlog::event(runlog::EventKind::Note,
-                            "world state: nodes=%zu active_threads=%zu cars=%u car=%s",
-                            world.nodeCount(), scheduler.threadCount(), cars.count,
-                            carToken);
+              runlog::event(
+                  runlog::EventKind::Note,
+                  "world state: nodes=%zu active_threads=%zu cars=%u car=%s",
+                  world.nodeCount(), scheduler.threadCount(), cars.count,
+                  carToken);
             }
             const auto ground = resources.groundSnapshot();
             // Keys stay short so the line fits the 151-character event text.
-            runlog::event(runlog::EventKind::Note,
-                          "ground1 {\"v\":3,\"c\":%u,\"r\":%u,\"t\":%u,\"p\":%u,\"wa\":%u,"
-                          "\"wl\":%u,\"fg\":%u,\"ds\":%u,\"y\":%.5g,\"z\":%.5g}",
-                          ground.cities, ground.roads, ground.traffic, ground.pedestrianTypes,
-                          ground.waterActive, ground.waterLimits, ground.fogSettings,
-                          ground.densitySet, ground.density, ground.densityHi);
+            runlog::event(
+                runlog::EventKind::Note,
+                "ground1 "
+                "{\"v\":3,\"c\":%u,\"r\":%u,\"t\":%u,\"p\":%u,\"wa\":%u,"
+                "\"wl\":%u,\"fg\":%u,\"ds\":%u,\"y\":%.5g,\"z\":%.5g}",
+                ground.cities, ground.roads, ground.traffic,
+                ground.pedestrianTypes, ground.waterActive, ground.waterLimits,
+                ground.fogSettings, ground.densitySet, ground.density,
+                ground.densityHi);
             const auto water = resources.groundWaterNote();
             if (water.active) {
-              runlog::event(runlog::EventKind::Note,
-                            "ground2 {\"v\":1,\"px\":%.5g,\"py\":%.5g,\"pz\":%.5g,"
-                            "\"ea\":%.5g,\"eb\":%.5g}",
-                            water.posX, water.posY, water.posZ, water.extentA, water.extentB);
+              runlog::event(
+                  runlog::EventKind::Note,
+                  "ground2 {\"v\":1,\"px\":%.5g,\"py\":%.5g,\"pz\":%.5g,"
+                  "\"ea\":%.5g,\"eb\":%.5g}",
+                  water.posX, water.posY, water.posZ, water.extentA,
+                  water.extentB);
             }
           };
+          std::unique_ptr<AnimationDispatch> animationDispatch;
+          // Whatever ends the loop (failed frame step, scripted quit, error
+          // return), leave the thread and world state in run.log and in the
+          // dump files before the locals go away.
+          struct LoopExitDump {
+            std::function<void()> dump;
+            ~LoopExitDump() { dump(); }
+          } loopExitDump{[&] {
+            logThreadDump("loop exit");
+            recordWorldSummary();
+          }};
+          CarWorldStepper carStepper(world, resources);
           for (;;) {
             const auto frameStarted = std::chrono::steady_clock::now();
             if (sinceLoopStart() - lastWorldSummary >= 5.0) {
               recordWorldSummary();
               lastWorldSummary = sinceLoopStart();
             }
+            watchStalls();
             runlog::frameTick(static_cast<uint32_t>(world.frameCounter()));
             while (nextAction < script.size() &&
                    std::chrono::duration<double>(frameStarted - loopStarted)
@@ -1148,8 +1312,11 @@ static int probeMain(int argc, char **argv, const std::string &runDir) {
                 return 2;
               }
               if (action.verb == "quit") {
-                std::fprintf(stderr, "startup probe: script quit at %.1fs\n",
-                             action.at);
+                // A scripted quit is the planned termination of a successful
+                // run, not an error; log it as a note so the run's err list
+                // holds only genuine failures.
+                runlog::event(runlog::EventKind::Note,
+                              "startup probe: script quit at %.1fs", action.at);
                 return 0;
               }
               if (action.verb == "move") {
@@ -1219,6 +1386,32 @@ static int probeMain(int argc, char **argv, const std::string &runDir) {
                   else
                     platformInput->setSyntheticKey(static_cast<uint32_t>(code),
                                                    down);
+                } else if (action.verb == "sdl_type") {
+                  // Type a literal string into the focused text field by
+                  // pushing key down/up pairs with a real keycode, which is
+                  // what the game's key->char conversion reads (scancode-only
+                  // events carry no character).
+                  for (const char c : action.a) {
+                    SDL_Keymod modstate = SDL_KMOD_NONE;
+                    const SDL_Scancode code = SDL_GetScancodeFromKey(
+                        static_cast<SDL_Keycode>(c), &modstate);
+                    if (code == SDL_SCANCODE_UNKNOWN)
+                      continue;
+                    SDL_Event downEvent{};
+                    downEvent.type = SDL_EVENT_KEY_DOWN;
+                    downEvent.key.windowID = windowId;
+                    downEvent.key.scancode = code;
+                    downEvent.key.key = static_cast<SDL_Keycode>(c);
+                    downEvent.key.down = true;
+                    SDL_PushEvent(&downEvent);
+                    SDL_Event upEvent = downEvent;
+                    upEvent.type = SDL_EVENT_KEY_UP;
+                    upEvent.key.down = false;
+                    SDL_PushEvent(&upEvent);
+                    platformInput->setSyntheticKey(
+                        static_cast<uint32_t>(code), false);
+                  }
+                  pushed.type = 0;
                 } else {
                   std::fprintf(stderr,
                                "startup probe: script: unknown action %s\n",
@@ -1271,6 +1464,12 @@ static int probeMain(int argc, char **argv, const std::string &runDir) {
                              action.verb.c_str());
               }
             }
+            if (scriptPath.empty() &&
+                SDL_GetMouseFocus() == diagnosticWindow.get()) {
+              float x = 0, y = 0;
+              SDL_GetMouseState(&x, &y);
+              updateCursorPosition(x, y);
+            }
             SDL_Event event;
             while (SDL_PollEvent(&event)) {
               if (event.type == SDL_EVENT_QUIT ||
@@ -1279,15 +1478,7 @@ static int probeMain(int argc, char **argv, const std::string &runDir) {
               if (event.type == SDL_EVENT_MOUSE_MOTION &&
                   event.motion.windowID ==
                       SDL_GetWindowID(diagnosticWindow.get())) {
-                int width = 0, height = 0;
-                if (!SDL_GetWindowSize(diagnosticWindow.get(), &width, &height))
-                  cursorInput.reset();
-                else if (const auto point = normalizeCursorPosition(
-                             event.motion.x, event.motion.y, width, height))
-                  cursorInput =
-                      std::array<float, 3>{(*point)[0], (*point)[1], 0.0f};
-                else
-                  cursorInput.reset();
+                updateCursorPosition(event.motion.x, event.motion.y);
                 runlog::inputMotion(sinceLoopStart(), event.motion.x,
                                     event.motion.y);
               }
@@ -1295,6 +1486,7 @@ static int probeMain(int argc, char **argv, const std::string &runDir) {
                    event.type == SDL_EVENT_MOUSE_BUTTON_UP) &&
                   event.button.windowID ==
                       SDL_GetWindowID(diagnosticWindow.get())) {
+                updateCursorPosition(event.button.x, event.button.y);
                 if (event.button.button == SDL_BUTTON_LEFT)
                   runlog::inputButton(sinceLoopStart(), event.button.down);
                 else
@@ -1315,20 +1507,21 @@ static int probeMain(int argc, char **argv, const std::string &runDir) {
               }
             }
             runlog::inputFlush(sinceLoopStart());
-            platformInput->beginFrame();
+            platformInput->beginFrame(animationDispatch == nullptr);
+            if (const auto position = platformInput->frameButtonPosition())
+              updateCursorPosition((*position)[0], (*position)[1]);
             for (auto *player : world.playerInputs())
               if (player && player->playerInput)
                 player->playerInput->beginFrame(previousFrameSeconds);
             if (!timers.advanceFrame(
                     previousFrameSeconds, timers.timeScale(), 0.1f, 0.02f,
                     [&](float seconds, std::string &detail) {
-                      if (world.dynamicBodyCount() == 0)
-                        return world.stepEmptyPhysics(seconds, detail);
-                      return world.stepArmedCameraFollow(seconds, detail);
+                      return carStepper.step(seconds, detail);
                     },
-                    [&](LinkOwner &target, int32_t id, std::string &detail) {
-                      return dispatchTimerEvent(arena, target, id, loaded,
-                                                states, detail);
+                    [&](LinkOwner &target, int32_t id, uint32_t event,
+                        int32_t param, std::string &detail) {
+                      return dispatchTimerEvent(arena, target, id, event, param,
+                                                loaded, states, detail);
                     },
                     [&](std::string &detail) {
                       return world.drainDeferredDestroy(detail);
@@ -1347,9 +1540,11 @@ static int probeMain(int argc, char **argv, const std::string &runDir) {
                 std::fprintf(stderr, "  in %s\n", frame.c_str());
               return 1;
             }
-            if (!dispatchAnimationCallbacks(
-                    arena, std::min(previousFrameSeconds, 0.1f), loaded, states,
-                    error)) {
+            if (!animationDispatch)
+              animationDispatch = std::make_unique<AnimationDispatch>(
+                  arena, scheduler, std::min(previousFrameSeconds, 0.1f),
+                  loaded, states);
+            if (!animationDispatch->resume(error)) {
               recordWorldSummary();
               recordFailureContext(arena.failureTrace);
               std::fprintf(stderr, "startup probe: animation callbacks: %s\n",
@@ -1369,7 +1564,7 @@ static int probeMain(int argc, char **argv, const std::string &runDir) {
                     if (!renderActiveViewport(
                             world, *viewport, controls->worldScale,
                             controls->threshold, controls->frustumChecks,
-                            captureError)) {
+                            captureError, false, &arena, &states)) {
                       captured = false;
                       break;
                     }
@@ -1388,6 +1583,8 @@ static int probeMain(int argc, char **argv, const std::string &runDir) {
               }
               return 1;
             }
+            if (animationDispatch->finished())
+              animationDispatch.reset();
             if (!resourceLoadRate || *resourceLoadRate < 0) {
               std::fprintf(stderr,
                            "startup probe: resource load rate unavailable\n");
@@ -1409,6 +1606,11 @@ static int probeMain(int argc, char **argv, const std::string &runDir) {
                            error.c_str());
               return 1;
             }
+            if (!soundEffects->tick(error)) {
+              std::fprintf(stderr, "startup probe: sound update: %s\n",
+                           error.c_str());
+              return 1;
+            }
             const auto controls = frameVisibility.controls(error);
             if (!controls) {
               std::fprintf(stderr, "startup probe: frame controls: %s\n",
@@ -1422,9 +1624,18 @@ static int probeMain(int argc, char **argv, const std::string &runDir) {
                 cameras +=
                     viewport->viewport->renderAttachments->active().size();
             if (!cameras) {
-              std::fprintf(stderr,
-                           "startup probe: frame loop has no active camera\n");
-              return 1;
+              // Between scene switches (e.g. garage -> dealer) no camera is
+              // attached for a few frames; nothing is drawn but the frame
+              // still clears and presents. Logged once per gap, not fatal.
+              if (!noCameraFrameLogged) {
+                runlog::event(runlog::EventKind::Note,
+                              "frame loop has no active camera (frame %u): "
+                              "clearing without drawing",
+                              static_cast<unsigned>(world.frameCounter()));
+                noCameraFrameLogged = true;
+              }
+            } else {
+              noCameraFrameLogged = false;
             }
             if (!diagnosticRenderer->clear(0, 0, 0, 255, error)) {
               std::fprintf(stderr, "startup probe: frame clear: %s\n",
@@ -1439,9 +1650,12 @@ static int probeMain(int argc, char **argv, const std::string &runDir) {
               return 1;
             }
             for (auto *viewport : viewports) {
+              if (!cameras)
+                break;
               if (!renderActiveViewport(world, *viewport, controls->worldScale,
                                         controls->threshold,
-                                        controls->frustumChecks, error)) {
+                                        controls->frustumChecks, error, false,
+                                        &arena, &states)) {
                 std::fprintf(stderr, "startup probe: frame render: %s\n",
                              error.c_str());
                 return 1;
@@ -1459,8 +1673,11 @@ static int probeMain(int argc, char **argv, const std::string &runDir) {
                              pendingShot.c_str(), error.c_str());
                 return 1;
               }
+              // Success noise goes to stdout so scripted screenshot saves do
+              // not flood the run log's err stream (play.sh captures stderr
+              // as diagnostics).
               std::fprintf(
-                  stderr,
+                  stdout,
                   "startup probe: script shot saved %s (frame %u, %.1fs)\n",
                   pendingShot.c_str(),
                   static_cast<unsigned>(world.frameCounter()),
@@ -1518,7 +1735,8 @@ static int probeMain(int argc, char **argv, const std::string &runDir) {
               for (auto *viewport : viewports)
                 if (!renderActiveViewport(
                         world, *viewport, controls->worldScale,
-                        controls->threshold, controls->frustumChecks, error)) {
+                        controls->threshold, controls->frustumChecks, error,
+                        false, &arena, &states)) {
                   drawn = false;
                   break;
                 }
