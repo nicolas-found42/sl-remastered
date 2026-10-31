@@ -10,6 +10,9 @@ bool SDLCALL watchInput(void* userdata, SDL_Event* event) {
 	auto* input = static_cast<PlatformInput*>(userdata);
 	if (event->type == SDL_EVENT_MOUSE_MOTION)
 		input->captureMouse(event->motion.xrel, event->motion.yrel, 0.0f);
+	else if (event->type == SDL_EVENT_MOUSE_BUTTON_DOWN || event->type == SDL_EVENT_MOUSE_BUTTON_UP)
+		input->captureMouseButton(event->button.button, event->type == SDL_EVENT_MOUSE_BUTTON_DOWN,
+		                          event->button.x, event->button.y);
 	else if (event->type == SDL_EVENT_KEY_DOWN || event->type == SDL_EVENT_KEY_UP)
 		input->captureKey(static_cast<uint32_t>(event->key.scancode), event->key.key,
 		                  static_cast<uint16_t>(event->key.mod), event->type == SDL_EVENT_KEY_DOWN, event->key.repeat);
@@ -45,6 +48,12 @@ std::unique_ptr<PlatformInput> PlatformInput::create(std::string& error) {
 		input->kinds_.push_back(Kind::Joystick);
 	}
 	SDL_free(ids);
+	SDL_PumpEvents();
+	input->frameButtons_ = SDL_GetMouseState(nullptr, nullptr);
+	int keyCount = 0;
+	const bool* keys = SDL_GetKeyboardState(&keyCount);
+	if (keys) for (int i = 0; i < keyCount; ++i)
+		if (keys[i]) input->frameKeys_.insert(static_cast<uint32_t>(i));
 	if (!SDL_AddEventWatch(watchInput, input.get())) {
 		error = SDL_GetError();
 		return nullptr;
@@ -61,16 +70,21 @@ PlatformInput::~PlatformInput() {
 		SDL_SetCursor(previousCursor_);
 		if (previousCursorVisible_) SDL_ShowCursor(); else SDL_HideCursor();
 	}
-	if (selectedCursor_) SDL_DestroyCursor(selectedCursor_);
+	for (SDL_Cursor* cursor : stockCursors_) if (cursor) SDL_DestroyCursor(cursor);
 	SDL_QuitSubSystem(SDL_INIT_JOYSTICK | SDL_INIT_VIDEO);
 }
 
 bool PlatformInput::selectStockCursor(const std::filesystem::path& exe, int32_t index,
                                       bool visible, std::string& error) {
-	if (index != 0) { error = "stock cursor index unsupported"; return false; }
+	// FUN_004b7bd0 indexes the handles FUN_004b7ff0 loads from cursor groups
+	// 0x74..0x79, 0x7b..0x7e; an index outside 0..9 selects 0.
+	if (index < 0 || index > 9) index = 0;
+	static const uint16_t groups[10] = {0x74, 0x75, 0x76, 0x77, 0x78,
+	                                    0x79, 0x7b, 0x7c, 0x7d, 0x7e};
+	SDL_Cursor*& selectedCursor_ = stockCursors_[static_cast<size_t>(index)];
 	if (!selectedCursor_) {
 		CursorPixels pixels;
-		if (!loadStockCursor(exe, 116, pixels, error)) return false;
+		if (!loadStockCursor(exe, groups[index], pixels, error)) return false;
 		SDL_Surface* surface = SDL_CreateSurfaceFrom(static_cast<int>(pixels.width),
 		    static_cast<int>(pixels.height), SDL_PIXELFORMAT_RGBA32, pixels.rgba.data(),
 		    static_cast<int>(pixels.width * 4));
@@ -96,13 +110,57 @@ void PlatformInput::captureMouse(float x, float y, float wheel) {
 	pendingMouse_[0] += x; pendingMouse_[1] += y; pendingMouse_[2] += wheel;
 }
 
-void PlatformInput::beginFrame() {
+void PlatformInput::captureMouseButton(uint8_t button, bool down, float x, float y) {
+	if (button != SDL_BUTTON_LEFT && button != SDL_BUTTON_RIGHT &&
+	    button != SDL_BUTTON_MIDDLE && button != SDL_BUTTON_X1) return;
+	std::lock_guard<std::mutex> lock(mouseMutex_);
+	mouseButtonTransitions_.push_back({button, down, x, y});
+}
+
+std::optional<std::array<float, 2>> PlatformInput::frameButtonPosition() const {
+	std::lock_guard<std::mutex> lock(mouseMutex_);
+	return frameButtonPosition_;
+}
+
+void PlatformInput::beginFrame(bool advanceMouseButtons) {
 	SDL_PumpEvents();
 	const uint64_t now = SDL_GetTicksNS();
-	std::lock_guard<std::mutex> lock(mouseMutex_);
-	frameMilliseconds_ = static_cast<float>(static_cast<double>(now - lastFrame_) / 1000000.0);
-	lastFrame_ = now;
-	for (size_t i = 0; i < 3; ++i) { frameMouse_[i] = pendingMouse_[i]; pendingMouse_[i] = 0.0f; }
+	{
+		std::lock_guard<std::mutex> lock(mouseMutex_);
+		frameMilliseconds_ = static_cast<float>(static_cast<double>(now - lastFrame_) / 1000000.0);
+		lastFrame_ = now;
+		for (size_t i = 0; i < 3; ++i) { frameMouse_[i] = pendingMouse_[i]; pendingMouse_[i] = 0.0f; }
+		if (advanceMouseButtons) {
+			frameButtonPosition_.reset();
+			while (!mouseButtonTransitions_.empty()) {
+				const auto event = mouseButtonTransitions_.front();
+				mouseButtonTransitions_.pop_front();
+				const auto mask = SDL_BUTTON_MASK(event.button);
+				if (((frameButtons_ & mask) != 0) == event.down) continue;
+				if (event.down) frameButtons_ |= mask;
+				else frameButtons_ &= ~mask;
+				frameButtonPosition_ = std::array<float, 2>{event.x, event.y};
+				break;
+			}
+		}
+	}
+	{
+		std::lock_guard<std::mutex> lock(keyMutex_);
+		for (auto it = keyTransitions_.begin(); it != keyTransitions_.end();) {
+			auto& transitions = it->second;
+			while (!transitions.empty()) {
+				const bool down = transitions.front();
+				transitions.pop_front();
+				const bool held = frameKeys_.count(it->first) != 0;
+				if (held == down) continue;
+				if (down) frameKeys_.insert(it->first);
+				else frameKeys_.erase(it->first);
+				break;
+			}
+			if (transitions.empty()) it = keyTransitions_.erase(it);
+			else ++it;
+		}
+	}
 }
 
 namespace {
@@ -163,6 +221,7 @@ std::optional<SDL_Scancode> keyboardScancode(int32_t axis) {
 void PlatformInput::captureKey(uint32_t scancode, uint32_t keycode, uint16_t modifiers, bool down, bool repeat) {
 	if (repeat) return;
 	std::lock_guard<std::mutex> lock(keyMutex_);
+	keyTransitions_[scancode].push_back(down);
 	if (keyEvents_.size() >= 256) { keyOverflow_ = true; return; }
 	keyEvents_.push_back({scancode, keycode, modifiers, down});
 }
@@ -206,8 +265,8 @@ std::optional<float> PlatformInput::sample(int32_t device, int32_t axis) const {
 	}
 	if (kind == Kind::Mouse && axis >= 3 && axis <= 6) {
 		const uint8_t buttons[] = {SDL_BUTTON_LEFT, SDL_BUTTON_RIGHT, SDL_BUTTON_MIDDLE, SDL_BUTTON_X1};
-		SDL_PumpEvents();
-		auto state = SDL_GetMouseState(nullptr, nullptr);
+		std::lock_guard<std::mutex> mouseLock(mouseMutex_);
+		auto state = frameButtons_;
 		{
 			std::lock_guard<std::mutex> lock(syntheticMutex_);
 			state |= syntheticButtons_;
@@ -218,12 +277,13 @@ std::optional<float> PlatformInput::sample(int32_t device, int32_t axis) const {
 	if (axis >= 256) return 0.0f;
 	const auto scancode = keyboardScancode(axis);
 	if (!scancode) return std::nullopt;
-	SDL_PumpEvents();
-	int count = 0;
-	const bool* keys = SDL_GetKeyboardState(&count);
-	if (!keys || *scancode >= count) return std::nullopt;
+	bool held;
+	{
+		std::lock_guard<std::mutex> lock(keyMutex_);
+		held = frameKeys_.count(static_cast<uint32_t>(*scancode)) != 0;
+	}
 	std::lock_guard<std::mutex> lock(syntheticMutex_);
-	return (keys[*scancode] || syntheticKeys_.count(*scancode)) ? 1.0f : 0.0f;
+	return (held || syntheticKeys_.count(*scancode)) ? 1.0f : 0.0f;
 }
 
 void PlatformInput::setSyntheticMouseButton(uint8_t sdlButton, bool down) {

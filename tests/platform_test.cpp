@@ -51,6 +51,39 @@ int main(int argc, char** argv) {
 			    !SDL_HasEvent(SDL_EVENT_MOUSE_WHEEL)) return 1;
 			input->beginFrame();
 			if (input->sample(index, 2) != 0.0f) return 1;
+			SDL_Event button{};
+			button.type = SDL_EVENT_MOUSE_BUTTON_DOWN;
+			button.button.button = SDL_BUTTON_LEFT;
+			button.button.x = 25; button.button.y = 40;
+			if (!SDL_PushEvent(&button)) return 1;
+			button.type = SDL_EVENT_MOUSE_BUTTON_UP;
+			button.button.x = 30; button.button.y = 45;
+			if (!SDL_PushEvent(&button)) return 1;
+			input->beginFrame();
+			if (input->sample(index, 3) != 1.0f ||
+			    input->frameButtonPosition() != std::array<float, 2>{25, 40} ||
+			    input->sample(index, 3) != 1.0f) return 1;
+			input->beginFrame(false);
+			if (input->sample(index, 3) != 1.0f ||
+			    input->frameButtonPosition() != std::array<float, 2>{25, 40}) return 1;
+			input->beginFrame();
+			if (input->sample(index, 3) != 0.0f ||
+			    input->frameButtonPosition() != std::array<float, 2>{30, 45}) return 1;
+			input->beginFrame();
+			if (input->frameButtonPosition()) return 1;
+		}
+		const auto keyboard = std::find(input->names().begin(), input->names().end(), "SysKeyboard");
+		if (keyboard != input->names().end()) {
+			const auto index = static_cast<int32_t>(keyboard - input->names().begin());
+			SDL_Event key{};
+			key.type = SDL_EVENT_KEY_DOWN; key.key.scancode = SDL_SCANCODE_C; key.key.key = 'c';
+			if (!SDL_PushEvent(&key)) return 1;
+			key.type = SDL_EVENT_KEY_UP;
+			if (!SDL_PushEvent(&key)) return 1;
+			input->beginFrame();
+			if (input->sample(index, 0x2e) != 1.0f) return 1;
+			input->beginFrame();
+			if (input->sample(index, 0x2e) != 0.0f) return 1;
 		}
 	}
 	SDL_FlushEvents(SDL_EVENT_FIRST, SDL_EVENT_LAST);

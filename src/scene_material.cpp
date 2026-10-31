@@ -92,6 +92,10 @@ SceneMaterialLoadResult sceneLoadMaterial(ResourceWorld &world, uint32_t id) {
   std::vector<LinkOwner *> textures;
   textures.reserve(parsed.textures.size());
   for (uint32_t rawId : parsed.textures) {
+    if (!rawId) {
+      textures.push_back(nullptr);
+      continue;
+    }
     const uint32_t textureId = remapResourceId(rawId, mapping);
     if (!textureId) {
       result.error = "invalid material resource ID";
@@ -106,6 +110,7 @@ SceneMaterialLoadResult sceneLoadMaterial(ResourceWorld &world, uint32_t id) {
   }
   result.material = std::make_unique<SceneMaterialResources>(
       mesh.node.owner, textures, parsed.flags);
+  result.material->setLod(parsed.lodBias, parsed.lodAmplitude);
   result.flags = parsed.flags;
   result.error.clear();
   return result;
@@ -172,29 +177,34 @@ SceneRenderInstance::~SceneRenderInstance() {
 }
 bool SceneRenderInstance::attachPhysicsBone(GameWorld &world, WorldNode &node) {
   auto body = world.dynamicBody(node);
-  if (node.type != 2 || body.expired()) return false;
+  if (node.type != 2 || body.expired())
+    return false;
   detachPhysicsBone();
   prepareUnattachedGroundBone();
   setLinkOwner(physicsNode_, &node);
+  ++node.physicsBoneAttachments;
   physicsBody_ = std::move(body);
   physicsBoneAttached_ = true;
   return true;
 }
 void SceneRenderInstance::detachPhysicsBone() {
+  if (physicsNode_.owner) {
+    auto *node = static_cast<WorldNode *>(physicsNode_.owner);
+    if (node->physicsBoneAttachments)
+      --node->physicsBoneAttachments;
+  }
   setLinkOwner(physicsNode_, nullptr);
   physicsBody_.reset();
   physicsBoneAttached_ = false;
 }
 bool SceneRenderInstance::refreshPhysicsBone() {
-  if (!physicsNode_.owner) return false;
+  if (!physicsNode_.owner)
+    return false;
   const auto body = physicsBody_.lock();
-  if (!body || body->current > 1) return false;
+  if (!body || body->current > 1)
+    return false;
   const auto &state = body->state[body->current];
-  const auto &m = state.rot;
-  boneMatrix_ = {{m[0], m[4], m[8], 0, m[1], m[5], m[9], 0,
-                  m[2], m[6], m[10], 0, state.pos[0] * 10.0f,
-                  state.pos[1] * 10.0f, state.pos[2] * 10.0f, 1}};
-  rootBoneUpdatePending_ = true;
+  setBoneTransform(state.pos, state.rot);
   return true;
 }
 void SceneRenderInstance::prepareUnattachedGroundBone() {
@@ -202,8 +212,45 @@ void SceneRenderInstance::prepareUnattachedGroundBone() {
     groundBone_ = SceneGroundBone{"bone00", 0x8000};
 }
 void SceneRenderInstance::setBoneTranslation(float x, float y, float z) {
-  boneMatrix_ = {
-      {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, x * 10, y * 10, z * 10, 1}};
+  const float position[3]{x, y, z};
+  const float identity[3]{};
+  setBoneMatrix(position, identity);
+}
+void SceneRenderInstance::setBoneTransform(const std::array<float, 3> &position,
+                                           const std::array<float, 12> &m) {
+  boneMatrix_ = {{m[0], m[4], m[8], 0, m[1], m[5], m[9], 0, m[2], m[6], m[10],
+                  0, position[0] * 10.0f, position[1] * 10.0f,
+                  position[2] * 10.0f, 1}};
+  rootBoneUpdatePending_ = true;
+}
+void SceneRenderInstance::setBoneMatrix(const float position[3],
+                                        const float ypr[3]) {
+  // 0054ecd0 keeps sin(yaw) and sin(pitch) unrounded and stores the other
+  // sines and cosines as floats; 0054f4c0 transposes the basis into the 4x4
+  // and scales the position by 10 (DAT_005f37a0).
+  const double s0 = std::sin(ypr[0]), s1 = std::sin(ypr[1]);
+  const float c0 = static_cast<float>(std::cos(ypr[0])),
+              c1 = static_cast<float>(std::cos(ypr[1]));
+  const float s2 = static_cast<float>(std::sin(ypr[2])),
+              c2 = static_cast<float>(std::cos(ypr[2]));
+  const float t1 = static_cast<float>(static_cast<double>(s2) * s1);
+  const float t2 = static_cast<float>(static_cast<double>(c2) * s1);
+  const float m0 = static_cast<float>((static_cast<double>(s2) * s1) * s0 +
+                                      static_cast<double>(c2) * c0);
+  const float m1 = static_cast<float>((static_cast<double>(c2) * s1) * s0 -
+                                      static_cast<double>(s2) * c0);
+  const float m2 = static_cast<float>(static_cast<double>(c1) * s0);
+  const float m4 = static_cast<float>(static_cast<double>(s2) * c1);
+  const float m5 = static_cast<float>(static_cast<double>(c2) * c1);
+  const float m6 = static_cast<float>(-s1);
+  const float m8 = static_cast<float>(static_cast<double>(t1) * c0 -
+                                      static_cast<double>(c2) * s0);
+  const float m9 = static_cast<float>(static_cast<double>(t2) * c0 +
+                                      static_cast<double>(s2) * s0);
+  const float m10 = static_cast<float>(static_cast<double>(c1) * c0);
+  boneMatrix_ = {{m0, m4, m8, 0, m1, m5, m9, 0, m2, m6, m10, 0,
+                  position[0] * 10.0f, position[1] * 10.0f, position[2] * 10.0f,
+                  1}};
   rootBoneUpdatePending_ = true;
 }
 void SceneRenderInstance::processRootBoneUpdate() {

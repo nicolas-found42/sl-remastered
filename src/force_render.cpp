@@ -10,12 +10,13 @@ bool forceRenderFrames(GameWorld& world, ResourceWorld& resources, Render2D& ren
                       std::optional<int32_t> soundMax, std::optional<int32_t> textureMax,
                       std::optional<int32_t> meshMax, std::optional<int32_t> loadRate,
                       FrameVisibilityState* visibility, std::string& error,
-                      const std::function<bool(std::string&)>& drawVideo, bool videoPressureAccounted) {
+                      const std::function<bool(std::string&)>& drawVideo, bool videoPressureAccounted,
+                      VmArena* arena, const std::vector<VmStaticFields>* staticFields) {
 	for (int pass = 0; pass < 7; ++pass) {
-		if (resources.pendingPackLoads()) {
-			if (!loadRate || *loadRate < 0) { error = "resource load rate unavailable"; return false; }
-			if (!resources.completePendingPackLoads(static_cast<uint32_t>(*loadRate), error)) return false;
+		if (resources.pendingPackLoads() && (!loadRate || *loadRate < 0)) {
+			error = "resource load rate unavailable"; return false;
 		}
+		if (!resources.completePendingPackLoads(loadRate && *loadRate >= 0 ? static_cast<uint32_t>(*loadRate) : 0, error)) return false;
 		if (!resources.forceRenderPreflight(error, instanceMax, soundMax, textureMax, meshMax)) return false;
 		if (resources.pendingPackLoads()) { error = "pending load queue unsupported"; return false; }
 		if (videoPlaying && !drawVideo) { error = "video renderer unavailable"; return false; }
@@ -35,7 +36,7 @@ bool forceRenderFrames(GameWorld& world, ResourceWorld& resources, Render2D& ren
 		if (videoPlaying && !drawVideo(error)) return false;
 		for (auto* viewport : viewports)
 			if (!renderActiveViewport(world, *viewport, controls->worldScale, controls->threshold,
-			                          controls->frustumChecks, error, true)) return false;
+			                          controls->frustumChecks, error, true, arena, staticFields)) return false;
 		world.setFrameCounter(world.frameCounter() + 1);
 	}
 	error.clear(); return true;

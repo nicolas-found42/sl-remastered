@@ -62,6 +62,13 @@ static int rpkCensus(const char* dir, bool hasExpect, unsigned long expect) {
 		++opened;
 		totalDeps += r.pack.dependencies.size();
 		totalEntries += r.pack.entries.size();
+		for (const auto& entry : r.pack.entries) {
+			std::printf("ENTRY %s ", rel.c_str());
+			for (unsigned char c : entry.alias) {
+				std::printf("%02x", static_cast<unsigned>(c));
+			}
+			std::printf(" %u\n", entry.payloadSize);
+		}
 		std::printf("%s OK deps=%zu entries=%zu payloadsOutOfRange=%u payloadsOverlappingTable=%u\n", rel.c_str(),
 			r.pack.dependencies.size(), r.pack.entries.size(), r.pack.payloadsOutOfRange, r.pack.payloadsOverlappingTable);
 	}
@@ -124,6 +131,13 @@ static int scxCensus(const char* dir, const char* ext, bool perFile, bool hasExp
 			continue;
 		}
 		const ScxModel& m = r.model;
+		for (const auto& material : m.materials) {
+			std::printf("ENTRY %s ", rel.c_str());
+			for (unsigned char c : material.name) {
+				std::printf("%02x", static_cast<unsigned>(c));
+			}
+			std::printf(" %u\n", material.recordSize);
+		}
 		unsigned long fileVertices = 0;
 		unsigned long fileIndices = 0;
 		for (const ScxMesh& mesh : m.meshes) {
@@ -360,6 +374,7 @@ static int sdatCensus(const char* dir, bool perFile, bool hasExpect, unsigned lo
 		unsigned long fileBlob = 0;
 		std::string kinds;
 		for (const SdatUnsaved& u : f.unsaved) {
+			std::printf("ENTRY %s U %u %u %u\n", rel.c_str(), u.ordinal, u.kind, u.size);
 			if (u.kind == 7) {
 				fileBlob += u.size;
 			}
@@ -367,6 +382,11 @@ static int sdatCensus(const char* dir, bool perFile, bool hasExpect, unsigned lo
 		}
 		std::string names;
 		for (const SdatPack& pk : f.packs) {
+			std::printf("ENTRY %s P %u ", rel.c_str(), pk.ordinal);
+			for (unsigned char c : pk.path) {
+				std::printf("%02x", static_cast<unsigned>(c));
+			}
+			std::printf(" %zu\n", pk.path.size());
 			names += (names.empty() ? "" : ",") + std::to_string(pk.ordinal) + "=" + pk.path;
 		}
 		++opened;

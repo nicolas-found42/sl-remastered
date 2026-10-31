@@ -7,9 +7,9 @@
 #include <sstream>
 
 static bool sceneLoadMeshImpl(ResourceWorld &world, uint32_t id,
-                              const std::filesystem::path &root, ScxModel &model,
-                              std::string &error, bool allowFontFlags,
-                              bool allowGroundScy) {
+                              const std::filesystem::path &root,
+                              ScxModel &model, std::string &error,
+                              bool allowFontFlags, bool allowGroundScy) {
   const auto node = world.lookup(id, 5);
   if (node.status != LookupStatus::Found) {
     error = "linked mesh unavailable";
@@ -75,7 +75,11 @@ static bool sceneLoadMeshImpl(ResourceWorld &world, uint32_t id,
     else if (allowFontFlags && key == "flags" && !fontFlagsSeen &&
              (value == "16" || value == "16.000"))
       fontFlagsSeen = true;
-    else {
+    else if (key == "radius" || key == "slot" || key == "oc_rect") {
+      // City mesh metadata (cull radius, slot index, occlusion rectangle).
+      // Stock reads them into the mesh record; the bounded renderer ignores
+      // them, so the values are accepted without interpretation.
+    } else {
       error = "unsupported mesh directive";
       return false;
     }
@@ -151,7 +155,8 @@ static bool sceneLoadMeshImpl(ResourceWorld &world, uint32_t id,
 bool sceneLoadMesh(ResourceWorld &world, uint32_t id,
                    const std::filesystem::path &root, ScxModel &model,
                    std::string &error, bool allowFontFlags) {
-  return sceneLoadMeshImpl(world, id, root, model, error, allowFontFlags, false);
+  return sceneLoadMeshImpl(world, id, root, model, error, allowFontFlags,
+                           false);
 }
 
 bool sceneLoadGroundMesh(ResourceWorld &world, uint32_t id,
@@ -227,7 +232,8 @@ WorldNode *sceneCloneMesh(ResourceWorld &world, const ResolvedNode &source,
   return node;
 }
 
-WorldNode *sceneCloneRenderLight(ResourceWorld &world, const ResolvedNode &source,
+WorldNode *sceneCloneRenderLight(ResourceWorld &world,
+                                 const ResolvedNode &source,
                                  std::string &error) {
   if (source.type != 13) {
     error = "source light unavailable";
@@ -251,7 +257,8 @@ WorldNode *sceneCloneRenderLight(ResourceWorld &world, const ResolvedNode &sourc
   const auto parent = world.resolve(world.world().parentOwner(handle));
   WorldNode *node = nullptr;
   if (parent.worldNode)
-    node = world.world().addTypedChild(*parent.worldNode, 13, "", flags | 0x200);
+    node =
+        world.world().addTypedChild(*parent.worldNode, 13, "", flags | 0x200);
   else if (parent.packNode)
     node = world.world().addTypedChildUnderExternal(
         parent.packNode->handle, *parent.owner, parent.type,

@@ -4,6 +4,7 @@
 #include <array>
 #include <deque>
 #include <memory>
+#include <map>
 #include <optional>
 #include <mutex>
 #include <set>
@@ -25,10 +26,13 @@ public:
 	const std::vector<std::string>& names() const { return names_; }
 	std::optional<float> sample(int32_t device, int32_t axis) const;
 	std::optional<int32_t> type(int32_t device, int32_t axis) const;
-	// Called once per input frame on the main thread. SDL events are watched,
-	// not removed from the application's event queue.
-	void beginFrame();
+	// Called once per render frame on the main thread. Button transitions may be
+	// held while a previous animation pass is suspended; other input advances.
+	// SDL events are watched, not removed from the application's event queue.
+	void beginFrame(bool advanceMouseButtons = true);
 	void captureMouse(float x, float y, float wheel);
+	void captureMouseButton(uint8_t button, bool down, float x, float y);
+	std::optional<std::array<float, 2>> frameButtonPosition() const;
 	void captureKey(uint32_t scancode, uint32_t keycode, uint16_t modifiers, bool down, bool repeat);
 	std::optional<uint32_t> nextKey();
 	// Scripted input for automated runs. Folded into sample() beside the real SDL state.
@@ -46,8 +50,14 @@ private:
 	struct KeyEvent { uint32_t scancode, keycode; uint16_t modifiers; bool down; };
 	mutable std::mutex keyMutex_;
 	std::deque<KeyEvent> keyEvents_;
+	std::map<uint32_t, std::deque<bool>> keyTransitions_;
+	std::set<uint32_t> frameKeys_;
 	bool keyOverflow_ = false;
 	mutable std::mutex mouseMutex_;
+	struct MouseButtonTransition { uint8_t button; bool down; float x, y; };
+	std::deque<MouseButtonTransition> mouseButtonTransitions_;
+	uint32_t frameButtons_ = 0;
+	std::optional<std::array<float, 2>> frameButtonPosition_;
 	mutable std::mutex syntheticMutex_;
 	uint32_t syntheticButtons_ = 0;
 	std::set<uint32_t> syntheticKeys_;
@@ -56,7 +66,7 @@ private:
 	float frameMilliseconds_ = 0.0f;
 	uint64_t lastFrame_ = 0;
 	bool watching_ = false;
-	SDL_Cursor* selectedCursor_ = nullptr;
+	std::array<SDL_Cursor*, 10> stockCursors_{};
 	SDL_Cursor* previousCursor_ = nullptr;
 	bool previousCursorVisible_ = false;
 	bool changedCursor_ = false;
