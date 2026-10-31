@@ -90,8 +90,17 @@ struct SuspensionContactCandidate {
   std::shared_ptr<const SuspensionContactSurface> surface;
 };
 enum class SuspensionContactResult { Selected, Rejected, Unsupported };
-SuspensionContactResult selectSuspensionContact(SuspensionUpdate& suspension,
-                                                const SuspensionContactCandidate& candidate);
+// Numbers behind a rejection, for the car step trace.
+struct SuspensionSelectionDiag {
+  float length = 0;
+  float distance = 0;
+  float auxiliary = 0;
+  float storedDistanceSquared = 0;
+};
+SuspensionContactResult
+selectSuspensionContact(SuspensionUpdate &suspension,
+                        const SuspensionContactCandidate &candidate,
+                        SuspensionSelectionDiag *diag = nullptr);
 enum class SuspensionUpdateResult { Unsupported, Inactive, Active };
 SuspensionUpdateResult updateSuspension(SuspensionUpdate& suspension);
 

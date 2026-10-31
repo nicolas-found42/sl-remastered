@@ -1,4 +1,8 @@
+#include <cstdio>
 #include "physics_core_pair.hpp"
+#include <array>
+#include <atomic>
+#include <algorithm>
 #include <cmath>
 
 namespace physics {
@@ -27,7 +31,7 @@ Vec3 toLocal(const State& pose, const Vec3& world) {
 std::optional<CorePair> closestPointSegmentCores(const CollisionCore& a, const State& pa,
                                                   const CollisionCore& b, const State& pb) {
   const bool ap = point(a), bp = point(b);
-  if (!(ap && bp) && !(ap && segment(b)) && !(bp && segment(a))) return std::nullopt;
+  if (!(ap && bp) && !(ap && segment(b)) && !(bp && segment(a))) return corePairUnavailable(PairSiteFile::CorePair,__LINE__);
   Vec3 localA = a.vertices[0].position, localB = b.vertices[0].position;
   if (!ap || !bp) {
     const auto& c = ap ? b : a;
@@ -68,9 +72,9 @@ namespace physics {
 std::optional<CorePair> closestPointPolyhedron(const State& pointPose,
     const CollisionCore& core, const State& polyPose,
     std::optional<std::size_t>& cache, bool pointFirst) {
-  if (core.features.empty() || core.vertices.empty() || core.faces.empty()) return std::nullopt;
+  if (core.features.empty() || core.vertices.empty() || core.faces.empty()) return corePairUnavailable(PairSiteFile::CorePair,__LINE__);
   std::size_t index = cache.value_or(0);
-  if (index >= core.features.size()) return std::nullopt;
+  if (index >= core.features.size()) return corePairUnavailable(PairSiteFile::CorePair,__LINE__);
   auto findFeature = [&](CoreFeatureRef ref) -> std::optional<std::size_t> {
     for (std::size_t i = 0; i < core.features.size(); ++i)
       if (core.features[i].ref.kind == ref.kind && core.features[i].ref.index == ref.index) return i;
@@ -82,7 +86,7 @@ std::optional<CorePair> closestPointPolyhedron(const State& pointPose,
     float minimum = f.ref.kind == CoreFeatureKind::Face ? 1.0f : 0.0f;
     std::optional<std::size_t> next;
     for (const auto& a : f.adjacent) {
-      if (a.anchorVertex >= core.vertices.size()) return std::nullopt;
+      if (a.anchorVertex >= core.vertices.size()) return corePairUnavailable(PairSiteFile::CorePair,__LINE__);
       const auto v = subtract(p, core.vertices[a.anchorVertex].position);
       // The stock tests use y + z + x for edge/face and y + x + z for vertex.
       const float d = f.ref.kind == CoreFeatureKind::Vertex
@@ -90,7 +94,7 @@ std::optional<CorePair> closestPointPolyhedron(const State& pointPose,
           : v[1]*a.normal[1] + v[2]*a.normal[2] + v[0]*a.normal[0];
       if (d < minimum) {
         minimum = d; next = findFeature(a.neighbor);
-        if (!next) return std::nullopt;
+        if (!next) return corePairUnavailable(PairSiteFile::CorePair,__LINE__);
         if (f.ref.kind != CoreFeatureKind::Face) break;
       }
     }
@@ -98,7 +102,7 @@ std::optional<CorePair> closestPointPolyhedron(const State& pointPose,
     CorePair result;
     const Vec3 origin{};
     if (f.ref.kind == CoreFeatureKind::Vertex) {
-      if (f.ref.index >= core.vertices.size()) return std::nullopt;
+      if (f.ref.index >= core.vertices.size()) return corePairUnavailable(PairSiteFile::CorePair,__LINE__);
       result.pointB = core.vertices[f.ref.index].position;
       result.normal = pointFirst
           ? subtract(pointPose.pos, transformPoint(polyPose.pos, polyPose.rot, result.pointB))
@@ -106,18 +110,18 @@ std::optional<CorePair> closestPointPolyhedron(const State& pointPose,
       result.distance = std::sqrt(result.normal[2]*result.normal[2] + result.normal[1]*result.normal[1] + result.normal[0]*result.normal[0]);
       if (result.distance > 0) { const float inv = 1.0f/result.distance; for (auto& v: result.normal) v *= inv; }
     } else if (f.ref.kind == CoreFeatureKind::Edge) {
-      if (f.ref.index >= core.edges.size()) return std::nullopt;
+      if (f.ref.index >= core.edges.size()) return corePairUnavailable(PairSiteFile::CorePair,__LINE__);
       const auto& edge = core.edges[f.ref.index];
-      if (edge.vertices[0] >= core.vertices.size() || edge.vertices[1] >= core.vertices.size()) return std::nullopt;
+      if (edge.vertices[0] >= core.vertices.size() || edge.vertices[1] >= core.vertices.size()) return corePairUnavailable(PairSiteFile::CorePair,__LINE__);
       CollisionCore c = segmentCore(core.vertices[edge.vertices[0]].position, core.vertices[edge.vertices[1]].position);
       c.edges[0].direction = edge.direction;
       auto pair = closestPointSegmentCores(pointCore(), pointPose, c, polyPose);
-      if (!pair) return std::nullopt;
+      if (!pair) return corePairUnavailable(PairSiteFile::CorePair,__LINE__);
       result = *pair;
     } else {
-      if (f.ref.index >= core.faces.size() || core.faces[f.ref.index].vertices.empty()) return std::nullopt;
+      if (f.ref.index >= core.faces.size() || core.faces[f.ref.index].vertices.empty()) return corePairUnavailable(PairSiteFile::CorePair,__LINE__);
       const auto& face = core.faces[f.ref.index];
-      if (face.vertices[0] >= core.vertices.size()) return std::nullopt;
+      if (face.vertices[0] >= core.vertices.size()) return corePairUnavailable(PairSiteFile::CorePair,__LINE__);
       const float d = dot(subtract(p, core.vertices[face.vertices[0]].position), face.normal);
       if (d <= 0) {
         float best = -3.402823466e38f;
@@ -126,11 +130,11 @@ std::optional<CorePair> closestPointPolyhedron(const State& pointPose,
           const auto ref = core.features[i].ref;
           if (ref.kind != CoreFeatureKind::Face || ref.index >= core.faces.size()) continue;
           const auto& candidate = core.faces[ref.index];
-          if (candidate.vertices.empty() || candidate.vertices[0] >= core.vertices.size()) return std::nullopt;
+          if (candidate.vertices.empty() || candidate.vertices[0] >= core.vertices.size()) return corePairUnavailable(PairSiteFile::CorePair,__LINE__);
           const float v = dot(subtract(p, core.vertices[candidate.vertices[0]].position), candidate.normal);
           if (v > best) { best = v; bestIndex = i; }
         }
-        if (!bestIndex) return std::nullopt;
+        if (!bestIndex) return corePairUnavailable(PairSiteFile::CorePair,__LINE__);
         if (*bestIndex != index) { index = *bestIndex; continue; }
       }
       result.distance = d;
@@ -145,7 +149,7 @@ std::optional<CorePair> closestPointPolyhedron(const State& pointPose,
     }
     return result;
   }
-  return std::nullopt;
+  return corePairUnavailable(PairSiteFile::CorePair,__LINE__);
 }
 }
 
@@ -191,10 +195,10 @@ Vec3 along(const Vec3& a,const Vec3& b,float t) {
 std::optional<CorePair> closestSegmentCores(const CollisionCore& a,const State& pa,
     const CollisionCore& b,const State& pb,std::optional<std::size_t>& ca,
     std::optional<std::size_t>& cb) {
-  if(!segment(a)||!segment(b)||a.features.size()!=3||b.features.size()!=3) return std::nullopt;
+  if(!segment(a)||!segment(b)||a.features.size()!=3||b.features.size()!=3) return corePairUnavailable(PairSiteFile::CorePair,__LINE__);
   const CollisionCore* c[]={&a,&b}; const State* pose[]={&pa,&pb};
   std::size_t f[]={ca.value_or(0),cb.value_or(0)};
-  if(f[0]>=3||f[1]>=3) return std::nullopt;
+  if(f[0]>=3||f[1]>=3) return corePairUnavailable(PairSiteFile::CorePair,__LINE__);
   auto world=[&](int side,const Vec3& v){return transformPoint(pose[side]->pos,pose[side]->rot,v);};
   auto convert=[&](int side,int other,const Vec3& v){return toLocal(*pose[side],world(other,v));};
   auto anchor=[&](int side)->Vec3 { const auto ref=c[side]->features[f[side]].ref;
@@ -203,14 +207,14 @@ std::optional<CorePair> closestSegmentCores(const CollisionCore& a,const State& 
     return c[side]->vertices[c[side]->edges[ref.index].vertices[1]].position; };
   for(int steps=0;steps<12;++steps) {
     const auto k0=c[0]->features[f[0]].ref.kind, k1=c[1]->features[f[1]].ref.kind;
-    if(k0==CoreFeatureKind::Face||k1==CoreFeatureKind::Face) return std::nullopt;
+    if(k0==CoreFeatureKind::Face||k1==CoreFeatureKind::Face) return corePairUnavailable(PairSiteFile::CorePair,__LINE__);
     if(k0==CoreFeatureKind::Vertex&&k1==CoreFeatureKind::Vertex) {
       bool moved=false;
       for(int s=0;s<2&&!moved;++s) {
         const auto& feature=c[s]->features[f[s]];
         const Vec3 p=convert(s,1-s,anchor(1-s));
         for(const auto& adj:feature.adjacent) if(dot(subtract(p,c[s]->vertices[adj.anchorVertex].position),adj.normal)<0) {
-          auto n=featureIndex(*c[s],adj.neighbor);if(!n)return std::nullopt;f[s]=*n;moved=true;break;
+          auto n=featureIndex(*c[s],adj.neighbor);if(!n)return corePairUnavailable(PairSiteFile::CorePair,__LINE__);f[s]=*n;moved=true;break;
         }
       }
       if(moved) continue;
@@ -225,7 +229,7 @@ std::optional<CorePair> closestSegmentCores(const CollisionCore& a,const State& 
       const Vec3 p=convert(e,v,anchor(v)); const auto& ef=c[e]->features[f[e]];
       bool moved=false;
       for(const auto& adj:ef.adjacent) if(dot(subtract(p,c[e]->vertices[adj.anchorVertex].position),adj.normal)<0) {
-        auto n=featureIndex(*c[e],adj.neighbor);if(!n)return std::nullopt;f[e]=*n;moved=true;break;
+        auto n=featureIndex(*c[e],adj.neighbor);if(!n)return corePairUnavailable(PairSiteFile::CorePair,__LINE__);f[e]=*n;moved=true;break;
       }
       if(moved)continue;
       const Vec3 x=convert(v,e,anchor(e)),y=convert(v,e,end(e)),delta=subtract(y,x);
@@ -237,7 +241,7 @@ std::optional<CorePair> closestSegmentCores(const CollisionCore& a,const State& 
       CollisionCore pointOnly=pointCore(); pointOnly.vertices[0].position=anchor(v);
       auto r=v==0?closestPointSegmentCores(pointOnly,*pose[v],*c[e],*pose[e])
                  :closestPointSegmentCores(*c[e],*pose[e],pointOnly,*pose[v]);
-      if(!r)return std::nullopt;ca=f[0];cb=f[1];return r;
+      if(!r)return corePairUnavailable(PairSiteFile::CorePair,__LINE__);ca=f[0];cb=f[1];return r;
     }
     bool moved=false;
     for(int side=0;side<2&&!moved;++side) {
@@ -289,7 +293,7 @@ std::optional<CorePair> closestSegmentCores(const CollisionCore& a,const State& 
     if(length!=0){const float inverse=1/length;for(int i=0;i<3;++i)r.normal[i]=n[i]*inverse;}
     ca=f[0];cb=f[1];return r;
   }
-  return std::nullopt;
+  return corePairUnavailable(PairSiteFile::CorePair,__LINE__);
 }
 }
 
@@ -297,10 +301,10 @@ namespace physics {
 std::optional<CorePair> closestSegmentPolyhedron(const CollisionCore& seg,const State& ps,
     const CollisionCore& poly,const State& pp,std::optional<std::size_t>& cs,
     std::optional<std::size_t>& cp,bool segmentFirst) {
-  if(!segment(seg)||seg.features.size()!=3||poly.faces.empty()||poly.features.empty())return std::nullopt;
+  if(!segment(seg)||seg.features.size()!=3||poly.faces.empty()||poly.features.empty())return corePairUnavailable(PairSiteFile::CorePair,__LINE__);
   const CollisionCore* c[]={&seg,&poly};const State* pose[]={&ps,&pp};
   std::size_t f[]={cs.value_or(0),cp.value_or(0)};
-  if(f[0]>=seg.features.size()||f[1]>=poly.features.size())return std::nullopt;
+  if(f[0]>=seg.features.size()||f[1]>=poly.features.size())return corePairUnavailable(PairSiteFile::CorePair,__LINE__);
   auto world=[&](int s,const Vec3& v){return transformPoint(pose[s]->pos,pose[s]->rot,v);};
   auto convert=[&](int s,int other,const Vec3& v){return toLocal(*pose[s],world(other,v));};
   auto valid=[&](int s){auto r=c[s]->features[f[s]].ref;
@@ -312,11 +316,11 @@ std::optional<CorePair> closestSegmentPolyhedron(const CollisionCore& seg,const 
   auto end=[&](int s)->Vec3 {return c[s]->vertices[c[s]->edges[c[s]->features[f[s]].ref.index].vertices[1]].position;};
   auto finish=[&](CorePair r){cs=f[0];cp=f[1];if(!segmentFirst){std::swap(r.pointA,r.pointB);for(auto& v:r.normal)v=-v;}return std::optional<CorePair>(r);};
   for(std::size_t steps=0;steps<2*(seg.features.size()+poly.features.size());++steps) {
-    if(!valid(0)||!valid(1))return std::nullopt;
+    if(!valid(0)||!valid(1))return corePairUnavailable(PairSiteFile::CorePair,__LINE__);
     auto k0=c[0]->features[f[0]].ref.kind,k1=c[1]->features[f[1]].ref.kind;
-    if(k0==CoreFeatureKind::Face)return std::nullopt;
+    if(k0==CoreFeatureKind::Face)return corePairUnavailable(PairSiteFile::CorePair,__LINE__);
     for(int s=0;s<2;++s)for(const auto& x:c[s]->features[f[s]].adjacent)
-      if(x.anchorVertex>=c[s]->vertices.size()||!featureIndex(*c[s],x.neighbor))return std::nullopt;
+      if(x.anchorVertex>=c[s]->vertices.size()||!featureIndex(*c[s],x.neighbor))return corePairUnavailable(PairSiteFile::CorePair,__LINE__);
     if(k0==CoreFeatureKind::Vertex&&k1==CoreFeatureKind::Vertex) {
       bool moved=false;
       for(int s=0;s<2&&!moved;++s){const auto p=convert(s,1-s,anchor(1-s));
@@ -349,7 +353,7 @@ std::optional<CorePair> closestSegmentPolyhedron(const CollisionCore& seg,const 
       }else{const auto& edge=c[e]->edges[c[e]->features[f[e]].ref.index];
         auto edgeCore=segmentCore(anchor(e),end(e));edgeCore.edges[0].direction=edge.direction;
         r=closestPointSegmentCores(edgeCore,*pose[e],pcore,*pose[v]);}
-      if(!r)return std::nullopt;return finish(*r);
+      if(!r)return corePairUnavailable(PairSiteFile::CorePair,__LINE__);return finish(*r);
     }
     if(k0==CoreFeatureKind::Vertex&&k1==CoreFeatureKind::Face) {
       const Vec3 p=convert(1,0,anchor(0));auto face=poly.faces[poly.features[f[1]].ref.index];
@@ -360,15 +364,15 @@ std::optional<CorePair> closestSegmentPolyhedron(const CollisionCore& seg,const 
       const auto& vertex=seg.vertices[seg.features[f[0]].ref.index];
       bool movedVertex=false;
       for(auto ei:vertex.edges){const auto& e=seg.edges[ei];auto other=e.vertices[0]==seg.features[f[0]].ref.index?e.vertices[1]:e.vertices[0];
-        if(other>=seg.vertices.size())return std::nullopt;
+        if(other>=seg.vertices.size())return corePairUnavailable(PairSiteFile::CorePair,__LINE__);
         float d2=dot(subtract(convert(1,0,seg.vertices[other].position),anchor(1)),face.normal);
-        if(std::fabs(d2)<std::fabs(d)||d2*d<0){auto n=featureIndex(seg,{CoreFeatureKind::Edge,ei});if(!n)return std::nullopt;f[0]=*n;movedVertex=true;break;}}
+        if(std::fabs(d2)<std::fabs(d)||d2*d<0){auto n=featureIndex(seg,{CoreFeatureKind::Edge,ei});if(!n)return corePairUnavailable(PairSiteFile::CorePair,__LINE__);f[0]=*n;movedVertex=true;break;}}
       if(movedVertex)continue;
       if(d<=0){float best=-3.402823466e38f;std::optional<std::size_t> bestIndex;
         for(std::size_t i=0;i<poly.features.size();++i){auto r=poly.features[i].ref;if(r.kind!=CoreFeatureKind::Face||r.index>=poly.faces.size()||poly.faces[r.index].vertices.empty())continue;
-          const auto& q=poly.faces[r.index];if(q.vertices[0]>=poly.vertices.size())return std::nullopt;
+          const auto& q=poly.faces[r.index];if(q.vertices[0]>=poly.vertices.size())return corePairUnavailable(PairSiteFile::CorePair,__LINE__);
           float dist=dot(subtract(p,poly.vertices[q.vertices[0]].position),q.normal);if(dist>best){best=dist;bestIndex=i;}}
-        if(!bestIndex)return std::nullopt; f[1]=*bestIndex; if(best>0)continue; face=poly.faces[poly.features[f[1]].ref.index]; d=best;}
+        if(!bestIndex)return corePairUnavailable(PairSiteFile::CorePair,__LINE__); f[1]=*bestIndex; if(best>0)continue; face=poly.faces[poly.features[f[1]].ref.index]; d=best;}
       CorePair r;r.pointA=anchor(0);r.distance=d;
       for(int i=0;i<3;++i)r.pointB[i]=p[i]-d*face.normal[i];r.normal=matrixTransformRows(pp.rot,face.normal);return finish(r);
     }
@@ -379,21 +383,21 @@ std::optional<CorePair> closestSegmentPolyhedron(const CollisionCore& seg,const 
         if(clip.lowNeighbor==clip.highNeighbor || clip.high<clip.low) {
           // 004ae300 follows the face boundary from the first rejecting edge.
           const auto first=clip.lowNeighbor;
-          if(!first||ff.adjacent.empty())return std::nullopt;
+          if(!first||ff.adjacent.empty())return corePairUnavailable(PairSiteFile::CorePair,__LINE__);
           std::size_t current=0;
           while(current<ff.adjacent.size()&&featureIndex(poly,ff.adjacent[current].neighbor)!=first)++current;
-          if(current==ff.adjacent.size())return std::nullopt;
+          if(current==ff.adjacent.size())return corePairUnavailable(PairSiteFile::CorePair,__LINE__);
           std::optional<std::size_t> previous;
           bool rejected=false, accepted=false;
           std::optional<std::size_t> selected;
           for(std::size_t iterations=0;iterations<=ff.adjacent.size()*2;++iterations) {
             const auto currentEdge=featureIndex(poly,ff.adjacent[current].neighbor);
-            if(!currentEdge||poly.features[*currentEdge].ref.kind!=CoreFeatureKind::Edge)return std::nullopt;
+            if(!currentEdge||poly.features[*currentEdge].ref.kind!=CoreFeatureKind::Edge)return corePairUnavailable(PairSiteFile::CorePair,__LINE__);
             auto plane=clipToFeature(poly,ff,x,y,current,current+1);
             std::size_t next=(current+1)%ff.adjacent.size();
             if(!plane.lowNeighbor&&!plane.highNeighbor) {
-              if(accepted){if(!previous)return std::nullopt;selected=featureIndex(poly,ff.adjacent[*previous].neighbor);break;}
-              if(rejected){if(!previous)return std::nullopt;selected=featureIndex(poly,ff.adjacent[*previous].neighbor);break;}
+              if(accepted){if(!previous)return corePairUnavailable(PairSiteFile::CorePair,__LINE__);selected=featureIndex(poly,ff.adjacent[*previous].neighbor);break;}
+              if(rejected){if(!previous)return corePairUnavailable(PairSiteFile::CorePair,__LINE__);selected=featureIndex(poly,ff.adjacent[*previous].neighbor);break;}
             } else {
               rejected=true;
               float lo=0,hi=1;
@@ -402,7 +406,7 @@ std::optional<CorePair> closestSegmentPolyhedron(const CollisionCore& seg,const 
                 else if(plane.lowNeighbor)hi=plane.low;
               }
               const auto& edgeFeature=poly.features[*currentEdge];
-              if(edgeFeature.adjacent.size()<2)return std::nullopt;
+              if(edgeFeature.adjacent.size()<2)return corePairUnavailable(PairSiteFile::CorePair,__LINE__);
               auto ends=clipToFeature(poly,edgeFeature,x,y,0,2,lo,hi);
               auto shares=[&](std::size_t index,std::optional<std::size_t> vertex) {
                 auto e=featureIndex(poly,ff.adjacent[index].neighbor);
@@ -413,7 +417,7 @@ std::optional<CorePair> closestSegmentPolyhedron(const CollisionCore& seg,const 
               auto steer=[&](std::optional<std::size_t> vertex){if(!shares(next,vertex))next=current?current-1:ff.adjacent.size()-1;};
               if(ends.lowNeighbor&&ends.lowNeighbor==ends.highNeighbor)steer(ends.lowNeighbor);
               else if(ends.high<ends.low) {
-                if(accepted){if(!previous)return std::nullopt;selected=featureIndex(poly,ff.adjacent[*previous].neighbor);break;}
+                if(accepted){if(!previous)return corePairUnavailable(PairSiteFile::CorePair,__LINE__);selected=featureIndex(poly,ff.adjacent[*previous].neighbor);break;}
                 steer(ends.lowNeighbor?ends.lowNeighbor:ends.highNeighbor);
               } else {
                 accepted=true;
@@ -430,7 +434,7 @@ std::optional<CorePair> closestSegmentPolyhedron(const CollisionCore& seg,const 
             if(previous&&next==*previous){selected=featureIndex(poly,ff.adjacent[*previous].neighbor);break;}
             previous=current;current=next;
           }
-          if(!selected)return std::nullopt;
+          if(!selected)return corePairUnavailable(PairSiteFile::CorePair,__LINE__);
           f[1]=*selected;continue;
         }
       }
@@ -459,7 +463,7 @@ std::optional<CorePair> closestSegmentPolyhedron(const CollisionCore& seg,const 
       for(int side=0;side<2&&!moved;++side) {
         int other=1-side;Vec3 x=convert(side,other,anchor(other)),y=convert(side,other,end(other)),delta=subtract(y,x);
         const auto& feature=c[side]->features[f[side]];
-        if(feature.adjacent.size()<2)return std::nullopt;
+        if(feature.adjacent.size()<2)return corePairUnavailable(PairSiteFile::CorePair,__LINE__);
         auto clip=clipToFeature(*c[side],feature,x,y,0,2);
         if(clip.lowNeighbor==clip.highNeighbor&&clip.lowNeighbor){f[side]=*clip.lowNeighbor;moved=true;break;}
         auto checkVertex=[&](std::optional<std::size_t> n,float t,bool low){
@@ -488,13 +492,13 @@ std::optional<CorePair> closestSegmentPolyhedron(const CollisionCore& seg,const 
       std::optional<std::size_t> sa=2,sb=2;
       auto r=segmentFirst ? closestSegmentCores(seg,ps,temp,pp,sa,sb)
                           : closestSegmentCores(temp,pp,seg,ps,sb,sa);
-      if(!r||*sa!=2||*sb!=2)return std::nullopt;
+      if(!r||*sa!=2||*sb!=2)return corePairUnavailable(PairSiteFile::CorePair,__LINE__);
       cs=f[0];cp=f[1];return r;
     }
     // The remaining clipped face cases have not yet been translated.
-    return std::nullopt;
+    return corePairUnavailable(PairSiteFile::CorePair,__LINE__);
   }
-  return std::nullopt;
+  return corePairUnavailable(PairSiteFile::CorePair,__LINE__);
 }
 }
 
@@ -502,10 +506,10 @@ namespace physics {
 std::optional<CorePair> closestPolyhedronCores(const CollisionCore& a,const State& pa,
     const CollisionCore& b,const State& pb,std::optional<std::size_t>& ca,
     std::optional<std::size_t>& cb) {
-  if(a.faces.empty()||b.faces.empty()||a.features.empty()||b.features.empty())return std::nullopt;
+  if(a.faces.empty()||b.faces.empty()||a.features.empty()||b.features.empty())return corePairUnavailable(PairSiteFile::CorePair,__LINE__);
   const CollisionCore* c[]={&a,&b};const State* pose[]={&pa,&pb};
   std::size_t f[]={ca.value_or(0),cb.value_or(0)};
-  if(f[0]>=a.features.size()||f[1]>=b.features.size())return std::nullopt;
+  if(f[0]>=a.features.size()||f[1]>=b.features.size())return corePairUnavailable(PairSiteFile::CorePair,__LINE__);
   auto valid=[&](int side) {const auto& core=*c[side];auto ref=core.features[f[side]].ref;
     if(ref.kind==CoreFeatureKind::Vertex)return ref.index<core.vertices.size();
     if(ref.kind==CoreFeatureKind::Edge)return ref.index<core.edges.size()&&core.edges[ref.index].vertices[0]<core.vertices.size()&&core.edges[ref.index].vertices[1]<core.vertices.size();
@@ -518,12 +522,12 @@ std::optional<CorePair> closestPolyhedronCores(const CollisionCore& a,const Stat
   auto finish=[&](CorePair r){ca=f[0];cb=f[1];return std::optional<CorePair>(r);};
   int orientation=0;
   for(std::size_t steps=0;steps<=a.features.size()+2*b.features.size();++steps) {
-    if(!valid(0)||!valid(1))return std::nullopt;
+    if(!valid(0)||!valid(1))return corePairUnavailable(PairSiteFile::CorePair,__LINE__);
     for(int s=0;s<2;++s)for(const auto& x:c[s]->features[f[s]].adjacent)
-      if(x.anchorVertex>=c[s]->vertices.size()||!featureIndex(*c[s],x.neighbor))return std::nullopt;
+      if(x.anchorVertex>=c[s]->vertices.size()||!featureIndex(*c[s],x.neighbor))return corePairUnavailable(PairSiteFile::CorePair,__LINE__);
     auto k0=c[0]->features[f[0]].ref.kind,k1=c[1]->features[f[1]].ref.kind;
     if(k0==CoreFeatureKind::Face&&k1==CoreFeatureKind::Face){
-      if(c[0]->features[f[0]].adjacent.empty())return std::nullopt;
+      if(c[0]->features[f[0]].adjacent.empty())return corePairUnavailable(PairSiteFile::CorePair,__LINE__);
       f[0]=*featureIndex(a,c[0]->features[f[0]].adjacent[0].neighbor);continue;
     }
     if(k0==CoreFeatureKind::Vertex&&k1==CoreFeatureKind::Vertex){
@@ -545,7 +549,7 @@ std::optional<CorePair> closestPolyhedronCores(const CollisionCore& a,const Stat
       if(clip.highNeighbor&&dot(subtract(along(x,y,clip.high),anchor(v)),delta)<0){f[v]=*clip.highNeighbor;continue;}
       CollisionCore p=pointCore();p.vertices[0].position=anchor(v);auto edge=segmentCore(anchor(e),end(e));edge.edges[0].direction=c[e]->edges[c[e]->features[f[e]].ref.index].direction;
       auto r=v==0?closestPointSegmentCores(p,*pose[v],edge,*pose[e]):closestPointSegmentCores(edge,*pose[e],p,*pose[v]);
-      if(!r)return std::nullopt;return finish(*r);
+      if(!r)return corePairUnavailable(PairSiteFile::CorePair,__LINE__);return finish(*r);
     }
     if((k0==CoreFeatureKind::Vertex&&k1==CoreFeatureKind::Face)||(k0==CoreFeatureKind::Face&&k1==CoreFeatureKind::Vertex)){
       int v=k0==CoreFeatureKind::Vertex?0:1,q=1-v;orientation=v;Vec3 point=convert(q,v,anchor(v));const auto& feature=c[q]->features[f[q]];
@@ -554,18 +558,18 @@ std::optional<CorePair> closestPolyhedronCores(const CollisionCore& a,const Stat
       if(minimum<0&&next){f[q]=*next;continue;}
       CoreFace face=c[q]->faces[feature.ref.index];float d=dot(subtract(point,anchor(q)),face.normal);bool moved=false;
       const auto vi=c[v]->features[f[v]].ref.index;
-      for(auto ei:c[v]->vertices[vi].edges){if(ei>=c[v]->edges.size())return std::nullopt;const auto& edge=c[v]->edges[ei];
-        auto other=edge.vertices[0]==vi?edge.vertices[1]:edge.vertices[0];if(other>=c[v]->vertices.size())return std::nullopt;
+      for(auto ei:c[v]->vertices[vi].edges){if(ei>=c[v]->edges.size())return corePairUnavailable(PairSiteFile::CorePair,__LINE__);const auto& edge=c[v]->edges[ei];
+        auto other=edge.vertices[0]==vi?edge.vertices[1]:edge.vertices[0];if(other>=c[v]->vertices.size())return corePairUnavailable(PairSiteFile::CorePair,__LINE__);
         float d2=dot(subtract(convert(q,v,c[v]->vertices[other].position),anchor(q)),face.normal);
-        if(std::fabs(d2)<std::fabs(d)||d2*d<0){auto n=featureIndex(*c[v],{CoreFeatureKind::Edge,ei});if(!n)return std::nullopt;f[v]=*n;moved=true;break;}}
+        if(std::fabs(d2)<std::fabs(d)||d2*d<0){auto n=featureIndex(*c[v],{CoreFeatureKind::Edge,ei});if(!n)return corePairUnavailable(PairSiteFile::CorePair,__LINE__);f[v]=*n;moved=true;break;}}
       if(moved)continue;
       if(d<=0){float best=-3.402823466e38f;std::optional<std::size_t> bestIndex;
         for(std::size_t i=0;i<c[q]->features.size();++i){auto ref=c[q]->features[i].ref;
           if(ref.kind!=CoreFeatureKind::Face||ref.index>=c[q]->faces.size())continue;
-          const auto& candidate=c[q]->faces[ref.index];if(candidate.vertices.empty()||candidate.vertices[0]>=c[q]->vertices.size())return std::nullopt;
+          const auto& candidate=c[q]->faces[ref.index];if(candidate.vertices.empty()||candidate.vertices[0]>=c[q]->vertices.size())return corePairUnavailable(PairSiteFile::CorePair,__LINE__);
           float value=dot(subtract(point,c[q]->vertices[candidate.vertices[0]].position),candidate.normal);
           if(value>best){best=value;bestIndex=i;}}
-        if(!bestIndex)return std::nullopt;f[q]=*bestIndex;if(best>0)continue;face=c[q]->faces[c[q]->features[f[q]].ref.index];d=best;}
+        if(!bestIndex)return corePairUnavailable(PairSiteFile::CorePair,__LINE__);f[q]=*bestIndex;if(best>0)continue;face=c[q]->faces[c[q]->features[f[q]].ref.index];d=best;}
       CorePair r;r.distance=d;Vec3 projection;for(int i=0;i<3;++i)projection[i]=point[i]-d*face.normal[i];
       r.normal=matrixTransformRows(pose[q]->rot,face.normal);
       if(v==0){r.pointA=anchor(v);r.pointB=projection;}else{r.pointA=projection;r.pointB=anchor(v);for(auto& n:r.normal)n=-n;}
@@ -576,7 +580,7 @@ std::optional<CorePair> closestPolyhedronCores(const CollisionCore& a,const Stat
       for(int turn=0;turn<2&&!moved;++turn) {
         int side=orientation^turn;int other=1-side;Vec3 x=convert(side,other,anchor(other)),y=convert(side,other,end(other)),delta=subtract(y,x);
         const auto& feature=c[side]->features[f[side]];
-        if(feature.adjacent.size()<2)return std::nullopt;
+        if(feature.adjacent.size()<2)return corePairUnavailable(PairSiteFile::CorePair,__LINE__);
         auto clip=clipToFeature(*c[side],feature,x,y,0,2);
         if(clip.lowNeighbor==clip.highNeighbor&&clip.lowNeighbor){f[side]=*clip.lowNeighbor;moved=true;break;}
         auto checkVertex=[&](std::optional<std::size_t> n,float t,bool low){
@@ -605,7 +609,7 @@ std::optional<CorePair> closestPolyhedronCores(const CollisionCore& a,const Stat
       tempB.edges[0].direction=b.edges[b.features[f[1]].ref.index].direction;
       std::optional<std::size_t> sa=2,sb=2;
       auto r=closestSegmentCores(tempA,pa,tempB,pb,sa,sb);
-      if(!r||*sa!=2||*sb!=2)return std::nullopt;
+      if(!r||*sa!=2||*sb!=2)return corePairUnavailable(PairSiteFile::CorePair,__LINE__);
       ca=f[0];cb=f[1];return r;
     }
     if((k0==CoreFeatureKind::Edge&&k1==CoreFeatureKind::Face)||(k0==CoreFeatureKind::Face&&k1==CoreFeatureKind::Edge)) {
@@ -617,21 +621,21 @@ std::optional<CorePair> closestPolyhedronCores(const CollisionCore& a,const Stat
         if(clip.lowNeighbor==clip.highNeighbor || clip.high<clip.low) {
           // 004ae300 follows the face boundary from the first rejecting edge.
           const auto first=clip.lowNeighbor;
-          if(!first||ff.adjacent.empty())return std::nullopt;
+          if(!first||ff.adjacent.empty())return corePairUnavailable(PairSiteFile::CorePair,__LINE__);
           std::size_t current=0;
           while(current<ff.adjacent.size()&&featureIndex(poly,ff.adjacent[current].neighbor)!=first)++current;
-          if(current==ff.adjacent.size())return std::nullopt;
+          if(current==ff.adjacent.size())return corePairUnavailable(PairSiteFile::CorePair,__LINE__);
           std::optional<std::size_t> previous;
           bool rejected=false, accepted=false;
           std::optional<std::size_t> selected;
           for(std::size_t iterations=0;iterations<=ff.adjacent.size()*2;++iterations) {
             const auto currentEdge=featureIndex(poly,ff.adjacent[current].neighbor);
-            if(!currentEdge||poly.features[*currentEdge].ref.kind!=CoreFeatureKind::Edge)return std::nullopt;
+            if(!currentEdge||poly.features[*currentEdge].ref.kind!=CoreFeatureKind::Edge)return corePairUnavailable(PairSiteFile::CorePair,__LINE__);
             auto plane=clipToFeature(poly,ff,x,y,current,current+1);
             std::size_t next=(current+1)%ff.adjacent.size();
             if(!plane.lowNeighbor&&!plane.highNeighbor) {
-              if(accepted){if(!previous)return std::nullopt;selected=featureIndex(poly,ff.adjacent[*previous].neighbor);break;}
-              if(rejected){if(!previous)return std::nullopt;selected=featureIndex(poly,ff.adjacent[*previous].neighbor);break;}
+              if(accepted){if(!previous)return corePairUnavailable(PairSiteFile::CorePair,__LINE__);selected=featureIndex(poly,ff.adjacent[*previous].neighbor);break;}
+              if(rejected){if(!previous)return corePairUnavailable(PairSiteFile::CorePair,__LINE__);selected=featureIndex(poly,ff.adjacent[*previous].neighbor);break;}
             } else {
               rejected=true;
               float lo=0,hi=1;
@@ -640,7 +644,7 @@ std::optional<CorePair> closestPolyhedronCores(const CollisionCore& a,const Stat
                 else if(plane.lowNeighbor)hi=plane.low;
               }
               const auto& edgeFeature=poly.features[*currentEdge];
-              if(edgeFeature.adjacent.size()<2)return std::nullopt;
+              if(edgeFeature.adjacent.size()<2)return corePairUnavailable(PairSiteFile::CorePair,__LINE__);
               auto ends=clipToFeature(poly,edgeFeature,x,y,0,2,lo,hi);
               auto shares=[&](std::size_t index,std::optional<std::size_t> vertex) {
                 auto e=featureIndex(poly,ff.adjacent[index].neighbor);
@@ -651,7 +655,7 @@ std::optional<CorePair> closestPolyhedronCores(const CollisionCore& a,const Stat
               auto steer=[&](std::optional<std::size_t> vertex){if(!shares(next,vertex))next=current?current-1:ff.adjacent.size()-1;};
               if(ends.lowNeighbor&&ends.lowNeighbor==ends.highNeighbor)steer(ends.lowNeighbor);
               else if(ends.high<ends.low) {
-                if(accepted){if(!previous)return std::nullopt;selected=featureIndex(poly,ff.adjacent[*previous].neighbor);break;}
+                if(accepted){if(!previous)return corePairUnavailable(PairSiteFile::CorePair,__LINE__);selected=featureIndex(poly,ff.adjacent[*previous].neighbor);break;}
                 steer(ends.lowNeighbor?ends.lowNeighbor:ends.highNeighbor);
               } else {
                 accepted=true;
@@ -668,7 +672,7 @@ std::optional<CorePair> closestPolyhedronCores(const CollisionCore& a,const Stat
             if(previous&&next==*previous){selected=featureIndex(poly,ff.adjacent[*previous].neighbor);break;}
             previous=current;current=next;
           }
-          if(!selected)return std::nullopt;
+          if(!selected)return corePairUnavailable(PairSiteFile::CorePair,__LINE__);
           f[faceSide]=*selected;continue;
         }
       }
@@ -694,8 +698,59 @@ std::optional<CorePair> closestPolyhedronCores(const CollisionCore& a,const Stat
       continue;
     }
     // The edge/face transition has not yet been translated here.
-    return std::nullopt;
+    return corePairUnavailable(PairSiteFile::CorePair,__LINE__);
   }
+  // 004ae9c0 after features+2*features iterations: logs "Voronoi error
+  // (infinite loop)", stores the current features and returns 1e6 (005f14dc),
+  // which every caller treats as "too far": the pair is dropped or not made.
+  std::fprintf(stderr, "Voronoi error (infinite loop)\n");
+  corePairCountLoopCap();
+  ca=f[0];cb=f[1];
+  CorePair far;far.distance=1000000.0f;
+  return far;
+}
+}
+
+namespace physics {
+namespace {
+constexpr unsigned kSiteLines = 1024;
+std::array<std::atomic<uint64_t>, 2 * kSiteLines> g_siteCounts{};
+std::array<uint64_t, 2 * kSiteLines> g_siteReported{};
+std::atomic<uint64_t> g_loopCaps{0};
+uint64_t g_loopCapsReported = 0;
+}  // namespace
+
+std::optional<CorePair> corePairUnavailable(PairSiteFile file, unsigned line) {
+  const unsigned index =
+      static_cast<unsigned>(file) * kSiteLines + std::min(line, kSiteLines - 1);
+  g_siteCounts[index].fetch_add(1, std::memory_order_relaxed);
   return std::nullopt;
 }
+
+void corePairCountLoopCap() {
+  g_loopCaps.fetch_add(1, std::memory_order_relaxed);
 }
+
+std::string corePairDiagnosticsDelta() {
+  std::string out;
+  char piece[64];
+  for (unsigned i = 0; i < g_siteCounts.size(); ++i) {
+    const uint64_t now = g_siteCounts[i].load(std::memory_order_relaxed);
+    if (now == g_siteReported[i])
+      continue;
+    std::snprintf(piece, sizeof piece, "%s%s:%u=%llu", out.empty() ? "" : " ",
+                  i < kSiteLines ? "core_pair" : "contact_geometry",
+                  i % kSiteLines, static_cast<unsigned long long>(now));
+    out += piece;
+    g_siteReported[i] = now;
+  }
+  const uint64_t caps = g_loopCaps.load(std::memory_order_relaxed);
+  if (caps != g_loopCapsReported) {
+    std::snprintf(piece, sizeof piece, "%svoronoi_loop_cap=%llu",
+                  out.empty() ? "" : " ", static_cast<unsigned long long>(caps));
+    out += piece;
+    g_loopCapsReported = caps;
+  }
+  return out;
+}
+}  // namespace physics

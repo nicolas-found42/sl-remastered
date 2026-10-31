@@ -1,4 +1,5 @@
 #include "physics_suspension.hpp"
+#include "run_log.hpp"
 
 #include <cmath>
 
@@ -102,8 +103,9 @@ Vec3 pointVelocity(const Body& b, const Vec3& p) {
 }
 }
 
-SuspensionContactResult selectSuspensionContact(SuspensionUpdate& u,
-                                                const SuspensionContactCandidate& c) {
+SuspensionContactResult
+selectSuspensionContact(SuspensionUpdate &u, const SuspensionContactCandidate &c,
+                        SuspensionSelectionDiag *diag) {
   if (!u.wheelBody || !c.a || !c.b || !c.otherOwner || !c.otherPrototype ||
       c.otherOwner->proto != c.otherPrototype.get()) return SuspensionContactResult::Unsupported;
   const bool wheelFirst = c.a == u.wheelBody;
@@ -131,8 +133,37 @@ SuspensionContactResult selectSuspensionContact(SuspensionUpdate& u,
   const float distanceSquared = x*x + y*y + z*z;
   if (!std::isfinite(distanceSquared)) return SuspensionContactResult::Unsupported;
   if (u.length - std::sqrt(distanceSquared) > u.settings.auxiliaryLength ||
-      !(distanceSquared < u.distanceSquared)) return SuspensionContactResult::Rejected;
+      !(distanceSquared < u.distanceSquared)) {
+    if (diag) {
+      diag->length = u.length;
+      diag->distance = std::sqrt(distanceSquared);
+      diag->auxiliary = u.settings.auxiliaryLength;
+      diag->storedDistanceSquared = u.distanceSquared;
+    }
+    {
+      static double lastRejectLog = -1e9;
+      static unsigned rejectCount = 0;
+      const double nowRejectLog = runlog::monotonicSeconds();
+      if (nowRejectLog - lastRejectLog >= 2.0 && rejectCount < 6) {
+        lastRejectLog = nowRejectLog;
+        ++rejectCount;
+        runlog::event(runlog::EventKind::Note,
+                      "susp reject: anchorY=%.3f pointAY=%.3f dist=%.3f "
+                      "max=%.3f len=%.3f stored=%.3f",
+                      u.anchor[1], wheelPoint[1], std::sqrt(distanceSquared),
+                      u.settings.maxLength, u.length,
+                      std::sqrt(u.distanceSquared));
+      }
+    }
+    return SuspensionContactResult::Rejected;
+  }
   u.distanceSquared = distanceSquared;
+  if (diag) {
+    diag->length = u.length;
+    diag->distance = std::sqrt(distanceSquared);
+    diag->auxiliary = u.settings.auxiliaryLength;
+    diag->storedDistanceSquared = distanceSquared;
+  }
   u.contactOwner = c.otherOwner;
   u.contactPrototype = c.otherPrototype;
   u.contactBody = other;

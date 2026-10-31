@@ -1,7 +1,9 @@
 #pragma once
 
 #include "physics_polyhedron.hpp"
+#include <cstdint>
 #include <optional>
+#include <string>
 
 namespace physics {
 // 004af970 for isolated point and segment cores. Points are in each core's
@@ -44,4 +46,16 @@ namespace physics {
 std::optional<CorePair> closestPolyhedronCores(const CollisionCore& a, const State& poseA,
     const CollisionCore& b, const State& poseB,
     std::optional<std::size_t>& featureA, std::optional<std::size_t>& featureB);
+}
+
+namespace physics {
+// Diagnostics for the core-pair walks. Every nullopt return is a site (file id
+// and source line) that is counted; the walk loop cap of 004ae9c0 (stock prints
+// "Voronoi error (infinite loop)") is counted separately. The car step reports
+// changes through runlog.
+enum class PairSiteFile : unsigned { CorePair = 0, ContactGeometry = 1 };
+std::optional<CorePair> corePairUnavailable(PairSiteFile file, unsigned line);
+void corePairCountLoopCap();
+// Empty when nothing changed since the previous call.
+std::string corePairDiagnosticsDelta();
 }

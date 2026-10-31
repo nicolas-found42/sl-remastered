@@ -139,6 +139,12 @@ int correctDirectContact(DirectContact& c, DirectContactWorld& world) {
       c.frictionForce += forceMagnitude;
     }
   }
+  // NOTE (open regression): stock 00496050 applies only the impulse, with no
+  // positional correction. Removing this shift made the compound sink through
+  // the spawn overlap (impulses alone under-correct the 36-contact pile);
+  // keeping it makes the spawn launch past the wheel-catch window when many
+  // part contacts overlap. The settle is being reworked against the stock
+  // correction path; see docs/continuation.md.
   if (!(c.separation < 0.021f)) {
     if (result) { if (da) a.state[a.current ^ 1].stepFlags &= ~1u; if (db) b.state[b.current ^ 1].stepFlags &= ~1u; ++world.corrections; }
     return result;

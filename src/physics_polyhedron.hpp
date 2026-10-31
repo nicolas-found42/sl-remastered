@@ -44,15 +44,29 @@ struct CollisionCore {
 
 // 004ac150/004ab8d0: faces contain three to seven vertex indices.
 // Failure leaves output unchanged.
-bool meshCore(const std::vector<Vec3>& vertices,
-              const std::vector<std::vector<std::size_t>>& faces,
-              CollisionCore& output, std::string& error);
+bool meshCore(const std::vector<Vec3> &vertices,
+              const std::vector<std::vector<std::size_t>> &faces,
+              CollisionCore &output, std::string &error);
 
 // 004ac2b0 produces vertices only. 004ac260 adds box topology.
-CollisionCore boundsVertices(const Vec3& low, const Vec3& high);
-CollisionCore boundsCore(const Vec3& low, const Vec3& high);
-CollisionCore boxCore(const Vec3& halfExtents); // 004ac1c0
-CollisionCore pointCore(); // 004ac370
-CollisionCore segmentCore(const Vec3& first, const Vec3& second); // 004ac440
+CollisionCore boundsVertices(const Vec3 &low, const Vec3 &high);
+CollisionCore boundsCore(const Vec3 &low, const Vec3 &high);
+CollisionCore boxCore(const Vec3 &halfExtents); // 004ac1c0
+CollisionCore pointCore();                      // 004ac370
+// 0049dba0 / 004aa740: a PHYS triangle has two oppositely oriented faces
+// sharing its three vertices and edges. The normal is the stored PHYS normal.
+// Invalid or degenerate input leaves output unchanged.
+bool triangleCore(const std::array<Vec3, 3> &vertices, const Vec3 &normal,
+                  CollisionCore &output, std::string &error);
+CollisionCore segmentCore(const Vec3 &first, const Vec3 &second); // 004ac440
+
+// 004a5e80: the collision core of a prototype's shape, built on first use in
+// stock. Spheres are a point, cylinders a segment along their axis, boxes the
+// 8-vertex box, meshes the polyhedron of their triangles. Empty and vertex
+// cloud shapes have none (core stays null, success). Failure leaves it
+// unchanged.
+bool buildShapeCore(const BodyProto &proto,
+                    std::shared_ptr<const CollisionCore> &core,
+                    std::string &error);
 
 } // namespace physics
