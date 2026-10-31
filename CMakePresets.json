@@ -1,0 +1,48 @@
+{
+  "version": 2,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 20,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "ninja-release",
+      "displayName": "Ninja release",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/preset-release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "CMAKE_JOB_POOLS": "compile_pool=6;link_pool=2",
+        "CMAKE_JOB_POOL_COMPILE": "compile_pool",
+        "CMAKE_JOB_POOL_LINK": "link_pool"
+      }
+    },
+    {
+      "name": "ninja-debug",
+      "inherits": "ninja-release",
+      "displayName": "Ninja debug",
+      "binaryDir": "${sourceDir}/build/preset-debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    }
+  ],
+  "buildPresets": [
+    { "name": "release", "configurePreset": "ninja-release" },
+    { "name": "debug", "configurePreset": "ninja-debug" }
+  ],
+  "testPresets": [
+    {
+      "name": "release",
+      "configurePreset": "ninja-release",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "debug",
+      "configurePreset": "ninja-debug",
+      "output": { "outputOnFailure": true }
+    }
+  ]
+}

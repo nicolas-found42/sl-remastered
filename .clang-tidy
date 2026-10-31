@@ -1,0 +1,13 @@
+---
+Checks: >-
+  -*,
+  bugprone-narrowing-conversions,
+  bugprone-sizeof-expression,
+  performance-no-int-to-ptr
+WarningsAsErrors: ''
+HeaderFilterRegex: '(^|.*/)src/.*'
+FormatStyle: file
+CheckOptions:
+  bugprone-narrowing-conversions.WarnOnIntegerNarrowingConversion: 'true'
+  bugprone-narrowing-conversions.WarnOnIntegerToFloatingPointNarrowingConversion: 'true'
+  bugprone-narrowing-conversions.WarnOnFloatingPointNarrowingConversion: 'true'
