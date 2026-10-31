@@ -29,7 +29,9 @@ public:
 	CameraFrame(const CameraFrame&) = delete;
 	CameraFrame& operator=(const CameraFrame&) = delete;
 	bool draw(WorldNode& cameraInstance, const ViewportInstance& viewport,
-	          float worldScale, float threshold, bool frustumChecks, std::string& error, bool requireCached = false);
+	          float worldScale, float threshold, bool frustumChecks, std::string& error,
+	          bool requireCached = false, VmArena* arena = nullptr,
+	          const std::vector<VmStaticFields>* staticFields = nullptr);
 private:
 	ResourceWorld& resources_;
 	Render2D& renderer_;
@@ -43,7 +45,9 @@ private:
 // Draws the ordered camera attachments of one active runtime viewport. The
 // caller owns clear/present and supplies live stock visibility controls.
 bool renderActiveViewport(GameWorld& world, WorldNode& viewportNode, float worldScale,
-	                          float threshold, bool frustumChecks, std::string& error, bool requireCached = false);
+	                          float threshold, bool frustumChecks, std::string& error,
+	                          bool requireCached = false, VmArena* arena = nullptr,
+	                          const std::vector<VmStaticFields>* staticFields = nullptr);
 
 // Stock 00428960 notifies Frontend.render after a completed engine frame.
 class VmScheduler;

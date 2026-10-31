@@ -100,6 +100,52 @@ int main() {
       box->bounds.mode != 1 || box->bounds.values[0] != 2 || box->bounds.values[3] != box->physicsBox->radius) return 1;
   if (!world.stepEmptyPhysics(0.02f, error)) return 1;
   if (!world.destroy(*box) || game.bindings.at(boxHandle)->link.owner || world.staticBoxGeometryCount() || world.staticBoxBodyCount()) return 1;
+  {
+    auto *leaf = world.addChild(*world.defaultParent(), "collision queue", 0);
+    const auto *object = makeObject();
+    if (!leaf || !object) return 1;
+    auto *state = nativeResourceState(object, &arena);
+    const auto handle = static_cast<int32_t>(state - arena.resourceStates.data()) + 1;
+    game.bindings[handle] = std::make_unique<ReceiverBinding>();
+    setLinkOwner(game.bindings[handle]->link, leaf);
+    if (!std::holds_alternative<std::monostate>(gameRefSetActiveCollision({}, object, &arena, &classes)) ||
+        !std::holds_alternative<std::monostate>(gameRefSetActiveCollision({}, object, &arena, &classes)) ||
+        world.collisionUpdateCount() != 1 || !(leaf->flags & 0x10000000u)) return 1;
+    if (!world.stepEmptyPhysics(0.01f, error) ||
+        world.collisionUpdateCount() != 0 || (leaf->flags & 0x10000000u)) return 1;
+    if (!world.destroy(*leaf)) return 1;
+  }
+  {
+    auto *physicsNode = world.addTypedChild(*parent, 2, "dynamic", 0);
+    auto protoValue = physics::createBodyProto(1, 5, 1, 1, 1, nullptr, error);
+    if (!physicsNode || !protoValue) return 1;
+    auto prototype = std::make_shared<physics::BodyProto>(std::move(*protoValue));
+    auto body = std::make_shared<physics::Body>(physics::createBody(*prototype, {}));
+    if (!world.registerDynamicBody(*physicsNode, body, prototype)) return 1;
+    world.markLoaded(*physicsNode);
+    const auto *dynamicObject = makeObject();
+    if (!dynamicObject) return 1;
+    auto *dynamicState = nativeResourceState(dynamicObject, &arena);
+    const auto dynamicHandle = static_cast<int32_t>(dynamicState - arena.resourceStates.data()) + 1;
+    game.bindings[dynamicHandle] = std::make_unique<ReceiverBinding>();
+    setLinkOwner(game.bindings[dynamicHandle]->link, physicsNode);
+    SceneRenderInstance attached(nullptr);
+    if (!attached.attachPhysicsBone(world, *physicsNode) ||
+        physicsNode->physicsBoneAttachments != 1) return 1;
+    const auto before = body->state[body->current];
+    if (!std::holds_alternative<std::string>(
+            physicsSetMatrix({&position, static_cast<const VmObject *>(nullptr)}, dynamicObject, &arena, &classes)) ||
+        body->state[body->current].pos != before.pos || physicsNode->bounds.mode != 2) return 1;
+    attached.detachPhysicsBone();
+    if (physicsNode->physicsBoneAttachments != 0) return 1;
+    VmObject orientation; orientation.fields = {{"y", 0.5f, "F"}, {"p", 0.0f, "F"}, {"r", 0.0f, "F"}};
+    if (!std::holds_alternative<std::monostate>(physicsSetMatrix({&position, &orientation}, dynamicObject, &arena, &classes)) ||
+        body->state[0].pos != std::array<float, 3>{2,3,4} ||
+        body->state[1].pos != body->state[0].pos ||
+        std::fabs(body->state[0].rot[2] - std::sin(0.5f)) > 1e-6f ||
+        physicsNode->bounds.mode != 1 || physicsNode->bounds.values[3] != prototype->shape.boundRadius) return 1;
+    if (!world.destroy(*physicsNode)) return 1;
+  }
   if (!std::holds_alternative<std::monostate>(invokeNative("java.util.resource.GameRef", "setFlags", "(I)V",
       {int32_t{0x10}}, parentObject, &arena, &classes))) return 1;
   auto result = invokeNative("java.render.Viewport", "create", "(IFFFF)V",
@@ -110,7 +156,7 @@ int main() {
   auto *viewport = world.nodeFor(game.bindings.at(viewportHandle)->link.owner);
   game.renderer = nullptr;
   const std::vector<VmValue> args{parentObject, viewportObject, int32_t{0}, 90.0f, 0.1f, 100.0f,
-                                  1.0f, 1.0f, int32_t{1}, int32_t{0}};
+                                  1.0f, 1.0f, int32_t{1}, int32_t{2}};
   result = invokeNative("java.render.Camera", "create", "(Ljava.util.resource.ResourceRef;Ljava.render.Viewport;IFFFFFII)V",
                         args, cameraObject, &arena, &classes);
   if (!std::holds_alternative<std::string>(result)) return 1;
@@ -130,13 +176,17 @@ int main() {
   auto cameraNode = instance ? resources.lookup(instance->typeId(), 12) : LookupResult{};
   if (!cameraNode.node.worldNode || !cameraNode.node.worldNode->camera ||
       cameraNode.node.worldNode->camera->nearDistance != 1.0f ||
-      cameraNode.node.worldNode->camera->viewportAspect != 4.0f / 3.0f) return 1;
+      cameraNode.node.worldNode->camera->viewportAspect != 4.0f / 3.0f ||
+      cameraNode.node.worldNode->camera->planeTest != 2) return 1;
   if (renderActiveViewport(world, *viewport, 1, 0, false, error)) return 1;
   if (!std::holds_alternative<std::monostate>(invokeNative("java.render.Viewport", "activate", "(I)V",
       {int32_t{0}}, viewportObject, &arena, &classes))) return 1;
   if (!renderActiveViewport(world, *viewport, 1, 0, false, error)) {
     std::printf("FAIL native viewport frame: %s\n", error.c_str()); return 1;
   }
+  // FUN_00510fc0: the mode-2 camera resets its instance bounds every frame.
+  if (render->bounds.mode != 0 || render->bounds.values[3] != 100.0f ||
+      render->bounds.values[5] != 100.0f) return 1;
   {
     auto *physicsNode = world.addTypedChild(*parent, 2, "camera frame body", 0);
     auto prototype = std::make_shared<physics::BodyProto>();

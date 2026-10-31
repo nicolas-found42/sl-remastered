@@ -1,4 +1,6 @@
+#include <map>
 #include "camera_frame.hpp"
+#include "run_log.hpp"
 
 #include "resource_world.hpp"
 #include "vm.hpp"
@@ -50,7 +52,9 @@ std::optional<FrameVisibilityControls> FrameVisibilityState::controls(std::strin
 CameraFrame::~CameraFrame() { setLinkOwner(camera_, nullptr); }
 
 bool CameraFrame::draw(WorldNode& cameraInstance, const ViewportInstance& viewport,
-	                       float worldScale, float threshold, bool frustumChecks, std::string& error, bool requireCached) {
+	                       float worldScale, float threshold, bool frustumChecks, std::string& error,
+	                       bool requireCached, VmArena* arena,
+	                       const std::vector<VmStaticFields>* staticFields) {
 	if (cameraInstance.type != 3 || !cameraInstance.loaded || viewport.list != ViewportList::Active || !viewport.renderAttachments) {
 		error = "camera frame: active camera attachment unavailable"; return false;
 	}
@@ -79,7 +83,28 @@ bool CameraFrame::draw(WorldNode& cameraInstance, const ViewportInstance& viewpo
 	}
 	instance->processRootBoneUpdate();
 	const auto& cameraWorld = instance->derivedRootBoneMatrix();
+	{
+		static std::map<uint32_t, double> lastCamLogs;
+		const double nowCam = runlog::monotonicSeconds();
+		double& lastCamLog = lastCamLogs.try_emplace(cameraInstance.instanceId, -1e9).first->second;
+		if (nowCam - lastCamLog >= 5.0) {
+			lastCamLog = nowCam;
+			runlog::event(runlog::EventKind::Note,
+			              "camera world id=0x%x t=(%.1f,%.1f,%.1f) scale=(%.3f,%.3f,%.3f)",
+			              cameraInstance.instanceId, cameraWorld[12],
+			              cameraWorld[13], cameraWorld[14],
+			              std::sqrt(cameraWorld[0]*cameraWorld[0] + cameraWorld[1]*cameraWorld[1] + cameraWorld[2]*cameraWorld[2]),
+			              std::sqrt(cameraWorld[4]*cameraWorld[4] + cameraWorld[5]*cameraWorld[5] + cameraWorld[6]*cameraWorld[6]),
+			              std::sqrt(cameraWorld[8]*cameraWorld[8] + cameraWorld[9]*cameraWorld[9] + cameraWorld[10]*cameraWorld[10]));
+		}
+	}
 	const auto& camera = *type.node.worldNode->camera;
+	// FUN_00510fc0: a non-zero plane-test mode resets the camera instance
+	// node's bounds block to {mode 0, center 0, extents 100} every frame.
+	if (camera.planeTest != 0) {
+		cameraInstance.bounds.mode = 0;
+		cameraInstance.bounds.values = {0.0f, 0.0f, 0.0f, 100.0f, 100.0f, 100.0f};
+	}
 	const auto state = cameraViewState(camera, cameraWorld, pixelWidth / pixelHeight);
 	if (!state) { error = "camera frame: camera matrices unavailable"; return false; }
 	const auto params = cameraTraversalParams(camera, *state, cameraWorld, worldScale, threshold, frustumChecks);
@@ -92,7 +117,7 @@ bool CameraFrame::draw(WorldNode& cameraInstance, const ViewportInstance& viewpo
 		bound_ = true;
 	}
 	if (!traverseCameraCandidates(resources_.world(), *root, materials_.candidates(), *params, error,
-	                              &type1Records_, &resources_)) {
+	                              &type1Records_, &resources_, arena, staticFields)) {
 		materials_.candidates().discardPending();
 		return false;
 	}
@@ -101,7 +126,9 @@ bool CameraFrame::draw(WorldNode& cameraInstance, const ViewportInstance& viewpo
 }
 
 bool renderActiveViewport(GameWorld& world, WorldNode& viewportNode, float worldScale,
-	                          float threshold, bool frustumChecks, std::string& error, bool requireCached) {
+	                          float threshold, bool frustumChecks, std::string& error,
+	                          bool requireCached, VmArena* arena,
+	                          const std::vector<VmStaticFields>* staticFields) {
 	if (viewportNode.type != 18 || !viewportNode.viewport ||
 	    viewportNode.viewport->list != ViewportList::Active) {
 		error = "frame host: viewport is not active"; return false;
@@ -113,7 +140,8 @@ bool renderActiveViewport(GameWorld& world, WorldNode& viewportNode, float world
 		if (!camera || camera->cameraViewport.owner != &viewportNode || !camera->cameraFrame) {
 			error = "frame host: camera attachment unavailable"; return false;
 		}
-		if (!camera->cameraFrame->draw(*camera, viewport, worldScale, threshold, frustumChecks, error, requireCached)) return false;
+		if (!camera->cameraFrame->draw(*camera, viewport, worldScale, threshold, frustumChecks,
+		                              error, requireCached, arena, staticFields)) return false;
 	}
 	error.clear(); return true;
 }

@@ -99,9 +99,15 @@ bool applyCameraCommand(CameraCommandState &state, std::string_view command) {
     fields[0] = &state.torque; format = "%*s %f";
   } else if (word == "roll") {
     fields[0] = &state.roll; format = "%*s %f";
+  } else if (word == "height") {
+    // FUN_0043a4b0: "%s %f" into +0xa8, then +0xbc = 0.3 unless it is zero.
+    fields[0] = &state.height; format = "%*s %f";
+  } else if (word == "maxpitch") {
+    fields[0] = &state.maxPitch; format = "%*s %f";
   } else return false;
   const auto parsed = stockScan(command, format);
   for (size_t i = 0; i < parsed.values.size(); ++i)
     *fields[i] = parsed.values[i].f;
+  if (word == "height") state.maxPitch = state.height == 0.0f ? 1.3f : 0.3f;
   return true;
 }

@@ -1,11 +1,11 @@
 #pragma once
 
 #include "camera_device_args.hpp"
-#include "camera_device_config.hpp"
 #include "camera_device_command.hpp"
+#include "camera_device_config.hpp"
 #include "camera_follow_force.hpp"
-#include "physics_body.hpp"
 #include "owner_links.hpp"
+#include "physics_body.hpp"
 #include <memory>
 #include <string>
 
@@ -18,7 +18,8 @@ struct CameraResource;
 struct CarDriver;
 struct CarCameraSettings;
 
-void applyCameraSectorEnvironment(CameraResource &camera, const GroundFactoryResult &ground,
+void applyCameraSectorEnvironment(CameraResource &camera,
+                                  const GroundFactoryResult &ground,
                                   float farDistance);
 
 // The links are detached by GameWorld teardown, so the owner may outlive it.
@@ -34,20 +35,21 @@ public:
   bool attachViewport(ResourceWorld &resources, Render2D &renderer,
                       WorldNode &viewport, int32_t priority, float farDistance,
                       std::string &error);
+  bool detachViewport(WorldNode &viewport, std::string &error);
   bool applySeatFollow(WorldNode &car, const CarDriver &driver,
                        const CarCameraSettings &settings);
   CameraCommandState commands{};
   CameraFollowSmoothing followSmoothing{};
   float fieldOfView = 0;
   float maxForce = 1;
+  bool audioListenerEnabled = false; // constructor flags & 2, 00437ea0
   OwnerLink physics, camera, render, controller, lookTarget, moveTarget;
+
 private:
   GameWorld *world_;
 };
 
-std::unique_ptr<CameraDeviceResources> prepareCameraDeviceResources(GameWorld &world, ResourceWorld &resources,
-                                  WorldNode &gameNode,
-                                  const CameraDeviceConfig &config,
-                                  const CameraDeviceArgs &args,
-                                  std::shared_ptr<const physics::BodyProto> prototype,
-                                  std::string &error);
+std::unique_ptr<CameraDeviceResources> prepareCameraDeviceResources(
+    GameWorld &world, ResourceWorld &resources, WorldNode &gameNode,
+    const CameraDeviceConfig &config, const CameraDeviceArgs &args,
+    std::shared_ptr<const physics::BodyProto> prototype, std::string &error);

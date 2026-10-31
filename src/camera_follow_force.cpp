@@ -85,6 +85,43 @@ std::optional<CameraFollowForceResult> cameraFollowForce(
     force = add(force, mul(sub(in.camera.vel, mul(n, dot(in.camera.vel,n))), c.perpendicularDamping));
     if (dot(force,force) > 0.0001f) out.force = force;
   }
+  // The rest of 00438b60's body-state terms, all added to the same
+  // accumulators (FUN_004a6e10 takes a camera-local torque, FUN_004a6600 a
+  // world force at the centre of mass).
+  const auto &r = in.camera.rot;
+  const auto &w = in.camera.omega;
+  const auto localTorque = [&](const Vec3 &t) {
+    out.torque = add(out.torque, physics::matrixTransformRows(in.camera.rot, t));
+  };
+  // 00551c90 euler angles of the camera matrix: roll [2], pitch [1].
+  float roll, pitch;
+  if (r[10] == 0.0f && r[2] == 0.0f) {
+    roll = 0.0f;
+    pitch = 3.1415927f;
+  } else {
+    roll = std::atan2(r[4], r[5]);
+    const float cr = std::cos(roll);
+    pitch = cr > 0.0f ? std::atan2(-(cr * r[6]), r[5])
+                      : std::atan2(cr * r[6], -r[5]);
+  }
+  // Roll spring/damper about the camera's local z axis.
+  const float rollRate = r[2] * w[0] + r[6] * w[1] + r[10] * w[2];
+  const float rollTorque = (rollRate * 0.03f + (roll - c.roll)) * -0.3f;
+  if (rollTorque * rollTorque > 9.999999974752427e-07f)
+    localTorque({0, 0, rollTorque});
+  // Height spring toward the move target's y plus the commanded height.
+  if (c.height != 0.0f) {
+    const float dy = in.moveTarget.pos[1] + c.height - in.camera.pos[1];
+    if (std::fabs(dy) > 0.0010000000474774f)
+      out.force = add(out.force, Vec3{0, dy * 30.0f - 2.0f * in.camera.vel[1], 0});
+  }
+  // Pitch limit: predicted pitch (angle + 0.1 * local x rate) against maxPitch.
+  const float pitchRate = r[0] * w[0] + r[4] * w[1] + r[8] * w[2];
+  const float predicted = pitchRate * 0.1f + pitch;
+  if (c.maxPitch < std::fabs(predicted)) {
+    const float limit = predicted >= 0.0f ? c.maxPitch : -c.maxPitch;
+    localTorque({(predicted - limit) * -0.1f, 0, 0});
+  }
   if (!finite(out.force) || !finite(out.torque) || !finite(out.smoothing.look) || !finite(out.smoothing.move)) return fail("fout");
   return out;
 }

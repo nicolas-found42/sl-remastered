@@ -19,6 +19,10 @@ struct CameraCommandState {
   float damping;
   float perpendicularDamping;
   float roll = 0.0f;
+  // +0xa8 height above the move target (0 = off) and +0xbc pitch limit; the
+  // `height` command resets the limit to 0.3 (nonzero) or 1.3 (zero).
+  float height = 0.0f;
+  float maxPitch = 1.3f;
   std::array<float, 3> lookOffset{}, lookDirection{0, 0, -1};
   std::array<float, 3> moveOffset{}, moveRotation{};
   float moveDistance = 0;
