@@ -53,6 +53,8 @@ bool GameFile::open(const std::filesystem::path& dataRoot, const std::filesystem
 	data_ = std::move(bytes);
 	cursor_ = 8;
 	payloadEnd_ = 8 + static_cast<size_t>(parsed.file.payloadSize);
+	packs_.clear();
+	for (const auto& pack : parsed.file.packs) packs_.emplace_back(pack.ordinal, pack.path);
 	return true;
 }
 
@@ -81,4 +83,18 @@ std::optional<float> GameFile::readFloat() {
 	static_assert(sizeof value == sizeof *bits);
 	std::memcpy(&value, &*bits, sizeof value);
 	return value;
+}
+
+std::optional<std::string> GameFile::readString() {
+	const auto length = readInt();
+	if (!length || *length < 0) return std::nullopt;
+	if (*length == 0) return std::string();
+	const size_t n = static_cast<size_t>(*length);
+	if (cursor_ > payloadEnd_ || payloadEnd_ - cursor_ < n) return std::nullopt;
+	std::string text(reinterpret_cast<const char*>(data_.data() + cursor_), n);
+	cursor_ += n;
+	// Stored with its terminator; the string ends at the first NUL (FUN_004174a0).
+	const auto nul = text.find('\0');
+	if (nul != std::string::npos) text.resize(nul);
+	return text;
 }

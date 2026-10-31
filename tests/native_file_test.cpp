@@ -86,8 +86,30 @@ int main() {
     CHECK(bits == 0x3f806166u);
   } else
     CHECK(false);
-  CHECK(
-      std::holds_alternative<std::string>(call("open", "(I)I", {int32_t{1}})));
+  CHECK(std::holds_alternative<std::monostate>(call("close", "()V", {})));
+  // Stock 00485440 mode 1 opens for writing; close (00485870) flushes the
+  // packed values with the type-2 trailer, and mode 0 reads them back.
+  arena.strings[0].first = "save/game/roundtrip";
+  CHECK(std::holds_alternative<VmValue>(call("open", "(I)I", {int32_t{1}})));
+  CHECK(std::holds_alternative<VmValue>(call("write", "(I)I", {int32_t{-123456}})));
+  CHECK(std::holds_alternative<VmValue>(call("write", "(F)I", {1.5f})));
+  CHECK(std::holds_alternative<std::monostate>(call("close", "()V", {})));
+  CHECK(std::filesystem::exists(root / "save/game/roundtrip"));
+  CHECK(std::holds_alternative<VmValue>(call("open", "(I)I", {int32_t{0}})));
+  {
+    const auto integer = call("readInt", "()I", {});
+    CHECK(std::holds_alternative<VmValue>(integer) &&
+          std::get<int32_t>(std::get<VmValue>(integer)) == -123456);
+    const auto number = call("readFloat", "()F", {});
+    CHECK(std::holds_alternative<VmValue>(number) &&
+          std::get<float>(std::get<VmValue>(number)) == 1.5f);
+  }
+  CHECK(std::holds_alternative<std::monostate>(call("close", "()V", {})));
+  CHECK(std::holds_alternative<VmValue>(
+      call("delete", "(Ljava.lang.String;)I", {namePtr})));
+  CHECK(!std::filesystem::exists(root / "save/game/roundtrip"));
+  arena.strings[0].first = "save/game/options";
+  CHECK(std::holds_alternative<VmValue>(call("open", "(I)I", {int32_t{0}})));
   CHECK(std::holds_alternative<std::monostate>(call("close", "()V", {})));
   CHECK(std::get<int32_t>(receiver->fields[0].value) == 0);
   CHECK(std::holds_alternative<std::string>(call("readInt", "()I", {})));
