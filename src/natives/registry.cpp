@@ -8,6 +8,7 @@
 #include "natives/lang_system.hpp"
 #include "natives/math.hpp"
 #include "natives/measure.hpp"
+#include "natives/navigator.hpp"
 #include "natives/physics.hpp"
 #include "natives/random.hpp"
 #include "natives/resource_duplicate.hpp"
@@ -558,6 +559,12 @@ const std::vector<NativeEntry> entries{
      "00480ee0", renderRefCreate},
     {"java.util.resource.RenderRef", "setMatrix",
      "(Ljava.lang.Vector3;Ljava.lang.Ypr;)V", "00481240", renderRefSetMatrix},
+    {"java.util.resource.RenderRef", "setMatrix",
+     "(ILjava.util.resource.ResourceRef;Ljava.lang.Vector3;Ljava.lang.Ypr;)"
+     "V",
+     "004810b0", renderRefSetMatrixBone},
+    {"java.util.resource.RenderRef", "setColor", "(I)V", "00480310",
+     renderRefSetColor},
     {"java.util.resource.RenderRef", "setLight", "(III)V", "00486ab0",
      renderRefSetLight},
     {"java.util.resource.RenderRef", "setFlare",
@@ -576,6 +583,8 @@ const std::vector<NativeEntry> entries{
     {"java.sound.Sound", "setMode", "(I)I", "00487520", soundSetMode},
     {"java.sound.Sound", "getMode", "()I", "00487560", soundGetMode},
     {"java.lang.System", "setMeasure", "(F)V", "0047c4b0", setMeasure},
+    {"java.lang.System", "isLoading", "()I", "0047c3b0", systemIsLoading},
+    {"java.lang.System", "isLoadingReset", "()V", "0047c3a0", systemIsLoadingReset},
     {"java.lang.System", "currentTime", "()F", "0047bfe0", systemCurrentTime},
     {"java.lang.System", "syncGameTime", "(F)V", "0047bff0",
      systemSyncGameTime},
@@ -592,7 +601,13 @@ const std::vector<NativeEntry> entries{
      "(Ljava.util.resource.GameRef;Ljava.render.Osd;)V", "0047cd40",
      inputCheckHotkeys},
     {"java.io.Input", "lastKey", "()I", "0047cc10", inputLastKey},
+    {"java.io.Input", "getAxis", "(II)F", "0047c990", inputGetAxis},
     {"java.io.File", "exists", "(Ljava.lang.String;)I", "00486170", fileExists},
+    {"java.io.File", "delete", "(Ljava.lang.String;)I", "00486150", fileDelete},
+    {"java.io.File", "copy", "(Ljava.lang.String;Ljava.lang.String;)I",
+     "004860f0", fileCopy},
+    {"java.io.File", "move", "(Ljava.lang.String;Ljava.lang.String;)I",
+     "00486120", fileMove},
     {"java.io.FindFile", "first", "(Ljava.lang.String;I)Ljava.lang.String;",
      "00487cb0", findFileFirst},
     {"java.io.FindFile", "next", "()Ljava.lang.String;", "00487da0",
@@ -602,6 +617,15 @@ const std::vector<NativeEntry> entries{
     {"java.io.File", "readInt", "()I", "00485b70", fileReadInt},
     {"java.io.File", "readFloat", "()F", "00485c10", fileReadFloat},
     {"java.io.File", "close", "()V", "00485870", fileClose},
+    {"java.io.File", "write", "(I)I", "00485b20", fileWriteInt},
+    {"java.io.File", "write", "(F)I", "00485bc0", fileWriteFloat},
+    {"java.io.File", "write", "(Ljava.util.resource.ResourceRef;)I",
+     "00485c60", fileWriteResource},
+    {"java.io.File", "write", "(Ljava.lang.String;)I", "00485fd0",
+     fileWriteString},
+    {"java.io.File", "readResID", "()I", "00485ea0", fileReadResId},
+    {"java.io.File", "readString", "()Ljava.lang.String;", "00486060",
+     fileReadString},
     {"java.lang.System", "openLib", "(Ljava.lang.String;)I", "00487be0",
      systemOpenLib},
     {"java.lang.System", "buildNumber", "()I", "0047c0b0", buildNumber},
@@ -635,6 +659,8 @@ const std::vector<NativeEntry> entries{
     {"java.render.GfxEngine", "forceRendering", "()V", "0047c1d0",
      gfxForceRendering},
     {"java.render.GfxEngine", "flush", "()V", "0047c2d0", gfxFlush},
+    {"java.game.Navigator", "updateNavigator",
+     "(Ljava.util.resource.GameRef;I)V", "00482d30", navigatorUpdate},
     {"java.render.GfxEngine", "numDisplayModes", "()I", "0047c440",
      gfxNumDisplayModes},
     {"java.render.GfxEngine", "currDisplayMode", "()I", "0047c450",
@@ -700,6 +726,7 @@ const std::vector<NativeEntry> entries{
     {"java.lang.Object", "toString", "()Ljava.lang.String;", "0047c870",
      objectToString},
     {"java.lang.String", "intValue", "()I", "00481ed0", stringIntValue},
+    {"java.lang.String", "floatValue", "()F", "00481f10", stringFloatValue},
     {"java.lang.Float", "toString", "(FLjava.lang.String;)Ljava.lang.String;",
      "00481dd0", floatToString},
     {"java.lang.Integer", "toString", "(I)Ljava.lang.String;", "00481e30",

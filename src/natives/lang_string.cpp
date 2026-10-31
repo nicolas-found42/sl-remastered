@@ -1,3 +1,4 @@
+#include <cstdio>
 #include "natives/lang_string.hpp"
 
 #include <algorithm>
@@ -366,4 +367,21 @@ NativeResult stringIntValue(const std::vector<VmValue> &args,
   int32_t result;
   std::memcpy(&result, &value, sizeof(result));
   return VmValue{result};
+}
+
+// Stock 00481f10: sscanf(text, "%f", &value) on the receiver's bytes.
+NativeResult stringFloatValue(const std::vector<VmValue> &args,
+                              const VmObject *receiver, VmArena *arena,
+                              const std::vector<const TufaClass *> *) {
+  if (!args.empty())
+    return std::string{"invalid String.floatValue call"};
+  const auto *bytes = stringBytes(arena, receiver);
+  if (!bytes)
+    return std::string{"String.floatValue: string unavailable"};
+  float value = 0;
+  if (std::sscanf(bytes->substr(0, bytes->find('\0')).c_str(), "%f", &value) !=
+      1)
+    return std::string{
+        "String.floatValue: stock result is uninitialized for invalid input"};
+  return VmValue{value};
 }

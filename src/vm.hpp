@@ -114,6 +114,7 @@ using VmClassEnsure = std::function<VmResult(const std::string &className)>;
 // VM.
 struct HotkeyState;
 class TimerState;
+class ObjectSoundState;
 struct VmArena {
   TimerState *timers = nullptr;
   HotkeyState *hotkeys = nullptr;
@@ -121,6 +122,9 @@ struct VmArena {
   FileState *fileState = nullptr;
   VmMeasurementState *measurementState = nullptr;
   VmSoundState *soundState = nullptr;
+  // Host-owned object random sound delivery for native timer id 0x80000080
+  // (src/object_sound.hpp); null rejects those timers with an explicit error.
+  ObjectSoundState *objectSound = nullptr;
   // One host-owned state per execution thread; independent stock threads do not
   // share it.
   VmRandomState *randomState = nullptr;
@@ -138,7 +142,8 @@ struct VmArena {
   // Optional. Without it a class that is not registered and initialized is an
   // error, as before.
   VmClassEnsure ensureClass;
-  std::function<std::optional<std::string>(const std::string&, std::string&)> loadScriptPath;
+  std::function<std::optional<std::string>(const std::string &, std::string &)>
+      loadScriptPath;
   // Native table that static initializer code uses. vmExecute fills it for the
   // duration of a call when empty.
   const std::vector<NativeEntry> *natives = nullptr;
@@ -168,7 +173,6 @@ std::optional<VmValue> vmActiveStaticField(const VmArena &arena,
                                            const std::string &className,
                                            const std::string &fieldName);
 
-
 struct VmExecution {
   std::shared_ptr<VmExecutionState> state;
 };
@@ -180,17 +184,40 @@ VmExecution vmStart(const TufaClass &cls, const std::vector<TufaNode> &tree,
                     const std::vector<VmStaticFields> *staticFields,
                     VmArena *arena);
 VmResult vmResume(VmExecution &execution, size_t nodeBudget, bool &finished);
-// Allocate and initialize instance fields during an active native call; constructor runs separately.
+// Allocate and initialize instance fields during an active native call;
+// constructor runs separately.
 VmResult vmAllocateNative(VmArena &arena, const std::string &className);
-// Host-side operations outside an active VM execution. Constructors are called separately.
+// Host-side operations outside an active VM execution. Constructors are called
+// separately.
 VmResult vmHostAllocate(VmArena &arena, const std::string &className,
                         const std::vector<NativeEntry> *natives,
                         const std::vector<const TufaClass *> *classes,
                         const std::vector<VmStaticFields> *staticFields);
-VmResult vmHostCall(VmArena &arena, const VmObject *receiver, const std::string &name,
-                    std::vector<VmValue> arguments, const std::vector<NativeEntry> *natives,
+VmResult vmHostCall(VmArena &arena, const VmObject *receiver,
+                    const std::string &name, std::vector<VmValue> arguments,
+                    const std::vector<NativeEntry> *natives,
                     const std::vector<const TufaClass *> *classes,
                     const std::vector<VmStaticFields> *staticFields);
+// A host task is owned by the scheduler until it finishes or its guard fails.
+struct VmHostTask {
+  bool finished = false;
+  VmResult result;
+};
+
+// One scheduler thread as a diagnostic dump reads it: what it is doing, what it
+// waits on, and the script frames it is inside (innermost first).
+struct VmThreadSnapshot {
+  std::string name;
+  std::string
+      state; // runnable | waiting | sleeping | not-started | stopped | dead
+  std::string waitingOn; // runtime class of the monitor object, when waiting
+  double sleepRemaining = 0;
+  uint32_t flags = 0;
+  size_t slices = 0;
+  uint32_t lastSliceFrame = 0; // probe frame of the thread's latest slice
+  bool hostTask = false;
+  std::vector<std::string> stack; // "Class.method()desc @pc/size"
+};
 
 class VmScheduler {
 public:
@@ -205,14 +232,21 @@ public:
   VmResult setPriority(const VmObject *owner, int32_t priority);
   VmResult start(const VmObject *owner);
   VmResult stop(const VmObject *owner);
-  VmResult sleep(float seconds);
+  VmResult sleep(float milliseconds);
   VmResult wait(const VmObject *object);
   VmResult notify(const VmObject *object, bool all);
+  VmResult startHostTask(const VmObject *receiver, const std::string &name,
+                         std::vector<VmValue> arguments,
+                         std::function<bool()> alive,
+                         std::shared_ptr<VmHostTask> &task);
+  const std::vector<const TufaClass *> *classes() const;
+  const std::vector<VmStaticFields> *staticFields() const;
   VmResult tick(size_t nodeBudget, int minPriority = 0);
   size_t threadCount() const;
   std::vector<std::string> threadNames() const;
   std::vector<std::pair<std::string, size_t>> threadProgress() const;
   std::vector<std::pair<std::string, const VmObject *>> threadWaits() const;
+  std::vector<VmThreadSnapshot> snapshot(size_t maxFrames = 8) const;
 
 private:
   struct Impl;

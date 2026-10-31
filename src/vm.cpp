@@ -371,6 +371,37 @@ static std::vector<VmField> &locationFields(const FieldLocation &location) {
   std::abort();
 }
 
+static bool concatOperandBytes(const VmValue &value, std::string &out,
+                               std::string &error, VmArena *arena,
+                               const std::vector<const TufaClass *> *classes) {
+            if (const auto *integer = std::get_if<int32_t>(&value)) {
+              out = stockFormatInt(*integer, 0, ' ');
+              return true;
+            }
+            if (const auto *number = std::get_if<float>(&value)) {
+              return stockFormatFloatConcat(*number, out, error);
+            }
+            const auto *object = std::get_if<const VmObject *>(&value);
+            if (!object || !arena)
+              return false;
+            if (!*object)
+              return true; // stock: a null reference contributes nothing
+            if (supportedReference(*object, "Ljava.lang.String;", arena,
+                                   classes)) {
+              bool found = false;
+              for (const auto &item : arena->strings)
+                if (item.second == *object) {
+                  if (found)
+                    return false;
+                  out = item.first;
+                  found = true;
+                }
+              return found;
+            }
+            error = "concat operand is not a String after stock conversion";
+            return false;
+}
+
 static const VmValue &readValue(const StackEntry &entry) {
   if (const auto *value = std::get_if<VmValue>(&entry))
     return *value;
@@ -1088,8 +1119,9 @@ static VmResult callNative(std::vector<StackEntry> &stack,
   }
   if (runlog::active() && owner.name.find("GroundRef") != std::string::npos) {
     const bool ok = !std::holds_alternative<std::string>(result);
-    runlog::event(runlog::EventKind::Note, "grlast {\"v\":1,\"m\":\"%s\",\"ok\":%u}",
-                  name.c_str(), ok ? 1u : 0u);
+    runlog::event(runlog::EventKind::Note,
+                  "grlast {\"v\":1,\"m\":\"%s\",\"ok\":%u}", name.c_str(),
+                  ok ? 1u : 0u);
   }
   if (const auto *error = std::get_if<std::string>(&result))
     return {false, int32_t{0}, *error};
@@ -1158,6 +1190,14 @@ static VmResult drive(VmExecutionState &execution, size_t base, size_t budget,
         return {true, int32_t{0}, {}};
       continue;
     }
+    std::string returnedFrom;
+    if (frame.cls) {
+      size_t treeIndex = 0;
+      while (treeIndex < frame.cls->trees.size() &&
+             &frame.cls->trees[treeIndex] != frame.tree)
+        ++treeIndex;
+      returnedFrom = frame.cls->name + " tree " + std::to_string(treeIndex);
+    }
     execution.frames.pop_back();
     if (execution.frames.size() == base) {
       finished = true;
@@ -1179,23 +1219,29 @@ static VmResult drive(VmExecutionState &execution, size_t base, size_t budget,
       parent.stack.push_back(result.value);
       break;
     case VmFrame::ReturnKind::Integer:
-      if (result.voidReturn || !std::holds_alternative<int32_t>(result.value))
-        return fail({false, int32_t{0}, "unsupported return type"});
+      // Stock pushes the returned box unchanged (0x2b: FUN_00423ba0); the
+      // installed Vehicle.getTotalPrice()I returns Chassis.currentPrice()F.
+      // The value keeps its dynamic type for the consumer.
+      if (result.voidReturn ||
+          !(std::holds_alternative<int32_t>(result.value) ||
+            std::holds_alternative<float>(result.value)))
+        return fail({false, int32_t{0},
+                     "unsupported return type from=" + returnedFrom +
+                         " index=" + std::to_string(result.value.index()) +
+                         " void=" + std::to_string(result.voidReturn)});
       parent.stack.push_back(result.value);
       break;
     case VmFrame::ReturnKind::Reference: {
-      const auto *object = std::get_if<const VmObject *>(&result.value);
+      // Stock never type-checks a returned reference against the declared
+      // return type: the installed Osd.createButton(IFFString;ResourceRef;I
+      // Object;I) is declared to return Button but returns the GameRef that
+      // createIcon made, and Painter stores it. Only a non-reference value is
+      // refused here.
       if (result.voidReturn ||
           (!std::holds_alternative<std::monostate>(result.value) &&
-           (!object ||
-            !referenceAssignable(*object, parent.returnType, execution.arena,
-                                 execution.classes))))
+           !std::holds_alternative<const VmObject *>(result.value)))
         return fail({false, int32_t{0},
-                     "unsupported reference return expected=" +
-                         parent.returnType + " actual=" +
-                         (object && *object && (*object)->runtimeClass
-                              ? (*object)->runtimeClass->name
-                              : "null-or-nonobject") +
+                     "unsupported reference return from=" + returnedFrom +
                          " index=" + std::to_string(result.value.index()) +
                          " void=" + std::to_string(result.voidReturn)});
       parent.stack.push_back(result.value);
@@ -1349,6 +1395,61 @@ static VmResult executeTree(VmExecutionState &execution, VmFrame &frame) {
         stack.emplace_back(LocalLocation{&locals, &localTypes, node.operand});
         ++pc;
       }
+      break;
+    }
+    case 0x17: {
+      // Stock FUN_00420ff0 case 0x1017 (switch case test): the top value is
+      // the case constant, the value below it the switch subject. When they
+      // are equal both are discarded and execution takes the 0x14 branch;
+      // otherwise only the constant is discarded and the subject stays for
+      // the next case.
+      if (!node.wide)
+        return {false, int32_t{0},
+                "unsupported operation 0x17 without operand"};
+      if (stack.size() < 2)
+        return {false, int32_t{0}, "switch case stack underflow"};
+      const VmValue constant = readValue(stack.back());
+      const VmValue subject = readValue(stack[stack.size() - 2]);
+      bool equal = false;
+      const auto *constantInt = std::get_if<int32_t>(&constant);
+      const auto *subjectInt = std::get_if<int32_t>(&subject);
+      const auto *constantFloat = std::get_if<float>(&constant);
+      const auto *subjectFloat = std::get_if<float>(&subject);
+      if (constantInt && subjectInt)
+        equal = *constantInt == *subjectInt;
+      else if ((constantInt || constantFloat) && (subjectInt || subjectFloat))
+        equal =
+            (constantInt ? static_cast<float>(*constantInt) : *constantFloat) ==
+            (subjectInt ? static_cast<float>(*subjectInt) : *subjectFloat);
+      else {
+        const auto *constantObject = std::get_if<const VmObject *>(&constant);
+        const auto *subjectObject = std::get_if<const VmObject *>(&subject);
+        if (!constantObject || !subjectObject)
+          return {false, int32_t{0}, "unsupported switch case operand types"};
+        equal = *constantObject == *subjectObject;
+      }
+      stack.pop_back();
+      if (equal) {
+        stack.pop_back();
+        int32_t offset;
+        std::memcpy(&offset, &node.operand, sizeof(offset));
+        const int64_t target = static_cast<int64_t>(pc) + offset;
+        if (target < 0 || static_cast<uint64_t>(target) >= tree.size())
+          return {false, int32_t{0}, "branch outside tree"};
+        pc = static_cast<size_t>(target) - 1;
+      }
+      break;
+    }
+    case 0x18: {
+      // Switch fall-through: every case test (wide 0x17) failed and left the
+      // subject on the stack in all six stock sites (Brake, Integer, Garage,
+      // City); the no-operand 0x18 discards it before the 0x14 jump past the
+      // case bodies.
+      if (node.wide)
+        return {false, int32_t{0}, "unsupported operation 0x18 with operand"};
+      if (stack.empty())
+        return {false, int32_t{0}, "switch subject stack underflow"};
+      stack.pop_back();
       break;
     }
     case 0x11:
@@ -1511,14 +1612,17 @@ static VmResult executeTree(VmExecutionState &execution, VmFrame &frame) {
             const TufaField *resolvedField = nullptr;
             std::vector<const TufaClass *> visited;
             while (declaring && !resolvedField && classes &&
-                   std::find(visited.begin(), visited.end(), declaring) == visited.end()) {
+                   std::find(visited.begin(), visited.end(), declaring) ==
+                       visited.end()) {
               visited.push_back(declaring);
               for (const auto &list : declaring->fields)
                 for (const auto &candidate : list)
                   if (candidate.words[1] < declaring->constants.size() &&
                       candidate.words[2] < declaring->constants.size() &&
-                      declaring->constants[candidate.words[1]].text == fieldName &&
-                      declaring->constants[candidate.words[2]].text == cls->constants[pair.b].text)
+                      declaring->constants[candidate.words[1]].text ==
+                          fieldName &&
+                      declaring->constants[candidate.words[2]].text ==
+                          cls->constants[pair.b].text)
                     resolvedField = &candidate;
               if (!resolvedField) {
                 const TufaClass *parent = nullptr;
@@ -1529,9 +1633,12 @@ static VmResult executeTree(VmExecutionState &execution, VmFrame &frame) {
             }
             if (resolvedField && (resolvedField->words[0] & 8)) {
               std::string loadError;
-              if (!staticFields || !resolveClass(declaring->name, classes, staticFields,
-                                                  arena, depth, loadError))
-                return {false, int32_t{0}, loadError.empty() ? "missing static fields" : loadError};
+              if (!staticFields ||
+                  !resolveClass(declaring->name, classes, staticFields, arena,
+                                depth, loadError))
+                return {false, int32_t{0},
+                        loadError.empty() ? "missing static fields"
+                                          : loadError};
               const VmStaticFields *state = nullptr;
               for (const auto &candidate : *staticFields)
                 if (candidate.owner == declaring)
@@ -1541,7 +1648,8 @@ static VmResult executeTree(VmExecutionState &execution, VmFrame &frame) {
               size_t index = state->fields.size();
               for (size_t i = 0; i < state->fields.size(); ++i)
                 if (state->fields[i].name == fieldName &&
-                    state->fields[i].descriptor == cls->constants[pair.b].text) {
+                    state->fields[i].descriptor ==
+                        cls->constants[pair.b].text) {
                   if (index != state->fields.size())
                     return {false, int32_t{0}, "ambiguous static field value"};
                   index = i;
@@ -1586,7 +1694,8 @@ static VmResult executeTree(VmExecutionState &execution, VmFrame &frame) {
                         std::to_string(pc) + ": " + error};
           if (lastWasField)
             stack.emplace_back(
-                FieldLocation{holder, staticHolder ? staticFields : nullptr, staticHolder, fieldIndex});
+                FieldLocation{holder, staticHolder ? staticFields : nullptr,
+                              staticHolder, fieldIndex});
           else
             stack.emplace_back(current);
           pc += (size_t)node.operand;
@@ -1853,6 +1962,21 @@ static VmResult executeTree(VmExecutionState &execution, VmFrame &frame) {
           int32_t sum;
           std::memcpy(&sum, &bits, sizeof(sum));
           source = sum;
+        } else if (node.operand == 39 &&
+                   std::holds_alternative<const VmObject *>(current)) {
+          // Stock FUN_0041b4d0 string concatenation applies to `+=` too:
+          // a null reference contributes nothing.
+          std::string left, right, concatError;
+          if (!concatOperandBytes(current, left, concatError, arena, classes) ||
+              !concatOperandBytes(source, right, concatError, arena, classes))
+            return {false, int32_t{0},
+                    concatError.empty() ? "unsupported string addition"
+                                        : concatError};
+          const auto result =
+              internString(left + right, classes, staticFields, arena);
+          if (!result.ok)
+            return result;
+          source = result.value;
         } else
           return {false, int32_t{0}, "unsupported compound addition"};
       }
@@ -2119,10 +2243,10 @@ static VmResult executeTree(VmExecutionState &execution, VmFrame &frame) {
       if (constructor->words[0] & 0x40) {
         const unsigned outerDepth = arena->nativeDepth;
         arena->nativeDepth = depth;
-        const auto called = callNative(
-            stack, *target, "<init>",
-            target->constants[constructor->words[2]].text + "V", false,
-            receiver, natives, classes, arena);
+        const auto called =
+            callNative(stack, *target, "<init>",
+                       target->constants[constructor->words[2]].text + "V",
+                       false, receiver, natives, classes, arena);
         arena->nativeDepth = outerDepth;
         if (!called.ok)
           return called;
@@ -2298,6 +2422,27 @@ static VmResult executeTree(VmExecutionState &execution, VmFrame &frame) {
       }
       if (node.wide && node.operand == 27)
         break;
+      if (node.wide && (node.operand == 13 || node.operand == 14)) {
+        // Stock's 0x1007 switch: case 0xd (13) calls FUN_0041aff0 (>>) and
+        // case 0xe (14) calls FUN_0041b0e0 (<<). Both require integral
+        // operands and mask the count with 0x1f; the right shift is
+        // arithmetic because stock shifts a signed int.
+        if (stack.size() < 2)
+          return {false, int32_t{0}, "shift stack underflow"};
+        const auto *left =
+            std::get_if<int32_t>(&readValue(stack[stack.size() - 2]));
+        const auto *right = std::get_if<int32_t>(&readValue(stack.back()));
+        if (!left || !right)
+          return {false, int32_t{0}, "non-integral operands >> / <<"};
+        const int32_t shift = *right & 0x1f;
+        const int32_t result =
+            node.operand == 13
+                ? (*left >> shift)
+                : static_cast<int32_t>(static_cast<uint32_t>(*left) << shift);
+        stack.pop_back();
+        stack.back() = VmValue{result};
+        break;
+      }
       if (node.wide && node.operand >= 23 && node.operand <= 26) {
         if (stack.empty())
           return {false, int32_t{0}, "increment stack underflow"};
@@ -2657,32 +2802,7 @@ static VmResult executeTree(VmExecutionState &execution, VmFrame &frame) {
           // nothing.
           auto bytes = [&](const VmValue &value, std::string &out,
                            std::string &error) {
-            if (const auto *integer = std::get_if<int32_t>(&value)) {
-              out = stockFormatInt(*integer, 0, ' ');
-              return true;
-            }
-            if (const auto *number = std::get_if<float>(&value)) {
-              return stockFormatFloatConcat(*number, out, error);
-            }
-            const auto *object = std::get_if<const VmObject *>(&value);
-            if (!object || !arena)
-              return false;
-            if (!*object)
-              return true; // stock: a null reference contributes nothing
-            if (supportedReference(*object, "Ljava.lang.String;", arena,
-                                   classes)) {
-              bool found = false;
-              for (const auto &item : arena->strings)
-                if (item.second == *object) {
-                  if (found)
-                    return false;
-                  out = item.first;
-                  found = true;
-                }
-              return found;
-            }
-            error = "concat operand is not a String after stock conversion";
-            return false;
+            return concatOperandBytes(value, out, error, arena, classes);
           };
           std::string left, right, concatError;
           if (!bytes(lhsValue, left, concatError) ||
@@ -2872,8 +2992,7 @@ static VmResult executeTree(VmExecutionState &execution, VmFrame &frame) {
         stack.pop_back();
       } else if (tree[refPc].op == 0x11) {
         if (!tree[refPc].wide ||
-            (tree[refPc].operand != 1 && tree[refPc].operand != 2 &&
-             tree[refPc].operand != 3) ||
+            tree[refPc].operand < 1 || tree[refPc].operand > 8 ||
             refPc + 2 >= tree.size() || !classes || !tree[refPc + 1].wide ||
             tree[refPc + 1].operand >= cls->constants.size())
           return {false, int32_t{0}, "unsupported qualified call"};
@@ -2889,17 +3008,24 @@ static VmResult executeTree(VmExecutionState &execution, VmFrame &frame) {
             target = (*value)->runtimeClass;
           }
           --refPc;
-        } else if (tree[refPc].operand == 3) {
-          if (refPc + 3 >= tree.size() ||
-              (tree[refPc + 1].op != 0x19 && tree[refPc + 1].op != 0x01 &&
-               tree[refPc + 1].op != 0x1b) ||
-              tree[refPc + 2].op != 0x1b)
+        } else if (tree[refPc].operand >= 3) {
+          // Receiver is a chain of operand-1 nodes: a first node
+          // (class/local/field) followed by field loads, then the method.
+          const size_t chain = tree[refPc].operand - 1;
+          bool shape = refPc + chain + 1 < tree.size() &&
+                       (tree[refPc + 1].op == 0x19 ||
+                        tree[refPc + 1].op == 0x01 ||
+                        tree[refPc + 1].op == 0x1b);
+          for (size_t i = 2; shape && i <= chain; ++i)
+            shape = tree[refPc + i].op == 0x1b;
+          if (!shape)
             return {false, int32_t{0}, "unsupported qualified field receiver"};
-          const std::vector<TufaNode> fieldTree{
-              {0x11, tree[refPc].source, true, 2},
-              tree[refPc + 1],
-              tree[refPc + 2],
-              {0x2b, 0, false, 0}};
+          std::vector<TufaNode> fieldTree{
+              {0x11, tree[refPc].source, true,
+               static_cast<uint32_t>(chain)}};
+          for (size_t i = 1; i <= chain; ++i)
+            fieldTree.push_back(tree[refPc + i]);
+          fieldTree.push_back({0x2b, 0, false, 0});
           const auto field = execute(cls, fieldTree, locals, depth + 1, natives,
                                      classes, staticFields, arena);
           if (!field.ok)
@@ -2911,7 +3037,7 @@ static VmResult executeTree(VmExecutionState &execution, VmFrame &frame) {
                         " reference " + std::to_string(refPc)};
           fieldReceiver = *value;
           target = fieldReceiver->runtimeClass;
-          ++refPc;
+          refPc += chain - 1;
         } else if (tree[refPc + 1].op == 0x19) {
           const auto &classRef = cls->constants[tree[refPc + 1].operand];
           if (classRef.kind != 4 || classRef.a >= cls->constants.size() ||
@@ -3291,6 +3417,22 @@ static VmResult executeTree(VmExecutionState &execution, VmFrame &frame) {
           return {false, int32_t{0}, "unsupported argument type"};
         if (type == "F" && std::holds_alternative<int32_t>(argument))
           argument = static_cast<float>(std::get<int32_t>(argument));
+        if (type == "Ljava.lang.String;" &&
+            (std::holds_alternative<int32_t>(argument) ||
+             std::holds_alternative<float>(argument))) {
+          // Stock FUN_00417da0 converts a numeric value to a String ("%d" /
+          // "%.3f") when it is assigned to a String-typed slot.
+          std::string text, convertError;
+          if (!concatOperandBytes(argument, text, convertError, arena,
+                                  classes))
+            return {false, int32_t{0},
+                    convertError.empty() ? "unsupported argument type"
+                                         : convertError};
+          const auto interned = internString(text, classes, staticFields, arena);
+          if (!interned.ok)
+            return interned;
+          argument = interned.value;
+        }
         const auto *object = std::get_if<const VmObject *>(&argument);
         const bool fits =
             type == "I" ? std::holds_alternative<int32_t>(argument)
@@ -3303,9 +3445,13 @@ static VmResult executeTree(VmExecutionState &execution, VmFrame &frame) {
         stack.pop_back();
       }
       if (methodOwner->trees[method->words[3]].empty()) {
-        if (returnType != "V")
-          return {false, int32_t{0}, "empty non-void method unsupported"};
-        stack.emplace_back(VmValue{std::monostate{}});
+        // Stock 0041fbc0 skips a null body but still pushes one zeroed value
+        // of the declared return type for a non-void method.
+        stack.emplace_back(returnType == "I"   ? VmValue{int32_t{0}}
+                           : returnType == "F" ? VmValue{0.0f}
+                           : returnType == "V"
+                               ? VmValue{std::monostate{}}
+                               : VmValue{static_cast<const VmObject *>(nullptr)});
         pc = refPc;
         break;
       }
@@ -3386,9 +3532,111 @@ static VmResult executeTree(VmExecutionState &execution, VmFrame &frame) {
                             : std::to_string(tree.front().op))};
 }
 
-// Stock FUN_004255e0 builds a call from typed values, runs FUN_00408a30 on the
-// receiver and hands back the result. Only a script method with a body on a
-// non-static receiver is supported here.
+// Resolve once for both synchronous native callbacks and resumable host tasks.
+static VmResult resolveScriptCall(
+    VmArena *arena, const std::vector<const TufaClass *> *classes,
+    const VmObject *receiver, const std::string &name,
+    const std::vector<VmValue> &arguments, const TufaClass *&resolvedOwner,
+    const std::vector<TufaNode> *&resolvedTree, std::vector<VmValue> &locals) {
+  if (!receiver || !receiver->runtimeClass || !classes)
+    return {false, int32_t{0}, "script call needs an object receiver"};
+  bool owned = false;
+  for (const auto &object : arena->objects)
+    if (object.get() == receiver)
+      owned = true;
+  if (!owned)
+    return {false, int32_t{0}, "script call receiver is not an arena object"};
+  std::string signature = "(";
+  for (const auto &argument : arguments) {
+    if (std::holds_alternative<int32_t>(argument))
+      signature += 'I';
+    else if (std::holds_alternative<float>(argument))
+      signature += 'F';
+    else if (const auto *value = std::get_if<const VmObject *>(&argument);
+             value && *value && (*value)->runtimeClass)
+      signature += "L" + (*value)->runtimeClass->name + ";";
+    else
+      signature += '?';
+  }
+  signature += ')';
+  const TufaClass *owner = receiver->runtimeClass;
+  const TufaMethod *method = nullptr;
+  std::vector<const TufaClass *> visited;
+  while (owner && !method) {
+    if (visited.size() >= 128 ||
+        std::find(visited.begin(), visited.end(), owner) != visited.end())
+      return {false, int32_t{0}, "cyclic script call ancestry"};
+    visited.push_back(owner);
+    for (const auto &list : owner->methods)
+      for (const auto &candidate : list) {
+        const auto &words = candidate.words;
+        if (words[1] >= owner->constants.size() ||
+            words[2] >= owner->constants.size() ||
+            owner->constants[words[1]].text != name)
+          continue;
+        std::vector<std::string> parameters;
+        std::string returnType;
+        std::string descriptor = owner->constants[words[2]].text;
+        if (!descriptor.empty() && descriptor.back() == ')')
+          descriptor += 'V';
+        if (!nativeSignature(descriptor, parameters, returnType) ||
+            parameters.size() != arguments.size())
+          continue;
+        bool fits = true;
+        for (size_t i = 0; i < parameters.size(); ++i) {
+          const auto &arg = arguments[i];
+          const auto *object = std::get_if<const VmObject *>(&arg);
+          if (parameters[i] == "I")
+            fits = std::holds_alternative<int32_t>(arg);
+          else if (parameters[i] == "F")
+            fits = std::holds_alternative<float>(arg);
+          else
+            fits = object &&
+                   referenceAssignable(*object, parameters[i], arena, classes);
+          if (!fits)
+            break;
+        }
+        if (!fits)
+          continue;
+        if (method)
+          return {false, int32_t{0}, "ambiguous script call: " + name};
+        method = &candidate;
+      }
+    if (!method) {
+      const TufaClass *parent = nullptr;
+      if (!parentClass(*owner, *classes, parent))
+        return {false, int32_t{0}, "invalid script call ancestry"};
+      owner = parent;
+    }
+  }
+  if (!method)
+    return {false, int32_t{0}, "script call: no method " + name + signature};
+  if ((method->words[0] & (8 | 0x40)) ||
+      method->words[3] >= owner->trees.size())
+    return {false, int32_t{0},
+            "script call: " + name + signature +
+                " is not a script instance method"};
+  if (owner->trees[method->words[3]].empty()) {
+    std::vector<std::string> parameters;
+    std::string returnType;
+    std::string descriptor = owner->constants[method->words[2]].text;
+    if (!descriptor.empty() && descriptor.back() == ')')
+      descriptor += 'V';
+    if (!nativeSignature(descriptor, parameters, returnType) ||
+        returnType != "V")
+      return {false, int32_t{0}, "empty non-void method unsupported"};
+    resolvedOwner = owner;
+    resolvedTree = nullptr;
+    return {true, std::monostate{}, {}};
+  }
+  locals = {receiver};
+  // 0041fbc0 pops arguments into locals in reverse order.
+  locals.insert(locals.end(), arguments.rbegin(), arguments.rend());
+  resolvedOwner = owner;
+  resolvedTree = &owner->trees[method->words[3]];
+  return {true, std::monostate{}, {}};
+}
+
 static VmScriptCall
 makeScriptCall(const std::vector<NativeEntry> *natives,
                const std::vector<const TufaClass *> *classes,
@@ -3396,100 +3644,15 @@ makeScriptCall(const std::vector<NativeEntry> *natives,
                VmArena *arena) {
   return [=](const VmObject *receiver, const std::string &name,
              std::vector<VmValue> arguments) -> VmResult {
-    if (!receiver || !receiver->runtimeClass || !classes)
-      return {false, int32_t{0}, "script call needs an object receiver"};
-    bool owned = false;
-    for (const auto &object : arena->objects)
-      if (object.get() == receiver)
-        owned = true;
-    if (!owned)
-      return {false, int32_t{0}, "script call receiver is not an arena object"};
-    std::string signature = "(";
-    for (const auto &argument : arguments) {
-      if (std::holds_alternative<int32_t>(argument))
-        signature += 'I';
-      else if (std::holds_alternative<float>(argument))
-        signature += 'F';
-      else if (const auto *value = std::get_if<const VmObject *>(&argument);
-               value && *value && (*value)->runtimeClass)
-        signature += "L" + (*value)->runtimeClass->name + ";";
-      else
-        signature += '?';
-    }
-    signature += ')';
-    const TufaClass *owner = receiver->runtimeClass;
-    const TufaMethod *method = nullptr;
-    std::vector<const TufaClass *> visited;
-    while (owner && !method) {
-      if (visited.size() >= 128 ||
-          std::find(visited.begin(), visited.end(), owner) != visited.end())
-        return {false, int32_t{0}, "cyclic script call ancestry"};
-      visited.push_back(owner);
-      for (const auto &list : owner->methods)
-        for (const auto &candidate : list) {
-          const auto &words = candidate.words;
-          if (words[1] >= owner->constants.size() ||
-              words[2] >= owner->constants.size() ||
-              owner->constants[words[1]].text != name)
-            continue;
-          std::vector<std::string> parameters;
-          std::string returnType;
-          std::string descriptor = owner->constants[words[2]].text;
-          if (!descriptor.empty() && descriptor.back() == ')')
-            descriptor += 'V';
-          if (!nativeSignature(descriptor, parameters, returnType) ||
-              parameters.size() != arguments.size())
-            continue;
-          bool fits = true;
-          for (size_t i = 0; i < parameters.size(); ++i) {
-            const auto &arg = arguments[i];
-            const auto *object = std::get_if<const VmObject *>(&arg);
-            if (parameters[i] == "I")
-              fits = std::holds_alternative<int32_t>(arg);
-            else if (parameters[i] == "F")
-              fits = std::holds_alternative<float>(arg);
-            else
-              fits = object && referenceAssignable(*object, parameters[i],
-                                                   arena, classes);
-            if (!fits)
-              break;
-          }
-          if (!fits)
-            continue;
-          if (method)
-            return {false, int32_t{0}, "ambiguous script call: " + name};
-          method = &candidate;
-        }
-      if (!method) {
-        const TufaClass *parent = nullptr;
-        if (!parentClass(*owner, *classes, parent))
-          return {false, int32_t{0}, "invalid script call ancestry"};
-        owner = parent;
-      }
-    }
-    if (!method)
-      return {false, int32_t{0}, "script call: no method " + name + signature};
-    if ((method->words[0] & (8 | 0x40)) ||
-        method->words[3] >= owner->trees.size())
-      return {false, int32_t{0},
-              "script call: " + name + signature +
-                  " is not a script instance method"};
-    if (owner->trees[method->words[3]].empty()) {
-      std::vector<std::string> parameters;
-      std::string returnType;
-      std::string descriptor = owner->constants[method->words[2]].text;
-      if (!descriptor.empty() && descriptor.back() == ')') descriptor += 'V';
-      if (!nativeSignature(descriptor, parameters, returnType) || returnType != "V")
-        return {false, int32_t{0}, "empty non-void method unsupported"};
-      return {true, std::monostate{}, {}};
-    }
-    std::vector<VmValue> locals{receiver};
-    // 0041fbc0 pops the call stack into local slots, so the last argument
-    // occupies local 1 and the first occupies the last parameter slot.
-    locals.insert(locals.end(), arguments.rbegin(), arguments.rend());
-    return execute(owner, owner->trees[method->words[3]], std::move(locals),
-                   arena->nativeDepth + 1, natives, classes, staticFields,
-                   arena);
+    const TufaClass *owner = nullptr;
+    const std::vector<TufaNode> *tree = nullptr;
+    std::vector<VmValue> locals;
+    auto result = resolveScriptCall(arena, classes, receiver, name, arguments,
+                                    owner, tree, locals);
+    if (!result.ok || !tree)
+      return result;
+    return execute(owner, *tree, std::move(locals), arena->nativeDepth + 1,
+                   natives, classes, staticFields, arena);
   };
 }
 
@@ -3599,12 +3762,15 @@ struct VmScheduler::Impl {
     std::string name;
     int priority = 2;
     uint32_t flags = 2;
-    float wake = 0;
+    double wake = 0;
     const VmObject *waitingOn = nullptr;
     uint64_t waitOrder = 0;
     VmExecution execution;
     VmRandomState random;
     size_t slices = 0;
+    uint32_t lastSliceFrame = 0;
+    std::shared_ptr<VmHostTask> hostTask;
+    std::function<bool()> alive;
   };
   VmArena &arena;
   const std::vector<NativeEntry> *natives;
@@ -3650,6 +3816,12 @@ VmScheduler::VmScheduler(VmArena &arena,
   arena.scheduler = this;
 }
 VmScheduler::~VmScheduler() {
+  for (const auto &thread : impl_->threads) {
+    if (thread && thread->hostTask && !thread->hostTask->finished) {
+      thread->hostTask->result = {false, int32_t{0}, "scheduler destroyed"};
+      thread->hostTask->finished = true;
+    }
+  }
   if (impl_->arena.scheduler == this)
     impl_->arena.scheduler = nullptr;
 }
@@ -3665,6 +3837,10 @@ VmResult VmScheduler::createThread(const VmObject *owner, std::string name) {
   auto thread = std::make_unique<Impl::Thread>();
   thread->owner = owner;
   thread->name = std::move(name);
+  // Bounded diagnostic: the loading dialog never dismisses; note every
+  // thread creation and start until that flow is traced.
+  runlog::event(runlog::EventKind::Note, "vmthread create \"%s\"",
+                thread->name.c_str());
   impl_->threads.push_back(std::move(thread));
   ptr->value = static_cast<int32_t>(impl_->threads.size());
   return {true, int32_t{0}, {}};
@@ -3702,6 +3878,9 @@ VmResult VmScheduler::start(const VmObject *owner) {
             "thread target has no script run()V: " +
                 target->runtimeClass->name};
   const bool isStatic = (method->words[0] & 8) != 0;
+  // Bounded diagnostic: see which script threads actually start.
+  runlog::event(runlog::EventKind::Note, "vmthread start \"%s\" target %s",
+                thread->name.c_str(), target->runtimeClass->name.c_str());
   thread->execution = vmStart(
       *methodOwner, methodOwner->trees[method->words[3]],
       isStatic ? std::vector<VmValue>{} : std::vector<VmValue>{target},
@@ -3727,22 +3906,29 @@ VmResult VmScheduler::stop(const VmObject *owner) {
   return {true, int32_t{0}, {}};
 }
 
-VmResult VmScheduler::sleep(float seconds) {
+// Thread.sleep(F) takes milliseconds: stock 0047c650 -> 0041f630 stores
+// FUN_005516c0() + argument as the wake time, and FUN_005516c0 is the
+// performance counter in seconds times 1000.0 (float at 005f0910, read in the
+// stock exe), the same clock FUN_00416940 compares the wake time against. The
+// scheduler clock here is in seconds.
+VmResult VmScheduler::sleep(float milliseconds) {
   if (!impl_->current || !impl_->arena.activeExecution)
     return {false, int32_t{0}, "sleep outside a scheduled thread"};
   if (impl_->arena.activeExecution->synchronousDepth)
     return {false, int32_t{0},
             "sleep in synchronous callback or initializer is unsupported"};
-  impl_->current->wake = static_cast<float>(impl_->clock() + seconds);
+  impl_->current->wake =
+      impl_->clock() + static_cast<double>(milliseconds) * 0.001;
   impl_->current->flags |= 8;
   impl_->arena.activeExecution->yieldRequested = true;
   return {true, int32_t{0}, {}};
 }
 
 VmResult VmScheduler::wait(const VmObject *object) {
-  if (!object || !impl_->current || !impl_->arena.activeExecution)
-    return {false, int32_t{0},
-            "wait outside a scheduled thread or without a receiver"};
+  if (!object)
+    return {false, int32_t{0}, "wait without a receiver"};
+  if (!impl_->current || !impl_->arena.activeExecution)
+    return {false, int32_t{0}, "wait outside a scheduled thread"};
   if (impl_->arena.activeExecution->synchronousDepth)
     return {false, int32_t{0},
             "wait in synchronous callback or initializer is unsupported"};
@@ -3754,6 +3940,11 @@ VmResult VmScheduler::wait(const VmObject *object) {
   thread->waitingOn = object;
   thread->waitOrder = ++impl_->nextWaitOrder;
   thread->flags |= 0x10;
+  // Bounded diagnostic: loading dialog stall; note monitor waits.
+  runlog::event(runlog::EventKind::Note, "monitor wait \"%s\" on %s",
+                thread->name.c_str(),
+                object->runtimeClass ? object->runtimeClass->name.c_str()
+                                     : "?");
   impl_->arena.activeExecution->yieldRequested = true;
   return {true, int32_t{0}, {}};
 }
@@ -3761,6 +3952,10 @@ VmResult VmScheduler::wait(const VmObject *object) {
 VmResult VmScheduler::notify(const VmObject *object, bool all) {
   if (!object)
     return {false, int32_t{0}, "notify without a receiver"};
+  const char *objectClass =
+      object->runtimeClass ? object->runtimeClass->name.c_str() : "?";
+  const char *notifier = impl_->current ? impl_->current->name.c_str() : "host";
+  size_t woken = 0;
   do {
     Impl::Thread *newest = nullptr;
     for (const auto &thread : impl_->threads)
@@ -3771,8 +3966,60 @@ VmResult VmScheduler::notify(const VmObject *object, bool all) {
       break;
     newest->waitingOn = nullptr;
     newest->flags &= ~uint32_t{0x10};
+    ++woken;
+    runlog::event(runlog::EventKind::Note,
+                  "monitor wake \"%s\" on %s by \"%s\"", newest->name.c_str(),
+                  objectClass, notifier);
   } while (all);
+  // A notify nobody waits for is lost, as in stock. The per-frame engine
+  // notify is expected to be lost most frames; any other lost notify is the
+  // usual sign of a handshake that never completes.
+  if (!woken && std::strcmp(objectClass, "java.render.GfxEngine") != 0)
+    runlog::event(runlog::EventKind::Note,
+                  "monitor notify%s lost on %s by \"%s\" (no waiter)",
+                  all ? "All" : "", objectClass, notifier);
   return {true, int32_t{0}, {}};
+}
+VmResult VmScheduler::startHostTask(const VmObject *receiver,
+                                    const std::string &name,
+                                    std::vector<VmValue> arguments,
+                                    std::function<bool()> alive,
+                                    std::shared_ptr<VmHostTask> &task) {
+  task.reset();
+  if (alive && !alive())
+    return {false, int32_t{0}, "host task owner destroyed"};
+  if (impl_->arena.activeExecution)
+    return {false, int32_t{0}, "host task requires inactive VM"};
+  const TufaClass *owner = nullptr;
+  const std::vector<TufaNode> *tree = nullptr;
+  std::vector<VmValue> locals;
+  auto result = resolveScriptCall(&impl_->arena, impl_->classes, receiver, name,
+                                  arguments, owner, tree, locals);
+  if (!result.ok)
+    return result;
+  task = std::make_shared<VmHostTask>();
+  if (!tree) {
+    task->finished = true;
+    task->result = result;
+    return result;
+  }
+  auto thread = std::make_unique<Impl::Thread>();
+  thread->owner = nullptr;
+  thread->name = "host:" + name;
+  thread->flags = 0;
+  thread->hostTask = task;
+  thread->alive = std::move(alive);
+  thread->execution =
+      vmStart(*owner, *tree, std::move(locals), impl_->natives, impl_->classes,
+              impl_->staticFields, &impl_->arena);
+  for (auto &slot : impl_->threads) {
+    if (!slot) {
+      slot = std::move(thread);
+      return {true, std::monostate{}, {}};
+    }
+  }
+  impl_->threads.push_back(std::move(thread));
+  return {true, std::monostate{}, {}};
 }
 
 VmResult VmScheduler::tick(size_t nodeBudget, int minPriority) {
@@ -3786,6 +4033,13 @@ VmResult VmScheduler::tick(size_t nodeBudget, int minPriority) {
     auto *thread = impl_->threads[index].get();
     if (!thread)
       continue;
+    if (thread->hostTask && thread->alive && !thread->alive()) {
+      thread->hostTask->result = {false, int32_t{0},
+                                  "host task owner destroyed"};
+      thread->hostTask->finished = true;
+      impl_->threads[index].reset();
+      continue;
+    }
     if ((thread->flags & 0x80) && !(thread->flags & 4)) {
       impl_->threads[index].reset();
       continue;
@@ -3803,16 +4057,26 @@ VmResult VmScheduler::tick(size_t nodeBudget, int minPriority) {
     impl_->arena.randomState = &thread->random;
     bool finished = false;
     ++thread->slices;
+    thread->lastSliceFrame = runlog::g_frame.load(std::memory_order_relaxed);
     runlog::event(runlog::EventKind::Thread, "slice %s #%zu",
                   thread->name.c_str(), thread->slices);
     auto result = vmResume(thread->execution, nodeBudget, finished);
     impl_->arena.randomState = previousRandom;
     impl_->current = nullptr;
     if (!result.ok) {
+      if (thread->hostTask) {
+        thread->hostTask->result = result;
+        thread->hostTask->finished = true;
+        thread->flags |= 0x80;
+      }
       result.error = "thread " + thread->name + ": " + result.error;
       return result;
     }
     if (finished) {
+      if (thread->hostTask) {
+        thread->hostTask->result = result;
+        thread->hostTask->finished = true;
+      }
       thread->flags |= 0x40;
       if (!(thread->flags & 1))
         thread->flags |= 0x80;
@@ -3821,6 +4085,13 @@ VmResult VmScheduler::tick(size_t nodeBudget, int minPriority) {
     }
   }
   return {true, int32_t{0}, {}};
+}
+
+const std::vector<const TufaClass *> *VmScheduler::classes() const {
+  return impl_->classes;
+}
+const std::vector<VmStaticFields> *VmScheduler::staticFields() const {
+  return impl_->staticFields;
 }
 
 size_t VmScheduler::threadCount() const {
@@ -3853,6 +4124,76 @@ VmScheduler::threadWaits() const {
   for (const auto &thread : impl_->threads)
     if (thread && !(thread->flags & 0x80) && thread->waitingOn)
       result.emplace_back(thread->name, thread->waitingOn);
+  return result;
+}
+
+static std::string describeFrame(const VmFrame &frame) {
+  std::string label = frame.cls ? frame.cls->name : std::string{"?"};
+  const char *method = "?";
+  const char *desc = "";
+  if (frame.cls && frame.tree) {
+    const auto &cls = *frame.cls;
+    for (const auto &side : cls.methods)
+      for (const auto &m : side) {
+        if (m.words[3] >= cls.trees.size() ||
+            &cls.trees[m.words[3]] != frame.tree)
+          continue;
+        if (m.words[1] < cls.constants.size() &&
+            cls.constants[m.words[1]].kind == 0)
+          method = cls.constants[m.words[1]].text.c_str();
+        if (m.words[2] < cls.constants.size() &&
+            cls.constants[m.words[2]].kind == 0)
+          desc = cls.constants[m.words[2]].text.c_str();
+      }
+  }
+  label += '.';
+  label += method;
+  label += desc;
+  label += " @" + std::to_string(frame.pc) + '/' +
+           std::to_string(frame.tree ? frame.tree->size() : 0);
+  if (frame.tree && frame.pc < frame.tree->size()) {
+    char op[16];
+    std::snprintf(op, sizeof op, " op=%02x", (*frame.tree)[frame.pc].op);
+    label += op;
+  }
+  return label;
+}
+
+std::vector<VmThreadSnapshot> VmScheduler::snapshot(size_t maxFrames) const {
+  std::vector<VmThreadSnapshot> result;
+  const double now = impl_->clock();
+  for (const auto &thread : impl_->threads) {
+    if (!thread)
+      continue;
+    VmThreadSnapshot s;
+    s.name = thread->name;
+    s.flags = thread->flags;
+    s.slices = thread->slices;
+    s.lastSliceFrame = thread->lastSliceFrame;
+    s.hostTask = thread->hostTask != nullptr;
+    if (thread->flags & 0x80)
+      s.state = "dead";
+    else if (thread->waitingOn) {
+      s.state = "waiting";
+      s.waitingOn = thread->waitingOn->runtimeClass
+                        ? thread->waitingOn->runtimeClass->name
+                        : "?";
+    } else if (thread->flags & 8) {
+      s.state = "sleeping";
+      s.sleepRemaining = static_cast<double>(thread->wake) - now;
+    } else if (thread->flags & 2)
+      s.state = "not-started";
+    else if (thread->flags & 0x44)
+      s.state = "stopped";
+    else
+      s.state = "runnable";
+    const auto *state = thread->execution.state.get();
+    if (state)
+      for (size_t i = state->frames.size();
+           i-- > 0 && s.stack.size() < maxFrames;)
+        s.stack.push_back(describeFrame(*state->frames[i]));
+    result.push_back(std::move(s));
+  }
   return result;
 }
 

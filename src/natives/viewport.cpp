@@ -106,8 +106,10 @@ NativeResult cameraCreate(const std::vector<VmValue> &args,
   const float pixelHeight = viewport.height * static_cast<float>(height);
   if (!(pixelWidth > 0) || !(pixelHeight > 0) || !std::isfinite(pixelWidth) || !std::isfinite(pixelHeight))
     return std::string{"Camera.create: invalid viewport dimensions"};
-  if (std::get<int32_t>(args[9]) != 0)
-    return std::string{"Camera.create: plane-test mode unsupported"};
+  // Stock FUN_004861e0 stores the plane-test mode unconditionally (camera
+  // payload +0x2c); modes 1 and 2 are identical in stock and never rejected.
+  // makeCameraResource receives it below; the per-frame behavior lives in
+  // traverseCameraCandidates (FUN_00510fc0).
   uint16_t slot = 0;
   if (!game.packs->registerPackName("system.rpk", slot, error))
     return "Camera.create: " + error;

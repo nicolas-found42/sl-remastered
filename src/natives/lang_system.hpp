@@ -19,3 +19,6 @@ NativeResult systemCurrentTime(const std::vector<VmValue>&, const VmObject*, VmA
 NativeResult systemTimeWarp(const std::vector<VmValue>&, const VmObject*, VmArena*, const std::vector<const TufaClass*>*);
 
 NativeResult systemSyncGameTime(const std::vector<VmValue>&, const VmObject*, VmArena*, const std::vector<const TufaClass*>*);
+
+NativeResult systemIsLoadingReset(const std::vector<VmValue>&, const VmObject*, VmArena*, const std::vector<const TufaClass*>*);
+NativeResult systemIsLoading(const std::vector<VmValue>&, const VmObject*, VmArena*, const std::vector<const TufaClass*>*);

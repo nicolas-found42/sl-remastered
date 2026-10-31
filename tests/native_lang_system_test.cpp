@@ -110,7 +110,7 @@ int main() {
   CHECK(std::holds_alternative<VmValue>(oldScale) && std::get<float>(std::get<VmValue>(oldScale)) == 1.0f);
   CHECK(simulation.timeScale() == 0.5f && std::abs(simulation.timeOrigin() - 2.0f) < 0.00001f);
   std::string timerError;
-  CHECK(simulation.advance(0.5f, [](LinkOwner &, int32_t, std::string &) { return true; }, timerError));
+  CHECK(simulation.advance(0.5f, [](LinkOwner &, int32_t, uint32_t, int32_t, std::string &) { return true; }, timerError));
   oldScale = systemTimeWarp({2.0f}, nullptr, &clockArena, nullptr);
   CHECK(std::holds_alternative<VmValue>(oldScale) && std::get<float>(std::get<VmValue>(oldScale)) == 0.5f);
   CHECK(simulation.timeScale() == 2.0f && std::abs(simulation.timeOrigin() - 1.75f) < 0.00001f);

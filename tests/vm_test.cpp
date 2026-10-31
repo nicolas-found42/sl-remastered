@@ -1269,9 +1269,14 @@ int main() {
       CHECK(!vmExecute(cls, external, {&receiver, &unowned}, nullptr, &classes,
                        &states, &arena)
                  .ok);
-      CHECK(!vmExecute(cls, external, {&receiver, int32_t{3}}, nullptr,
-                       &classes, &states, &arena)
-                 .ok);
+      // Stock FUN_00417da0 converts a number to "%d" text when it is
+      // passed to a String parameter.
+      const size_t stringsBefore = arena.strings.size();
+      CHECK(vmExecute(cls, external, {&receiver, int32_t{3}}, nullptr,
+                      &classes, &states, &arena)
+                .ok);
+      CHECK(arena.strings.size() == stringsBefore + 1 &&
+            arena.strings.back().first == "3");
       CHECK(vmExecute(cls, external,
                       {&receiver, static_cast<const VmObject *>(nullptr)},
                       nullptr, &classes, &states, &arena)
@@ -2093,6 +2098,43 @@ int main() {
         CHECK(!vmExecute(tree, {&object, int32_t{0}}).ok);
       }
     }
+  }
+  {
+    // 0x1007 case 0xd (`>>`, stock FUN_0041aff0) and case 0xe (`<<`, stock
+    // FUN_0041b0e0): integral operands only, count masked with 0x1f, and the
+    // right shift is arithmetic. Negative values and a count above 31 are
+    // covered because the mask is the only clamp stock applies.
+    std::vector<TufaNode> tree{{0x01, 0, true, 0},
+                               {0x01, 0, true, 1},
+                               {0x07, 13, true, 0},
+                               {0x2b, 0, false, 0}};
+    const auto shiftRight = [&](int32_t value, int32_t count) {
+      tree[2].operand = 13;
+      return vmExecute(tree, {int32_t{value}, int32_t{count}});
+    };
+    const auto shiftLeft = [&](int32_t value, int32_t count) {
+      tree[2].operand = 14;
+      return vmExecute(tree, {int32_t{value}, int32_t{count}});
+    };
+    // Arithmetic right shift keeps the sign.
+    CHECK(shiftRight(-16, 2).ok &&
+          std::get<int32_t>(shiftRight(-16, 2).value) == -4);
+    CHECK(shiftRight(16, 2).ok &&
+          std::get<int32_t>(shiftRight(16, 2).value) == 4);
+    // The count is masked with 0x1f: 33 behaves as 1.
+    CHECK(shiftRight(-8, 33).ok &&
+          std::get<int32_t>(shiftRight(-8, 33).value) == -4);
+    CHECK(shiftLeft(1, 4).ok && std::get<int32_t>(shiftLeft(1, 4).value) == 16);
+    CHECK(shiftLeft(1, 33).ok &&
+          std::get<int32_t>(shiftLeft(1, 33).value) == 2);
+    // Left shift wraps like stock's 32-bit shift.
+    CHECK(shiftLeft(1, 31).ok &&
+          std::get<int32_t>(shiftLeft(1, 31).value) == INT32_MIN);
+    // Non-integral operands are refused, as stock's "non integral operands"
+    // diagnostic does.
+    tree[2].operand = 13;
+    CHECK(!vmExecute(tree, {1.5f, int32_t{1}}).ok);
+    CHECK(!vmExecute(tree, {int32_t{1}, 1.5f}).ok);
   }
   {
     const auto parsed = tufaLoadFile("ref/raw/sl/Scripts/game/Roc.class");

@@ -28,6 +28,9 @@ NativeResult floatToString(const std::vector<VmValue> &args,
 NativeResult stringIntValue(const std::vector<VmValue> &args,
                             const VmObject *receiver, VmArena *arena,
                             const std::vector<const TufaClass *> *classes);
+NativeResult stringFloatValue(const std::vector<VmValue> &args,
+                              const VmObject *receiver, VmArena *arena,
+                              const std::vector<const TufaClass *> *classes);
 NativeResult stringLength(const std::vector<VmValue> &args,
                           const VmObject *receiver, VmArena *arena,
                           const std::vector<const TufaClass *> *classes);

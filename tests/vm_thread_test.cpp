@@ -1,5 +1,5 @@
-#include "natives/registry.hpp"
 #include "camera_frame.hpp"
+#include "natives/registry.hpp"
 #include "vm.hpp"
 
 #include <cstdio>
@@ -23,10 +23,12 @@ static NativeResult record(const std::vector<VmValue> &args, const VmObject *,
   return std::monostate{};
 }
 static const VmObject *callbackTarget = nullptr;
-static NativeResult callNested(const std::vector<VmValue>&, const VmObject*, VmArena* arena,
-                               const std::vector<const TufaClass*>*) {
+static NativeResult callNested(const std::vector<VmValue> &, const VmObject *,
+                               VmArena *arena,
+                               const std::vector<const TufaClass *> *) {
   const auto result = arena->callScript(callbackTarget, "run", {});
-  return result.ok ? NativeResult{std::monostate{}} : NativeResult{result.error};
+  return result.ok ? NativeResult{std::monostate{}}
+                   : NativeResult{result.error};
 }
 static const VmObject *waitObject = nullptr;
 static NativeResult park(const std::vector<VmValue> &, const VmObject *,
@@ -89,7 +91,7 @@ struct Script {
   }
 };
 
-static VmObject *object(VmArena &arena, const TufaClass *cls) {
+static VmObject *makeObject(VmArena &arena, const TufaClass *cls) {
   auto value = std::make_unique<VmObject>();
   value->runtimeClass = cls;
   auto *result = value.get();
@@ -97,7 +99,7 @@ static VmObject *object(VmArena &arena, const TufaClass *cls) {
   return result;
 }
 static VmObject *thread(VmArena &arena, const VmObject *target) {
-  auto *result = object(arena, nullptr);
+  auto *result = makeObject(arena, nullptr);
   result->fields.emplace_back("ptr", int32_t{0}, "I");
   result->fields.emplace_back("target", target, "Ljava.lang.Runnable;");
   return result;
@@ -105,20 +107,29 @@ static VmObject *thread(VmArena &arena, const VmObject *target) {
 
 int main() {
   {
-    // 07 suboperation 17: integer modulo, FUN_0041bbf0 (C remainder: sign follows the left operand).
+    // 07 suboperation 17: integer modulo, FUN_0041bbf0 (C remainder: sign
+    // follows the left operand).
     const auto remainder = vmExecute(
         {literal(-7), literal(3), node(0x07, 17, true), node(0x2b)}, {});
     CHECK(remainder.ok && std::get<int32_t>(remainder.value) == -1);
-    CHECK(!vmExecute({literal(7), literal(0), node(0x07, 17, true), node(0x2b)}, {}).ok);
-    CHECK(!vmExecute({literal(INT32_MIN), literal(-1), node(0x07, 17, true), node(0x2b)}, {}).ok);
+    CHECK(!vmExecute({literal(7), literal(0), node(0x07, 17, true), node(0x2b)},
+                     {})
+               .ok);
+    CHECK(!vmExecute({literal(INT32_MIN), literal(-1), node(0x07, 17, true),
+                      node(0x2b)},
+                     {})
+               .ok);
     float half = 0.5f;
     uint32_t bits;
     std::memcpy(&bits, &half, sizeof(bits));
-    CHECK(!vmExecute({literal(7), node(0x07, 28, true), node(0x0a, bits, true), node(0x07, 17, true),
-                      node(0x2b)}, {}).ok);
+    CHECK(!vmExecute({literal(7), node(0x07, 28, true), node(0x0a, bits, true),
+                      node(0x07, 17, true), node(0x2b)},
+                     {})
+               .ok);
   }
   {
-    // 07 suboperation 33 with a 06 descriptor: primitive cast (stock 0x1021 arm, FUN_00417da0).
+    // 07 suboperation 33 with a 06 descriptor: primitive cast (stock 0x1021
+    // arm, FUN_00417da0).
     TufaClass cls;
     cls.name = "test.PrimitiveCast";
     cls.constants.push_back({0, "I", 0, 0});
@@ -132,18 +143,23 @@ int main() {
     float value = -2.75f;
     uint32_t bits;
     std::memcpy(&bits, &value, sizeof(bits));
-    const auto truncated = run({node(0x07, 28, true), node(0x0a, bits, true), node(0x07, 33, true),
-                                node(0x06, 0, true), node(0x2b)});
+    const auto truncated =
+        run({node(0x07, 28, true), node(0x0a, bits, true), node(0x07, 33, true),
+             node(0x06, 0, true), node(0x2b)});
     CHECK(truncated.ok && std::holds_alternative<int32_t>(truncated.value) &&
           std::get<int32_t>(truncated.value) == -2);
-    const auto widened = run({literal(7), node(0x07, 33, true), node(0x06, 1, true), node(0x2b)});
-    CHECK(widened.ok && std::holds_alternative<float>(widened.value) && std::get<float>(widened.value) == 7.0f);
-    const auto same = run({literal(5), node(0x07, 33, true), node(0x06, 0, true), node(0x2b)});
+    const auto widened = run(
+        {literal(7), node(0x07, 33, true), node(0x06, 1, true), node(0x2b)});
+    CHECK(widened.ok && std::holds_alternative<float>(widened.value) &&
+          std::get<float>(widened.value) == 7.0f);
+    const auto same = run(
+        {literal(5), node(0x07, 33, true), node(0x06, 0, true), node(0x2b)});
     CHECK(same.ok && std::get<int32_t>(same.value) == 5);
     float huge = 4.0e10f;
     std::memcpy(&bits, &huge, sizeof(bits));
-    CHECK(!run({node(0x07, 28, true), node(0x0a, bits, true), node(0x07, 33, true), node(0x06, 0, true),
-                node(0x2b)}).ok);
+    CHECK(!run({node(0x07, 28, true), node(0x0a, bits, true),
+                node(0x07, 33, true), node(0x06, 0, true), node(0x2b)})
+               .ok);
   }
   {
     const auto quotient = vmExecute(
@@ -249,8 +265,8 @@ int main() {
     double now = 0;
     VmScheduler scheduler(arena, &natives, &classes, &states,
                           [&] { return now; });
-    auto *a = thread(arena, object(arena, &first.cls));
-    auto *b = thread(arena, object(arena, &second.cls));
+    auto *a = thread(arena, makeObject(arena, &first.cls));
+    auto *b = thread(arena, makeObject(arena, &second.cls));
     CHECK(scheduler.createThread(a, "first").ok &&
           scheduler.createThread(b, "second").ok);
     events.clear();
@@ -265,13 +281,16 @@ int main() {
     Script script("test.StaticRun", 7, 8, false);
     script.cls.methods[0][2].words[0] |= 8;
     VmArena arena;
-    std::vector<const TufaClass*> classes{&script.cls};
+    std::vector<const TufaClass *> classes{&script.cls};
     std::vector<VmStaticFields> states;
-    std::vector<NativeEntry> natives{{"test.StaticRun", "record", "(I)V", "test", record}};
-    VmScheduler scheduler(arena, &natives, &classes, &states, [] { return 0.0; });
-    auto* owner = thread(arena, object(arena, &script.cls));
+    std::vector<NativeEntry> natives{
+        {"test.StaticRun", "record", "(I)V", "test", record}};
+    VmScheduler scheduler(arena, &natives, &classes, &states,
+                          [] { return 0.0; });
+    auto *owner = thread(arena, makeObject(arena, &script.cls));
     events.clear();
-    CHECK(scheduler.createThread(owner, "static run").ok && scheduler.start(owner).ok);
+    CHECK(scheduler.createThread(owner, "static run").ok &&
+          scheduler.start(owner).ok);
     CHECK(scheduler.tick(100).ok && (events == std::vector<int>{7, 8}));
   }
   {
@@ -294,19 +313,19 @@ int main() {
     double now = 0;
     VmScheduler scheduler(arena, &natives, &classes, &states,
                           [&] { return now; });
-    auto *a = thread(arena, object(arena, &first.cls));
-    auto *b = thread(arena, object(arena, &second.cls));
+    auto *a = thread(arena, makeObject(arena, &first.cls));
+    auto *b = thread(arena, makeObject(arena, &second.cls));
     CHECK(scheduler.createThread(a, "sleeping").ok &&
           scheduler.createThread(b, "awake").ok);
     CHECK(scheduler.start(a).ok && scheduler.start(b).ok);
     events.clear();
     CHECK(scheduler.tick(100).ok);
     CHECK((events == std::vector<int>{1, 2, 4}));
-    now = 5;
+    now = 0.004; // the script sleeps 5 ms: still asleep
     CHECK(scheduler.tick(100).ok && events.size() == 3);
-    now = 5.1;
+    now = 0.0051;
     CHECK(scheduler.tick(100).ok && (events == std::vector<int>{1, 2, 4, 3}));
-    auto *stopped = thread(arena, object(arena, &first.cls));
+    auto *stopped = thread(arena, makeObject(arena, &first.cls));
     CHECK(scheduler.createThread(stopped, "stopped").ok &&
           scheduler.start(stopped).ok);
     CHECK(scheduler.stop(stopped).ok && scheduler.threadCount() == 0);
@@ -315,38 +334,75 @@ int main() {
   {
     Script script("test.HostSleep", 1, 2, true);
     VmArena arena;
-    std::vector<const TufaClass*> classes{&script.cls};
+    std::vector<const TufaClass *> classes{&script.cls};
     std::vector<VmStaticFields> states;
     NativeHandler sleepHandler = nullptr;
-    for (const auto& entry : nativeRegistry())
-      if (entry.className == "java.lang.Thread" && entry.method == "sleep" && entry.descriptor == "(F)V")
+    for (const auto &entry : nativeRegistry())
+      if (entry.className == "java.lang.Thread" && entry.method == "sleep" &&
+          entry.descriptor == "(F)V")
         sleepHandler = entry.handler;
-    std::vector<NativeEntry> natives{{"test.HostSleep", "record", "(I)V", "test", record},
-                                     {"test.HostSleep", "sleep", "(F)V", "test", sleepHandler}};
-    VmScheduler scheduler(arena, &natives, &classes, &states, [] { return 0.0; });
-    const auto* receiver = object(arena, &script.cls);
-    const auto result = vmHostCall(arena, receiver, "run", {}, &natives, &classes, &states);
-    CHECK(!result.ok && result.error.find("sleep outside a scheduled thread") != std::string::npos);
+    std::vector<NativeEntry> natives{
+        {"test.HostSleep", "record", "(I)V", "test", record},
+        {"test.HostSleep", "sleep", "(F)V", "test", sleepHandler}};
+    VmScheduler scheduler(arena, &natives, &classes, &states,
+                          [] { return 0.0; });
+    const auto *receiver = makeObject(arena, &script.cls);
+    const auto result =
+        vmHostCall(arena, receiver, "run", {}, &natives, &classes, &states);
+    CHECK(!result.ok && result.error.find("sleep outside a scheduled thread") !=
+                            std::string::npos);
   }
   {
-    Script outer("test.CallbackOuter", 1, 2, false), inner("test.CallbackInner", 3, 4, true);
+    Script outer("test.CallbackOuter", 1, 2, false),
+        inner("test.CallbackInner", 3, 4, true);
     VmArena arena;
-    std::vector<const TufaClass*> classes{&outer.cls, &inner.cls};
+    std::vector<const TufaClass *> classes{&outer.cls, &inner.cls};
     std::vector<VmStaticFields> states;
     NativeHandler sleepHandler = nullptr;
-    for (const auto& entry : nativeRegistry())
-      if (entry.className == "java.lang.Thread" && entry.method == "sleep" && entry.descriptor == "(F)V")
+    for (const auto &entry : nativeRegistry())
+      if (entry.className == "java.lang.Thread" && entry.method == "sleep" &&
+          entry.descriptor == "(F)V")
         sleepHandler = entry.handler;
-    std::vector<NativeEntry> natives{{"test.CallbackOuter", "record", "(I)V", "test", callNested},
+    std::vector<NativeEntry> natives{
+        {"test.CallbackOuter", "record", "(I)V", "test", callNested},
         {"test.CallbackInner", "record", "(I)V", "test", record},
         {"test.CallbackInner", "sleep", "(F)V", "test", sleepHandler}};
-    VmScheduler scheduler(arena, &natives, &classes, &states, [] { return 0.0; });
-    callbackTarget = object(arena, &inner.cls);
-    auto* owner = thread(arena, object(arena, &outer.cls));
-    CHECK(scheduler.createThread(owner, "callback").ok && scheduler.start(owner).ok);
+    VmScheduler scheduler(arena, &natives, &classes, &states,
+                          [] { return 0.0; });
+    callbackTarget = makeObject(arena, &inner.cls);
+    CHECK(!scheduler.wait(makeObject(arena, nullptr)).ok);
+    auto *owner = thread(arena, makeObject(arena, &outer.cls));
+    CHECK(scheduler.createThread(owner, "callback").ok &&
+          scheduler.start(owner).ok);
     const auto result = scheduler.tick(100);
-    CHECK(!result.ok && result.error.find("sleep in synchronous callback") != std::string::npos);
+    CHECK(!result.ok && result.error.find("sleep in synchronous callback") !=
+                            std::string::npos);
     callbackTarget = nullptr;
+  }
+  {
+    Script outer("test.WaitCallbackOuter", 1, 2, false),
+        inner("test.WaitCallbackInner", 3, 4, true);
+    VmArena arena;
+    std::vector<const TufaClass *> classes{&outer.cls, &inner.cls};
+    std::vector<VmStaticFields> states;
+    std::vector<NativeEntry> natives{
+        {"test.WaitCallbackOuter", "record", "(I)V", "test", callNested},
+        {"test.WaitCallbackInner", "record", "(I)V", "test", record},
+        {"test.WaitCallbackInner", "sleep", "(F)V", "test", park}};
+    VmScheduler scheduler(arena, &natives, &classes, &states,
+                          [] { return 0.0; });
+    waitObject = makeObject(arena, nullptr);
+    callbackTarget = makeObject(arena, &inner.cls);
+    auto *owner = thread(arena, makeObject(arena, &outer.cls));
+    CHECK(scheduler.createThread(owner, "callback wait").ok &&
+          scheduler.start(owner).ok);
+    events.clear();
+    const auto result = scheduler.tick(100);
+    CHECK(!result.ok && result.error.find("wait in synchronous callback") !=
+                            std::string::npos);
+    CHECK((events == std::vector<int>{3}));
+    callbackTarget = nullptr;
+    waitObject = nullptr;
   }
   {
     Script script("test.NativeTarget", 7, 8, false);
@@ -358,8 +414,8 @@ int main() {
     double now = 0;
     VmScheduler scheduler(arena, &natives, &classes, &states,
                           [&] { return now; });
-    auto *owner = thread(arena, object(arena, &script.cls));
-    auto *name = object(arena, nullptr);
+    auto *owner = thread(arena, makeObject(arena, &script.cls));
+    auto *name = makeObject(arena, nullptr);
     arena.strings.emplace_back("native thread", name);
     CHECK(std::holds_alternative<std::monostate>(invokeNative(
         "java.lang.Thread", "init", "(Ljava.lang.String;)V",
@@ -391,11 +447,11 @@ int main() {
         {"test.WaitC", "sleep", "(F)V", "test", park}};
     VmScheduler scheduler(arena, &natives, &classes, &states,
                           [] { return 0.0; });
-    waitObject = object(arena, nullptr);
-    auto *other = object(arena, nullptr);
-    auto *ta = thread(arena, object(arena, &a.cls));
-    auto *tb = thread(arena, object(arena, &b.cls));
-    auto *tc = thread(arena, object(arena, &c.cls));
+    waitObject = makeObject(arena, nullptr);
+    auto *other = makeObject(arena, nullptr);
+    auto *ta = thread(arena, makeObject(arena, &a.cls));
+    auto *tb = thread(arena, makeObject(arena, &b.cls));
+    auto *tc = thread(arena, makeObject(arena, &c.cls));
     CHECK(scheduler.createThread(ta, "a").ok &&
           scheduler.createThread(tb, "b").ok &&
           scheduler.createThread(tc, "c").ok);
@@ -420,23 +476,63 @@ int main() {
     waitObject = nullptr;
   }
   {
+    Script script("test.HostWait", 11, 12, true);
+    VmArena arena;
+    std::vector<const TufaClass *> classes{&script.cls};
+    std::vector<VmStaticFields> states;
+    std::vector<NativeEntry> natives{
+        {"test.HostWait", "record", "(I)V", "test", record},
+        {"test.HostWait", "sleep", "(F)V", "test", park}};
+    VmScheduler scheduler(arena, &natives, &classes, &states,
+                          [] { return 0.0; });
+    waitObject = makeObject(arena, nullptr);
+    auto *receiver = makeObject(arena, &script.cls);
+    bool alive = true;
+    std::shared_ptr<VmHostTask> task;
+    events.clear();
+    CHECK(scheduler
+              .startHostTask(
+                  receiver, "run", {}, [&] { return alive; }, task)
+              .ok);
+    CHECK(task && !task->finished && scheduler.tick(100).ok);
+    CHECK((events == std::vector<int>{11}) && !task->finished);
+    CHECK(scheduler.tick(100).ok && events.size() == 1);
+    CHECK(scheduler.notify(waitObject, false).ok && scheduler.tick(100).ok);
+    CHECK(task->finished && task->result.ok &&
+          (events == std::vector<int>{11, 12}));
+    CHECK(scheduler
+              .startHostTask(
+                  receiver, "run", {}, [&] { return alive; }, task)
+              .ok);
+    CHECK(scheduler.tick(100).ok && !task->finished);
+    alive = false;
+    CHECK(scheduler.tick(100).ok && task->finished && !task->result.ok);
+    CHECK((events == std::vector<int>{11, 12, 11}));
+    waitObject = nullptr;
+  }
+  {
     Script a("test.WaitA", 1, 4, true);
     VmArena arena;
     std::vector<const TufaClass *> classes{&a.cls};
-    TufaClass frontend; frontend.name = "java.render.Frontend";
+    TufaClass frontend;
+    frontend.name = "java.render.Frontend";
     std::vector<VmStaticFields> states;
-    std::vector<NativeEntry> natives{{"test.WaitA", "record", "(I)V", "test", record},
-                                     {"test.WaitA", "sleep", "(F)V", "test", park}};
-    VmScheduler scheduler(arena, &natives, &classes, &states, [] { return 0.0; });
-    waitObject = object(arena, nullptr);
-    auto *ta = thread(arena, object(arena, &a.cls));
+    std::vector<NativeEntry> natives{
+        {"test.WaitA", "record", "(I)V", "test", record},
+        {"test.WaitA", "sleep", "(F)V", "test", park}};
+    VmScheduler scheduler(arena, &natives, &classes, &states,
+                          [] { return 0.0; });
+    waitObject = makeObject(arena, nullptr);
+    auto *ta = thread(arena, makeObject(arena, &a.cls));
     CHECK(scheduler.createThread(ta, "a").ok && scheduler.start(ta).ok);
     events.clear();
     CHECK(scheduler.tick(100).ok && events == std::vector<int>{1});
     std::string error;
     CHECK(notifyFrontendAfterFrame(scheduler, states, error));
-    CHECK(runFrameSchedulerSlice(scheduler, error) && events == std::vector<int>{1});
-    states.push_back({&frontend, {{"render", waitObject, "Ljava.lang.Object;"}}});
+    CHECK(runFrameSchedulerSlice(scheduler, error) &&
+          events == std::vector<int>{1});
+    states.push_back(
+        {&frontend, {{"render", waitObject, "Ljava.lang.Object;"}}});
     CHECK(notifyFrontendAfterFrame(scheduler, states, error) && error.empty());
     CHECK(runFrameSchedulerSlice(scheduler, error) && error.empty());
     CHECK((events == std::vector<int>{1, 4}));
@@ -447,17 +543,20 @@ int main() {
     VmArena arena;
     std::vector<const TufaClass *> classes{&script.cls};
     std::vector<VmStaticFields> states;
-    std::vector<NativeEntry> natives{{"test.Priority", "record", "(I)V", "test", record}};
-    VmScheduler scheduler(arena, &natives, &classes, &states, [] { return 0.0; });
-    auto *owner = thread(arena, object(arena, &script.cls));
+    std::vector<NativeEntry> natives{
+        {"test.Priority", "record", "(I)V", "test", record}};
+    VmScheduler scheduler(arena, &natives, &classes, &states,
+                          [] { return 0.0; });
+    auto *owner = thread(arena, makeObject(arena, &script.cls));
     CHECK(scheduler.createThread(owner, "prio").ok);
     CHECK(scheduler.setPriority(owner, 5).ok);
-    const auto native = invokeNative("java.lang.Thread", "setPriority", "(I)V",
-                                     {VmValue{int32_t{3}}}, owner, &arena, nullptr);
+    const auto native =
+        invokeNative("java.lang.Thread", "setPriority", "(I)V",
+                     {VmValue{int32_t{3}}}, owner, &arena, nullptr);
     CHECK(std::holds_alternative<std::monostate>(native));
-    CHECK(std::holds_alternative<std::monostate>(
-        invokeNative("java.lang.Thread", "setPriority", "(I)V", {VmValue{int32_t{1}}},
-                     object(arena, &script.cls), &arena, nullptr)));
+    CHECK(std::holds_alternative<std::monostate>(invokeNative(
+        "java.lang.Thread", "setPriority", "(I)V", {VmValue{int32_t{1}}},
+        makeObject(arena, &script.cls), &arena, nullptr)));
   }
   return failures ? 1 : 0;
 }
