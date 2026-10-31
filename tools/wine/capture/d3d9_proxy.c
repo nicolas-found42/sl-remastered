@@ -45,6 +45,10 @@ static clear_fn real_clear;
 
 static char dump_dir[MAX_PATH];
 static char log_path[MAX_PATH];
+static char walk_trace_path[MAX_PATH];
+static int walk_trace_enabled;
+int walk_trace_install(HMODULE module, const char *image_path);
+int walk_trace_flush(const char *path);
 static unsigned dump_every = 60, dump_first = 3;
 static unsigned long presents, draws, draws_this_frame, clears, resets, dumps, dump_fail;
 static unsigned long first_tick;
@@ -247,6 +251,7 @@ static void run_cmd(char *line) {
 static DWORD WINAPI input_thread(LPVOID unused) {
     char path[MAX_PATH];
     long offset = 0;
+    DWORD last_flush = 0;
     (void)unused;
     snprintf(path, sizeof path, "%s\\input.cmd", dump_dir);
     for (;;) {
@@ -263,6 +268,10 @@ static DWORD WINAPI input_thread(LPVOID unused) {
                 run_cmd(line);
             }
             fclose(f);
+        }
+        if (walk_trace_enabled && GetTickCount() - last_flush >= 1000) {
+            if (walk_trace_flush(walk_trace_path) < 0) logf_("walk trace flush failed");
+            last_flush = GetTickCount();
         }
         Sleep(100);
     }
@@ -354,6 +363,14 @@ __declspec(dllexport) IDirect3D9 *WINAPI Direct3DCreate9(UINT version) {
         CreateDirectoryA(dump_dir, NULL);
         snprintf(log_path, sizeof log_path, "%s\\d3d9proxy.log", dump_dir);
         logf_("clock_origin_tick=%lu", first_tick);
+        if (GetEnvironmentVariableA("SLRR_WALK_TRACE", env, sizeof env) && !strcmp(env, "1")) {
+            char exe_path[MAX_PATH];
+            DWORD len = GetModuleFileNameA(NULL, exe_path, sizeof exe_path);
+            int n = snprintf(walk_trace_path, sizeof walk_trace_path, "%s\\stock-walk.jsonl", dump_dir);
+            if (len && len < sizeof exe_path && n >= 0 && n < (int)sizeof walk_trace_path)
+                walk_trace_enabled = walk_trace_install(GetModuleHandleA(NULL), exe_path);
+            logf_("stock walk trace %s", walk_trace_enabled ? "installed" : "refused");
+        }
         if (GetEnvironmentVariableA("SLRR_DUMP_EVERY", env, sizeof env)) dump_every = (unsigned)atoi(env);
         if (GetEnvironmentVariableA("SLRR_DUMP_FIRST", env, sizeof env)) dump_first = (unsigned)atoi(env);
         real_dll = LoadLibraryA(path);

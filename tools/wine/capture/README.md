@@ -15,6 +15,46 @@ Earlier Wine runs showed black pictures. The game was fine; the screen capture w
 
 Other pieces reused from earlier work: `tools/wine/synthetic_cd.c` and `tools/wine/synthetic_metadata.py` (the **synthetic** CD table that gets past the disc check; there is no CD audio and the track 11 length and total length are invented, see `docs/wine-comparison.md`).
 
+## Optional stock walk trace
+
+Set `SLRR_WALK_TRACE=1` when starting `run_capture.sh` to enable the
+experimental inline detour at stock `0x004ae9c0`. The executable file is not
+modified, but its in-memory code and return addresses are changed. The hook is
+disabled by default and refuses a different executable SHA-256 or prologue.
+It copies the first two instructions into an executable trampoline and saves
+flags, general registers and FXSAVE state around both callbacks. The input
+thread flushes completed entry/return pairs to `dumps/stock-walk.jsonl`; no
+file I/O occurs inside either hook.
+
+Each record has thread, depth, caller, arguments, entry poses and cores, cached
+feature pointers, return outputs and full entry/return FXSAVE images. Validity
+bits identify successful memory reads. At most 512 pairs and 64 thread slots
+are retained, with at most 32 nested calls per thread. Status records report
+reserved, pending and dropped counts. A killed process can lose records not
+yet flushed; once the buffer fills, later calls are dropped. Raw pointers are
+process-local, not port tick identifiers.
+
+**Installation is not atomic.** The diagnostic installs on the first
+`Direct3DCreate9` call and assumes no thread is executing the walk while the
+eight bytes are patched. The menu smoke run installed before graphics creation,
+but does not prove quiescence for every launch. Do not enable it in a process
+where this assumption is uncertain. It is not a general-purpose live patcher.
+Jev's patch review escalated this detour for human or stronger-model review;
+the smoke tests below do not resolve that review.
+
+Reproduce the bounded oracle check with:
+
+```
+SLRR_ORACLE_PREFIX_SOURCE="$PWD/local/verify/core-pair-oracle/mac-prefix" \
+  python3 -I tools/wine/capture/walk_trace_smoke.py local/verify/walk-trace-new
+```
+
+The check compares hooked and unhooked stock oracle output, checks the hash and
+prologue refusal paths, and exercises nested returns on two concurrent threads
+using a synthetic body in a private stock-image mapping. It also compares 256
+captured x87 ST(0) values with the stock oracle's float results. This is not a
+stock gameplay parity test.
+
 ## What you need
 
 - This Mac (Apple Silicon) with Rosetta, and the Wine 11.0 build that already exists at `local/wine-runs/winehq-source-20261028/build` (macOS windowing). It was built from the official source earlier.

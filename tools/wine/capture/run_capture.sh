@@ -35,7 +35,7 @@ cp -f ref/raw/StreetLegal_Redline.bak.exe "$RUN/game/StreetLegal_Redline.exe"
 python3 -I tools/wine/synthetic_metadata.py ref/raw/StreetLegal_Redline.bak.exe ref/raw/texture.dat \
   "$RUN/metadata.txt" "$RUN/SYNTHETIC-metadata.txt"
 "$GCC" -shared -O2 -Wl,--kill-at -o "$RUN/game/mcicda.dll" tools/wine/synthetic_cd.c -lwinmm
-"$GCC" -shared -O2 -Wall -Wno-format-truncation -Wl,--kill-at -static-libgcc -o "$RUN/game/d3d9.dll" tools/wine/capture/d3d9_proxy.c
+"$GCC" -shared -O2 -Wall -Wno-format-truncation -Wl,--kill-at -static-libgcc -o "$RUN/game/d3d9.dll" tools/wine/capture/d3d9_proxy.c tools/wine/capture/walk_trace.c -ladvapi32
 "$GCC" -shared -O2 -Wall -Wno-format-truncation -Wl,--kill-at -static-libgcc -o "$RUN/game/dinput8.dll" tools/wine/capture/dinput8_proxy.c
 
 # Record the data actually present in the private game copy before launch.

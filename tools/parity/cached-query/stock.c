@@ -4,6 +4,11 @@
 #include <string.h>
 #include <stdlib.h>
 
+#ifdef WALK_TRACE_SMOKE
+int walk_trace_install(HMODULE module, const char *image_path);
+int walk_trace_flush(const char *path);
+#endif
+
 typedef struct {float x,y,z;} Vec;
 typedef struct Feature Feature;
 typedef struct {Feature *neighbor; Vec *anchor; float n[3];} Adj;
@@ -73,6 +78,16 @@ int main(int argc,char **argv) {
     }
     pos+=r->SizeOfBlock;
   }
+#ifdef WALK_TRACE_SMOKE
+  if (getenv("SLRR_TEST_HOOK")) {
+    const char *bad = getenv("SLRR_TEST_BAD_IMAGE");
+    if (!bad || walk_trace_install((HMODULE)im, bad)) return 97;
+    im[0xae9c0] ^= 1;
+    if (walk_trace_install((HMODULE)im, argv[1])) return 96;
+    im[0xae9c0] ^= 1;
+    if (!walk_trace_install((HMODULE)im, argv[1])) return 98;
+  }
+#endif
   patch(im+0x14f560,alloc_stock); patch(im+0x14f5b0,free_stock); patch(im+0x14f580,realloc_stock);
   ((void (*)(void))(im+0xaa560))();
   for(int k=0;k<12;k++) {
@@ -294,5 +309,8 @@ int main(int argc,char **argv) {
      free(verts);free(faces);
    } if(fgetc(fixture)!=EOF)return 16;fclose(fixture);
  }
+#ifdef WALK_TRACE_SMOKE
+ if (getenv("SLRR_TEST_HOOK") && (!getenv("SLRR_TEST_TRACE_PATH") || walk_trace_flush(getenv("SLRR_TEST_TRACE_PATH")) < 0)) return 99;
+#endif
  return 0;
 }
