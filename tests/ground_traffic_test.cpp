@@ -1,6 +1,6 @@
+#include "camera_device_factory.hpp"
 #include "game_creation.hpp"
 #include "ground_runtime.hpp"
-#include "camera_device_factory.hpp"
 #include "natives/game_type.hpp"
 #include "natives/registry.hpp"
 #include "pack_registry.hpp"
@@ -80,11 +80,11 @@ int main() {
   const VmObject *car = bindRef(arena, game, taxi);
 
   const auto call = [&](int32_t count) {
-    return invokeNative(
-        "java.util.resource.GroundRef", "addTrafficN",
-        "(Ljava.util.resource.GameRef;IFFF)I",
-        {VmValue{car}, VmValue{count}, VmValue{2.f}, VmValue{5.f}, VmValue{2.f}}, ground, &arena,
-        nullptr);
+    return invokeNative("java.util.resource.GroundRef", "addTrafficN",
+                        "(Ljava.util.resource.GameRef;IFFF)I",
+                        {VmValue{car}, VmValue{count}, VmValue{2.f},
+                         VmValue{5.f}, VmValue{2.f}},
+                        ground, &arena, nullptr);
   };
 
   assert(returned(call(80)) == 80);
@@ -104,8 +104,8 @@ int main() {
          beforeDensity.traffic == 82 && beforeDensity.densitySet == 0);
 
   const auto setDensity = [&](float density) {
-    return invokeNative("java.util.resource.GroundRef", "setPedestrianDensityN", "(F)V",
-                        {VmValue{density}}, ground, &arena, nullptr);
+    return invokeNative("java.util.resource.GroundRef", "setPedestrianDensityN",
+                        "(F)V", {VmValue{density}}, ground, &arena, nullptr);
   };
   assert(std::holds_alternative<std::monostate>(setDensity(0.003f)));
   assert(factory->pedestrianDensity == 0.003f);
@@ -121,10 +121,11 @@ int main() {
 
   const uint32_t pedestrian = 0x00360001;
   const VmObject *walker = bindRef(arena, game, pedestrian);
-  const auto addPedType = [&](const VmObject *groundRef, const VmObject *typeRef) {
+  const auto addPedType = [&](const VmObject *groundRef,
+                              const VmObject *typeRef) {
     return invokeNative("java.util.resource.GroundRef", "addPedestrianType",
-                        "(Ljava.util.resource.GameRef;)V", {VmValue{typeRef}}, groundRef, &arena,
-                        nullptr);
+                        "(Ljava.util.resource.GameRef;)V", {VmValue{typeRef}},
+                        groundRef, &arena, nullptr);
   };
   assert(factory->pedestrianTypes.empty());
   assert(std::holds_alternative<std::monostate>(addPedType(ground, walker)));
@@ -144,31 +145,40 @@ int main() {
   const VmObject *dirA = makeVector3(arena, 0.f, 1.f, 0.f);
   const auto setWater = [&](const VmObject *groundRef, const VmObject *pos,
                             const VmObject *dir, float extentA, float extentB) {
-    return invokeNative("java.util.resource.GroundRef", "setWater",
-                        "(Ljava.lang.Vector3;Ljava.lang.Vector3;FF)V",
-                        {VmValue{pos}, VmValue{dir}, VmValue{extentA}, VmValue{extentB}}, groundRef,
-                        &arena, nullptr);
+    return invokeNative(
+        "java.util.resource.GroundRef", "setWater",
+        "(Ljava.lang.Vector3;Ljava.lang.Vector3;FF)V",
+        {VmValue{pos}, VmValue{dir}, VmValue{extentA}, VmValue{extentB}},
+        groundRef, &arena, nullptr);
   };
-  assert(std::holds_alternative<std::monostate>(setWater(ground, posA, dirA, 300.f, 550.f)));
+  assert(std::holds_alternative<std::monostate>(
+      setWater(ground, posA, dirA, 300.f, 550.f)));
   assert(factory->waterActive);
   assert(factory->waterExtentA == 300.f && factory->waterExtentB == 550.f);
-  assert(factory->waterPosX == 10.f && factory->waterPosY == -12.f && factory->waterPosZ == 20.f);
-  assert(factory->waterDirX == 0.f && factory->waterDirY == 1.f && factory->waterDirZ == 0.f);
+  assert(factory->waterPosX == 10.f && factory->waterPosY == -12.f &&
+         factory->waterPosZ == 20.f);
+  assert(factory->waterDirX == 0.f && factory->waterDirY == 1.f &&
+         factory->waterDirZ == 0.f);
 
   const VmObject *posB = makeVector3(arena, 1.f, 2.f, 3.f);
   const VmObject *dirB = makeVector3(arena, 3.f, 0.f, 4.f);
-  assert(std::holds_alternative<std::monostate>(setWater(ground, posB, dirB, 40.f, 50.f)));
+  assert(std::holds_alternative<std::monostate>(
+      setWater(ground, posB, dirB, 40.f, 50.f)));
   assert(factory->waterActive);
   assert(factory->waterExtentA == 40.f && factory->waterExtentB == 50.f);
-  assert(factory->waterPosX == 1.f && factory->waterPosY == 2.f && factory->waterPosZ == 3.f);
-  assert(factory->waterDirX == 0.6f && factory->waterDirY == 0.f && factory->waterDirZ == 0.8f);
+  assert(factory->waterPosX == 1.f && factory->waterPosY == 2.f &&
+         factory->waterPosZ == 3.f);
+  assert(factory->waterDirX == 0.6f && factory->waterDirY == 0.f &&
+         factory->waterDirZ == 0.8f);
   const auto afterWater = resources.groundSnapshot();
   assert(afterWater.waterActive == 1);
   const auto waterNote = resources.groundWaterNote();
-  assert(waterNote.active && waterNote.posX == 1.f && waterNote.extentA == 40.f);
+  assert(waterNote.active && waterNote.posX == 1.f &&
+         waterNote.extentA == 40.f);
 
   const VmObject *unlinkedGround = bindRef(arena, game, node.value);
-  assert(std::holds_alternative<std::monostate>(setWater(unlinkedGround, posB, dirB, 9.f, 9.f)));
+  assert(std::holds_alternative<std::monostate>(
+      setWater(unlinkedGround, posB, dirB, 9.f, 9.f)));
   assert(factory->waterExtentA == 40.f && factory->waterExtentB == 50.f);
 
   const VmObject *limA = makeVector3(arena, 0.f, 0.f, -500.f);
@@ -176,41 +186,49 @@ int main() {
   const auto addLimit = [&](const VmObject *groundRef, const VmObject *a,
                             const VmObject *b) {
     return invokeNative("java.util.resource.GroundRef", "addWaterLimit",
-                        "(Ljava.lang.Vector3;Ljava.lang.Vector3;)V", {VmValue{a}, VmValue{b}},
-                        groundRef, &arena, nullptr);
+                        "(Ljava.lang.Vector3;Ljava.lang.Vector3;)V",
+                        {VmValue{a}, VmValue{b}}, groundRef, &arena, nullptr);
   };
   assert(factory->waterLimits.empty());
   assert(std::holds_alternative<std::monostate>(addLimit(ground, limA, limB)));
   assert(factory->waterLimits.size() == 1);
-  assert(factory->waterLimits[0].az == -500.f && factory->waterLimits[0].bz == 1.f);
-  assert(std::holds_alternative<std::monostate>(addLimit(unlinkedGround, limA, limB)));
+  assert(factory->waterLimits[0].az == -500.f &&
+         factory->waterLimits[0].bz == 1.f);
+  assert(std::holds_alternative<std::monostate>(
+      addLimit(unlinkedGround, limA, limB)));
   assert(factory->waterLimits.size() == 1);
   const auto afterLimits = resources.groundSnapshot();
   assert(afterLimits.waterLimits == 1);
 
-  const auto setFog = [&](const VmObject *groundRef, int32_t color, float nearDist,
-                          float farDist) {
+  const auto setFog = [&](const VmObject *groundRef, int32_t color,
+                          float nearDist, float farDist) {
     return invokeNative("java.util.resource.GroundRef", "setFog", "(IFF)V",
-                        {VmValue{color}, VmValue{nearDist}, VmValue{farDist}}, groundRef, &arena,
-                        nullptr);
+                        {VmValue{color}, VmValue{nearDist}, VmValue{farDist}},
+                        groundRef, &arena, nullptr);
   };
-  assert(std::holds_alternative<std::monostate>(setFog(ground, 0x7121e, 20.f, 150.f)));
+  assert(std::holds_alternative<std::monostate>(
+      setFog(ground, 0x7121e, 20.f, 150.f)));
   assert(factory->fogSetting);
   assert(factory->fogSetting->color == 0x7121e);
-  assert(factory->fogSetting->nearDist == 200.f && factory->fogSetting->farDist == 1500.f);
+  assert(factory->fogSetting->nearDist == 200.f &&
+         factory->fogSetting->farDist == 1500.f);
   const auto afterFog = resources.groundSnapshot();
   assert(afterFog.fogSettings == 1);
-  assert(std::holds_alternative<std::monostate>(setFog(ground, 11582652, 70.f, 400.f)));
+  assert(std::holds_alternative<std::monostate>(
+      setFog(ground, 11582652, 70.f, 400.f)));
   assert(factory->fogSetting && factory->fogSetting->color == 11582652 &&
-         factory->fogSetting->nearDist == 700.f && factory->fogSetting->farDist == 4000.f);
+         factory->fogSetting->nearDist == 700.f &&
+         factory->fogSetting->farDist == 4000.f);
   assert(resources.groundSnapshot().fogSettings == 1);
   auto camera = makeCameraResource(1, 55, 0.2f, 200, 0, 1, 1, 0);
   applyCameraSectorEnvironment(camera, *factory, 300.f);
-  assert(camera.farDistance == 3000.f && camera.fog && camera.fog->color == 11582652 &&
-         camera.fog->nearDistance == 700.f && camera.fog->farDistance == 4000.f);
+  assert(camera.farDistance == 3000.f && camera.fog &&
+         camera.fog->color == 11582652 && camera.fog->nearDistance == 700.f &&
+         camera.fog->farDistance == 4000.f);
   GroundFactoryResult noFog;
   applyCameraSectorEnvironment(camera, noFog, 400.f);
-  assert(camera.farDistance == 4000.f && camera.fog && camera.fog->color == 11582652);
+  assert(camera.farDistance == 4000.f && camera.fog &&
+         camera.fog->color == 11582652);
 
   node.stateWord |= 1;
   node.eventMask = 0x14;
@@ -224,30 +242,40 @@ int main() {
     arena.objects.push_back(std::move(message));
     arena.strings.emplace_back(text, raw);
     return gameRefQueueEvent({VmValue{static_cast<const VmObject *>(nullptr)},
-                              VmValue{kind}, VmValue{raw}}, ground, &arena, nullptr);
+                              VmValue{kind}, VmValue{raw}},
+                             ground, &arena, nullptr);
   };
   const auto add = "obs_add " + std::to_string(observedId);
   const auto remove = "obs_rem " + std::to_string(observedId);
   assert(std::holds_alternative<std::monostate>(event(0x10, add)));
   assert(std::holds_alternative<std::monostate>(event(0x10, add)));
-  assert(factory->observers.size() == 2 && factory->observers[0]->owner == observed &&
+  assert(factory->observers.size() == 2 &&
+         factory->observers[0]->owner == observed &&
          factory->observers[1]->owner == observed);
   assert(std::holds_alternative<std::monostate>(event(0x10, remove)));
-  assert(factory->observers.size() == 1 && factory->observers[0]->owner == observed);
-  assert(std::holds_alternative<std::monostate>(invokeNative(
-      "java.lang.GameType", "clearEventMask", "(I)V", {int32_t{0x10}}, ground, &arena, nullptr)));
-  assert(std::holds_alternative<std::monostate>(event(0x10, add)) && factory->observers.size() == 1);
-  assert(std::holds_alternative<std::monostate>(invokeNative(
-      "java.lang.GameType", "setEventMask", "(I)V", {int32_t{0x10}}, ground, &arena, nullptr)));
+  assert(factory->observers.size() == 1 &&
+         factory->observers[0]->owner == observed);
+  assert(std::holds_alternative<std::monostate>(
+      invokeNative("java.lang.GameType", "clearEventMask", "(I)V",
+                   {int32_t{0x10}}, ground, &arena, nullptr)));
+  assert(std::holds_alternative<std::monostate>(event(0x10, add)) &&
+         factory->observers.size() == 1);
+  assert(std::holds_alternative<std::monostate>(
+      invokeNative("java.lang.GameType", "setEventMask", "(I)V",
+                   {int32_t{0x10}}, ground, &arena, nullptr)));
   assert(std::holds_alternative<std::string>(event(0x10, "unknown")));
   assert(std::holds_alternative<std::string>(event(0x04, "contact")));
   factory->roadWorld = nullptr;
-  assert(std::holds_alternative<std::monostate>(event(0x10, add)) && factory->observers.size() == 1);
+  assert(std::holds_alternative<std::monostate>(event(0x10, add)) &&
+         factory->observers.size() == 1);
   factory->roadWorld = &world;
   assert(world.destroy(*observed));
-  assert(!factory->observers[0]->owner && factory->observers[0]->cachedValue == 0);
-  assert(std::holds_alternative<std::monostate>(event(0x10, "obs_rem 0")) && factory->observers.empty());
-  assert(std::holds_alternative<std::monostate>(event(0x10, "obs_add 0")) && factory->observers.empty());
+  assert(!factory->observers[0]->owner &&
+         factory->observers[0]->cachedValue == 0);
+  assert(std::holds_alternative<std::monostate>(event(0x10, "obs_rem 0")) &&
+         factory->observers.empty());
+  assert(std::holds_alternative<std::monostate>(event(0x10, "obs_add 0")) &&
+         factory->observers.empty());
 
   factory->roadWorld = nullptr;
   assert(returned(call(4)) == 0);
@@ -258,10 +286,12 @@ int main() {
   assert(factory->traffic.size() == 82);
 
   const VmObject *unlinked = bindRef(arena, game, 1);
-  const auto missing = invokeNative(
-      "java.util.resource.GroundRef", "addTrafficN", "(Ljava.util.resource.GameRef;IFFF)I",
-      {VmValue{car}, VmValue{int32_t{4}}, VmValue{2.f}, VmValue{5.f}, VmValue{2.f}}, unlinked,
-      &arena, nullptr);
+  const auto missing =
+      invokeNative("java.util.resource.GroundRef", "addTrafficN",
+                   "(Ljava.util.resource.GameRef;IFFF)I",
+                   {VmValue{car}, VmValue{int32_t{4}}, VmValue{2.f},
+                    VmValue{5.f}, VmValue{2.f}},
+                   unlinked, &arena, nullptr);
   assert(returned(missing) == 0);
   assert(factory->traffic.size() == 82);
 
@@ -277,7 +307,8 @@ int main() {
   assert(factory->pedestrianDensityHi == 1.1f);
   assert(factory->pedestrianDensitySet);
   const auto rejected = resources.groundSnapshot();
-  assert(rejected.roads == 0 && rejected.densitySet == 1 && rejected.density == 1.f);
+  assert(rejected.roads == 0 && rejected.densitySet == 1 &&
+         rejected.density == 1.f);
 
   const size_t typesBeforeMissingGround = factory->pedestrianTypes.size();
   assert(std::holds_alternative<std::monostate>(addPedType(ground, walker)));
@@ -300,4 +331,13 @@ int main() {
   assert(noted.count == 1 && noted.instanceId == player->instanceId &&
          noted.x == 1.5f && noted.y == 2.5f && noted.z == 3.5f &&
          noted.speed == 5.f && noted.gear == 2 && noted.rpm == 3200.f);
+  player->carInstance->carPhysics = std::make_shared<CarPhysics>();
+  auto &carBody = player->carInstance->carPhysics->root;
+  carBody = std::make_unique<physics::Body>();
+  carBody->current = 1;
+  carBody->state[1].pos = {8.f, 9.f, 10.f};
+  carBody->state[1].vel = {0.f, 0.f, 12.f};
+  const auto moved = world.playerCarNote();
+  assert(moved.x == 8.f && moved.y == 9.f && moved.z == 10.f &&
+         moved.speed == 12.f);
 }

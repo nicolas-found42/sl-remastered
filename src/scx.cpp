@@ -39,6 +39,18 @@ constexpr uint32_t kChunkIndices = 5;
 constexpr uint32_t kPropNameType = 0x08000000;
 constexpr uint32_t kPropNameBytes = 32;
 
+float readFloat(const uint8_t* p) {
+	const uint32_t bits = readLe32(p);
+	float value;
+	std::memcpy(&value, &bits, sizeof value);
+	return value;
+}
+
+int32_t readSigned16(const uint8_t* p) {
+	const uint16_t value = readLe16(p);
+	return value < 0x8000 ? value : static_cast<int32_t>(value) - 0x10000;
+}
+
 bool floats(ScxReader& r, std::vector<float>& v, int n, const char* what) {
 	for (int i = 0; i < n; ++i) {
 		float f = 0.0f;
@@ -101,6 +113,22 @@ bool parseV3(ScxReader& r, ScxModel& m) {
 		const uint8_t* b = r.data + start;
 
 		ScxMaterial mat;
+		mat.recordSize = size;
+		ScyV3Material legacy;
+		legacy.recordSize = size;
+		for (size_t i = 0; i < 3; ++i) {
+			legacy.specular[i] = readFloat(b + 20 + i * 4);
+		}
+		legacy.specularStrength = readFloat(b + 32);
+		legacy.shininess = readFloat(b + 36);
+		for (size_t i = 0; i < (size > 56 ? 7u : 6u); ++i) {
+			legacy.textureIndices[i] = readSigned16(b + 44 + i * 2);
+		}
+		if (size > 56) {
+			legacy.diffuseChannel = readSigned16(b + 70);
+			legacy.layer2Channel = readSigned16(b + 72);
+		}
+		mat.scyV3 = legacy;
 		for (size_t i = 0; i < 4; ++i) {
 			uint32_t bits = readLe32(b + 4 + i * 4);
 			std::memcpy(&mat.diffuse[i], &bits, sizeof bits);
@@ -391,6 +419,7 @@ bool parseV4(ScxReader& r, ScxModel& m) {
 
 		if (type == kChunkMaterial) {
 			ScxMaterial mat;
+			mat.recordSize = size;
 			if (!readMaterialChunk(r, mat)) {
 				return false;
 			}

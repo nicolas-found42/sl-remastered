@@ -25,7 +25,8 @@ NativeResult sfxPlay(const std::vector<VmValue>& args, const VmObject* receiver,
 	    !std::holds_alternative<int32_t>(args[5])) return std::string{"SfxRef.nplay: invalid call"};
 	auto* node = soundNode(receiver, arena);
 	if (!node || !node->loaded() || !node->sound) return VmValue{int32_t{-1}};
-	if (std::get<const VmObject*>(args[0]) || std::get<int32_t>(args[4]) != 0)
+	const auto flags = std::get<int32_t>(args[4]);
+	if (std::get<const VmObject*>(args[0]) || (flags & ~5) != 0)
 		return std::string{"SfxRef.nplay: spatial position or flags unsupported"};
 	if (!arena->soundState || !arena->soundState->effects) return std::string{"SfxRef.nplay: no audio host"};
 	const float volume = arena->soundState->volumes[0] * std::get<float>(args[3]) * node->sound->volume;
@@ -33,7 +34,7 @@ NativeResult sfxPlay(const std::vector<VmValue>& args, const VmObject* receiver,
 	std::string error;
 	const auto id = std::get<int32_t>(args[5]);
 	auto outcome = SoundEffects::Outcome::Started;
-	if (!arena->soundState->effects->play(node->value, id, *node->sound, volume, std::get<float>(args[2]), error, &outcome))
+	if (!arena->soundState->effects->play(node->value, id, *node->sound, volume, std::get<float>(args[2]), error, &outcome, (flags & 1) != 0))
 		return "SfxRef.nplay: " + error;
 	static constexpr const char* outcomeName[] = {"Started", "Updated", "Dropped"};
 	static constexpr runlog::Counter outcomeCounter[] = {runlog::Counter::SoundStarted, runlog::Counter::SoundUpdated,

@@ -1,7 +1,7 @@
-#include "ground_runtime.hpp"
-#include "game_spatial_payload.hpp"
-#include "resource_extp_bounds.hpp"
 #include "resource_world.hpp"
+#include "game_spatial_payload.hpp"
+#include "ground_runtime.hpp"
+#include "resource_extp_bounds.hpp"
 
 #include "resource_id.hpp"
 #include "resource_texture.hpp"
@@ -204,6 +204,26 @@ std::optional<uint64_t> stockMeshVertexBytes(const ScxModel &model) {
   return total;
 }
 
+std::optional<uint64_t> stockMeshVertexBytesUpperBound(const ScxModel &model) {
+  if (const auto exact = stockMeshVertexBytes(model))
+    return exact;
+  if (model.version != 4)
+    return std::nullopt;
+  // FUN_004fe980 builds the vertex stride from the format flags: position 12,
+  // up to 7 blend weights (28), one index word (4), normal 12, diffuse 4,
+  // specular 4 and at most 15 texture sets of 16 bytes (240). No format can
+  // exceed 304 bytes, so vertexCount * 304 bounds the stock allocation.
+  constexpr uint64_t kMaxStride = 12 + 28 + 4 + 12 + 4 + 4 + 240;
+  uint64_t total = 0;
+  for (const auto &mesh : model.meshes) {
+    const uint64_t bytes = static_cast<uint64_t>(mesh.vertexCount) * kMaxStride;
+    if (bytes > std::numeric_limits<uint64_t>::max() - total)
+      return std::nullopt;
+    total += bytes;
+  }
+  return total;
+}
+
 namespace {
 
 // Rows follow the case order of the switch in FUN_00536a10. Flags are
@@ -263,6 +283,7 @@ LinkOwner &linkOwner(ResourceNode &node) {
 
 ResourceWorld::ResourceWorld(GameWorld &world, PackRegistry &packs)
     : world_(world), packs_(packs) {
+  world_.attachResourceWorld(*this);
   destroyObserver_ = world_.addNodeDestroyObserver([this](LinkOwner &owner) {
     const auto it = sceneMaterials_.find(owner.value);
     if (it != sceneMaterials_.end() && it->second->owner.owner == &owner)
@@ -292,7 +313,8 @@ GroundRunSnapshot ResourceWorld::groundSnapshot() const {
     if (groundRoadTablePublished(*factory))
       ++out.roads;
     out.traffic += static_cast<uint32_t>(factory->traffic.size());
-    out.pedestrianTypes += static_cast<uint32_t>(factory->pedestrianTypes.size());
+    out.pedestrianTypes +=
+        static_cast<uint32_t>(factory->pedestrianTypes.size());
     if (factory->waterActive)
       ++out.waterActive;
     out.waterLimits += static_cast<uint32_t>(factory->waterLimits.size());
@@ -306,18 +328,44 @@ GroundRunSnapshot ResourceWorld::groundSnapshot() const {
   return out;
 }
 
+std::vector<ResourceNode *>
+ResourceWorld::groundSectorsAt(const std::array<float, 3> &point,
+                               float margin) const {
+  std::vector<ResourceNode *> found;
+  for (const auto &node : nodes_) {
+    if (node->type != 1 || !node->groundFactory || !node->loaded())
+      continue;
+    if (node->bounds && node->bounds->mode == 1) {
+      bool inside = true;
+      for (size_t axis = 0; axis < 3; ++axis)
+        if (std::fabs(point[axis] - node->bounds->values[axis]) >
+            node->bounds->values[axis + 3] + margin)
+          inside = false;
+      if (!inside)
+        continue;
+    }
+    found.push_back(node.get());
+  }
+  return found;
+}
+
 GroundWaterNote ResourceWorld::groundWaterNote() const {
   for (const auto &node : nodes_) {
     const auto &factory = node->groundFactory;
     if (!factory || !factory->waterActive)
       continue;
-    return GroundWaterNote{true, factory->waterPosX, factory->waterPosY, factory->waterPosZ,
-                           factory->waterExtentA, factory->waterExtentB};
+    return GroundWaterNote{true,
+                           factory->waterPosX,
+                           factory->waterPosY,
+                           factory->waterPosZ,
+                           factory->waterExtentA,
+                           factory->waterExtentB};
   }
   return {};
 }
 
 ResourceWorld::~ResourceWorld() {
+  world_.detachResourceWorld(*this);
   world_.removeNodeDestroyObserver(destroyObserver_);
   pendingPackLoads_.clear();
   sceneMaterials_.clear();
@@ -461,8 +509,8 @@ bool ResourceWorld::parseGamePayload(ResourceNode &node,
               return fail();
             result.gameType = id;
             result.runtimeGameType = remapResourceId(id, mapping);
-            result.actions.push_back({GamePayloadAction::Kind::GameType,
-                                      *result.runtimeGameType});
+            result.actions.push_back(
+                {GamePayloadAction::Kind::GameType, *result.runtimeGameType});
           } else if (key == "params") {
             if (value.size() > 2048)
               return fail();
@@ -482,31 +530,35 @@ bool ResourceWorld::parseGamePayload(ResourceNode &node,
         if (!u32(value))
           return fail();
         result.externalTypes.push_back(value);
-        result.actions.push_back({GamePayloadAction::Kind::ExternalPack, value});
+        result.actions.push_back(
+            {GamePayloadAction::Kind::ExternalPack, value});
       }
       result.actions.push_back({GamePayloadAction::Kind::ExternalPackEnd, 0});
       continue;
     } else if (tag == 0x53594850 || tag == 0x594c4f50) {
       const size_t end = pos + size;
-      auto word = [&](uint32_t &value) {
-        return end - pos >= 4 && u32(value);
-      };
+      auto word = [&](uint32_t &value) { return end - pos >= 4 && u32(value); };
       auto records = [&](auto &out, uint32_t count) {
         using Record = typename std::decay_t<decltype(out)>::value_type;
-        if (count > (end - pos) / (sizeof(uint32_t) * std::tuple_size<Record>::value))
+        if (count >
+            (end - pos) / (sizeof(uint32_t) * std::tuple_size<Record>::value))
           return false;
         out.resize(count);
         for (auto &record : out)
           for (auto &value : record)
-            if (!word(value)) return false;
+            if (!word(value))
+              return false;
         return true;
       };
       uint32_t count = 0;
       if (tag == 0x53594850) {
         GamePhysicsChunk chunk;
-        if (!word(count) || !records(chunk.records, count)) return fail();
-        if (count && (!word(count) || !records(chunk.triples, count))) return fail();
-        if (pos != end) return fail();
+        if (!word(count) || !records(chunk.records, count))
+          return fail();
+        if (count && (!word(count) || !records(chunk.triples, count)))
+          return fail();
+        if (pos != end)
+          return fail();
         result.geometryChunks.emplace_back(std::move(chunk));
       } else {
         GamePolygonChunk chunk;
@@ -517,11 +569,13 @@ bool ResourceWorld::parseGamePayload(ResourceNode &node,
           GamePolygonGroup group;
           uint32_t vertices = 0, triangles = 0;
           if (!word(group.kind) || !word(vertices) || !word(triangles) ||
-              !records(group.records, vertices) || !records(group.triples, triangles))
+              !records(group.records, vertices) ||
+              !records(group.triples, triangles))
             return fail();
           chunk.groups.push_back(std::move(group));
         }
-        if (pos != end) return fail();
+        if (pos != end)
+          return fail();
         result.geometryChunks.emplace_back(std::move(chunk));
       }
       continue;
@@ -557,7 +611,8 @@ bool ResourceWorld::registerGamePayloadChildren(ResourceNode &node,
     RpkEntry entry = child.entry;
     entry.flags = child.runtimeFlags;
     bool crashed = false;
-    ResourceNode *created = createNode(slot, view, entry, result, crashed, &node);
+    ResourceNode *created =
+        createNode(slot, view, entry, result, crashed, &node);
     if (crashed) {
       node.payloadRegistrationFailed = true;
       error = result.detail;
@@ -685,13 +740,17 @@ bool ResourceWorld::loadEmptyGameParent(ResourceNode &node,
 bool ResourceWorld::loadPassiveSpatialGame(ResourceNode &node,
                                            std::string &error) {
   if (resolve(&node).packNode != &node || node.type != 1 ||
-      (node.parent ? !node.parent->loaded()
-                   : !world_.defaultParent() || !world_.defaultParent()->loaded)) {
+      (node.parent
+           ? !node.parent->loaded()
+           : !world_.defaultParent() || !world_.defaultParent()->loaded)) {
     error = "passive type-1 load needs a loaded parent";
     return false;
   }
   if (node.loaded()) {
-    if (node.spatialPayload) { error.clear(); return true; }
+    if (node.spatialPayload) {
+      error.clear();
+      return true;
+    }
     error = "type-1 resource already loaded by another factory";
     return false;
   }
@@ -708,10 +767,46 @@ bool ResourceWorld::loadPassiveSpatialGame(ResourceNode &node,
     error = "passive type-1 polygon count overflow";
     return false;
   }
-  if (!registerGamePayloadChildren(node, error)) return false;
-  node.polygonCount = prepared->polygons
-      ? static_cast<uint32_t>(prepared->polygons->groups.size()) : 0;
+  if (!payload.actions.empty()) {
+    // Stock 0053dee0 processes EXTP mounts and expands the owner bounds.
+    // Complete those side effects before publishing a passive loaded node.
+    GameResourcePayload applied;
+    if (!prepareGamePayload(node, applied, error))
+      return false;
+  } else if (!registerGamePayloadChildren(node, error)) {
+    return false;
+  }
+  node.polygonCount =
+      prepared->polygons
+          ? static_cast<uint32_t>(prepared->polygons->groups.size())
+          : 0;
   node.spatialPayload = std::move(prepared);
+  node.stateWord = (node.stateWord & ~uint32_t{0x50}) | 0x21;
+  node.loadPriority = 1.0f;
+  world_.countInstance(node.countedInstance);
+  world_.trackLoadState(linkOwner(node), node.type, true);
+  error.clear();
+  return true;
+}
+
+bool ResourceWorld::loadListenerGame(ResourceNode &node, std::string &error) {
+  if (resolve(&node).packNode != &node || node.type != 1 ||
+      (node.parent
+           ? !node.parent->loaded()
+           : !world_.defaultParent() || !world_.defaultParent()->loaded)) {
+    error = "listener type-1 load needs a loaded parent";
+    return false;
+  }
+  if (node.loaded()) {
+    error = "listener type-1 resource already loaded";
+    return false;
+  }
+  if (node.groundPreparation || node.groundFactory || node.spatialPayload) {
+    error = "listener type-1 resource has other preparation";
+    return false;
+  }
+  node.polygonCount = 0;
+  node.spatialPayload = std::make_shared<PreparedSpatialGamePayload>();
   node.stateWord = (node.stateWord & ~uint32_t{0x50}) | 0x21;
   node.loadPriority = 1.0f;
   world_.countInstance(node.countedInstance);
@@ -744,7 +839,7 @@ bool ResourceWorld::unloadPassiveSpatialGame(ResourceNode &node,
 }
 
 bool ResourceWorld::resetPreparedGamePayload(ResourceNode &node,
-                                              std::string &error) {
+                                             std::string &error) {
   if (resolve(&node).packNode != &node || node.type != 1) {
     error = "type-1 reset requires a mounted game resource";
     return false;
@@ -791,9 +886,10 @@ bool ResourceWorld::resetPreparedGamePayload(ResourceNode &node,
       return false;
     }
     const auto children = world_.childOwners(current.handle);
-    if (!children || (i != 0 &&
-        (children->size() != current.payloadChildren.size() ||
-         current.children.size() != current.payloadChildren.size()))) {
+    if (!children ||
+        (i != 0 &&
+         (children->size() != current.payloadChildren.size() ||
+          current.children.size() != current.payloadChildren.size()))) {
       error = "type-1 reset has unowned children at resource " +
               std::to_string(current.value) + " (tree " +
               (children ? std::to_string(children->size()) : "missing") +
@@ -803,16 +899,18 @@ bool ResourceWorld::resetPreparedGamePayload(ResourceNode &node,
     }
     for (ResourceNode *child : current.payloadChildren) {
       if (!child || child->parent != &current ||
-          std::find(current.children.begin(), current.children.end(), child) == current.children.end() ||
-          std::find(children->begin(), children->end(), &linkOwner(*child)) == children->end() ||
+          std::find(current.children.begin(), current.children.end(), child) ==
+              current.children.end() ||
+          std::find(children->begin(), children->end(), &linkOwner(*child)) ==
+              children->end() ||
           std::find(pending.begin(), pending.end(), child) != pending.end()) {
         error = "type-1 reset child ownership unsupported";
         return false;
       }
       if (child->value && std::count_if(nodes_.begin(), nodes_.end(),
-                                       [child](const auto &entry) {
-                                         return entry->value == child->value;
-                                       }) != 1) {
+                                        [child](const auto &entry) {
+                                          return entry->value == child->value;
+                                        }) != 1) {
         error = "type-1 reset duplicate child id unsupported";
         return false;
       }
@@ -835,13 +933,16 @@ bool ResourceWorld::resetPreparedGamePayload(ResourceNode &node,
     while (child->head)
       setLinkOwner(*child->head, nullptr);
     auto &siblings = child->parent->children;
-    siblings.erase(std::remove(siblings.begin(), siblings.end(), child), siblings.end());
+    siblings.erase(std::remove(siblings.begin(), siblings.end(), child),
+                   siblings.end());
     const auto index = byId_.find(child->value);
     if (index != byId_.end() && index->second == child) {
       byId_.erase(index);
     }
     nodes_.erase(std::remove_if(nodes_.begin(), nodes_.end(),
-                                [child](const auto &entry) { return entry.get() == child; }),
+                                [child](const auto &entry) {
+                                  return entry.get() == child;
+                                }),
                  nodes_.end());
   }
   node.groundPreparation.reset();
@@ -873,9 +974,10 @@ bool ResourceWorld::unloadEmptyGameParent(ResourceNode &node,
       resource.entry.payloadSize != 8 ||
       resource.entry.payloadOffset > resource.packBytes->size() ||
       resource.packBytes->size() - resource.entry.payloadOffset < 8 ||
-      !std::all_of(resource.packBytes->begin() + resource.entry.payloadOffset,
-                   resource.packBytes->begin() + resource.entry.payloadOffset + 8,
-                   [](uint8_t byte) { return byte == 0; })) {
+      !std::all_of(
+          resource.packBytes->begin() + resource.entry.payloadOffset,
+          resource.packBytes->begin() + resource.entry.payloadOffset + 8,
+          [](uint8_t byte) { return byte == 0; })) {
     error = "type-1 unload payload or factory unsupported";
     return false;
   }
@@ -975,11 +1077,19 @@ ResourceWorld::stockSceneMeshUpperBound(std::string *reason) const {
       }
     if (!packNode)
       ++runtimeMeshes;
-    const auto bytes = stockMeshVertexBytes(*slot.mesh);
+    const auto bytes = stockMeshVertexBytesUpperBound(*slot.mesh);
     if (!bytes || *bytes > std::numeric_limits<uint64_t>::max() - total) {
       if (reason)
-        *reason =
-            "unsupported mesh version or size: " + std::to_string(item.first);
+        *reason = "unsupported mesh version or size: " +
+                  std::to_string(item.first) + " (scx version " +
+                  std::to_string(slot.mesh->version) + ", " +
+                  std::to_string(slot.mesh->meshes.size()) + " meshes" +
+                  (slot.mesh->meshes.empty()
+                       ? std::string{}
+                       : ", first vertexFlags " +
+                             std::to_string(
+                                 slot.mesh->meshes[0].vertexFlags)) +
+                  ")";
       return std::nullopt;
     }
     total += *bytes;
@@ -1006,13 +1116,13 @@ ResourceWorld::stockSceneMeshUpperBound(std::string *reason) const {
 }
 
 bool ResourceWorld::stockSceneBatchBuffersAbsent() const {
-  if (stockBatchHistoryUnknown_)
-    return false;
   size_t runtimeMaterials = 0;
   for (const auto &item : sceneMaterials_) {
     const auto &slot = *item.second;
-    if (!slot.owner.owner || !slot.material ||
-        (slot.material->flags() & 0x8000u))
+    // FUN_00527950's batch holder (FUN_005093b0) is only created for objects
+    // whose flag 0x8000 is clear (stock branch near 00528f00), so 0x8000
+    // objects own no batch buffers.
+    if (!slot.owner.owner || !slot.material)
       return false;
     bool packNode = false;
     for (const auto &node : nodes_)
@@ -1296,8 +1406,6 @@ bool ResourceWorld::bindSceneMaterial(
   const auto current = resolve(node.owner);
   if (!current || current.id != node.id || current.type != 14)
     return false;
-  if (material->flags() & 0x8000u)
-    stockBatchHistoryUnknown_ = true;
   auto slot = std::make_unique<SceneMaterialSlot>();
   setLinkOwner(slot->owner, node.owner);
   slot->material = std::move(material);
@@ -1367,8 +1475,8 @@ std::shared_ptr<ScxModel> ResourceWorld::sceneMesh(const ResolvedNode &node) {
   return it->second->mesh;
 }
 
-bool ResourceWorld::bindSceneTexture(const ResolvedNode &node,
-                                     std::shared_ptr<ResourceTextureCache> texture) {
+bool ResourceWorld::bindSceneTexture(
+    const ResolvedNode &node, std::shared_ptr<ResourceTextureCache> texture) {
   if (!texture || !node.owner || node.type != 7)
     return false;
   const auto current = resolve(node.owner);
@@ -1381,14 +1489,62 @@ bool ResourceWorld::bindSceneTexture(const ResolvedNode &node,
   return true;
 }
 
-std::shared_ptr<ResourceTextureCache> ResourceWorld::sceneTexture(
-    const ResolvedNode &node) {
+std::shared_ptr<ResourceTextureCache>
+ResourceWorld::sceneTexture(const ResolvedNode &node) {
   if (!node.owner || node.type != 7)
     return {};
   const auto it = sceneTextures_.find(node.id);
   if (it == sceneTextures_.end() || it->second->owner.owner != node.owner)
     return {};
   return it->second->texture;
+}
+
+bool ResourceWorld::loadSceneLight(ResourceNode &node, std::string &error) {
+  if (resolve(&node).packNode != &node || node.type != 13) {
+    error = "light load requires a mounted type-13 resource";
+    return false;
+  }
+  if (node.loaded()) {
+    if (!sceneLight(resolve(&node))) {
+      error = "loaded light data unavailable";
+      return false;
+    }
+    error.clear();
+    return true;
+  }
+  PackResource resource;
+  if (!packs_.lookup(node.value, resource, error))
+    return false;
+  auto parsed = sceneParseLight(resource);
+  if (!parsed.ok) {
+    error = parsed.error;
+    return false;
+  }
+  PackView view;
+  if (packs_.view(node.payloadSlot, view, error) != PackViewStatus::Ok)
+    return false;
+  const ResourceIdMapping mapping{
+      view.slot, static_cast<uint32_t>(packs_.slotCount()), view.dependencies};
+  for (auto *id : {&parsed.light.attHTextureId, &parsed.light.attVTextureId}) {
+    if (*id && **id != 0) {
+      const uint32_t mapped =
+          remapResourceId(static_cast<uint32_t>(**id), mapping);
+      if (!mapped) {
+        error = "light attenuation texture id cannot be mapped";
+        return false;
+      }
+      **id = static_cast<int32_t>(mapped);
+    }
+  }
+  if (!bindSceneLight(resolve(&node), std::move(parsed.light))) {
+    error = "light attenuation texture resource unavailable";
+    return false;
+  }
+  node.stateWord = (node.stateWord & ~uint32_t{0x50}) | 0x21;
+  node.loadPriority = 1.0f;
+  world_.trackLoadState(linkOwner(node), node.type, true);
+  error.clear();
+  return true;
 }
 
 bool ResourceWorld::bindSceneLight(const ResolvedNode &node,
@@ -1398,8 +1554,24 @@ bool ResourceWorld::bindSceneLight(const ResolvedNode &node,
   const auto current = resolve(node.owner);
   if (!current || current.id != node.id || current.type != 13)
     return false;
+  LinkOwner *attH = nullptr, *attV = nullptr;
+  const auto resolveTexture = [&](const std::optional<int32_t> &id,
+                                  LinkOwner *&owner) {
+    if (!id || *id == 0)
+      return true;
+    const auto texture = lookup(static_cast<uint32_t>(*id), 7);
+    if (texture.status != LookupStatus::Found || !texture.node.owner)
+      return false;
+    owner = texture.node.owner;
+    return true;
+  };
+  if (!resolveTexture(light.attHTextureId, attH) ||
+      !resolveTexture(light.attVTextureId, attV))
+    return false;
   auto slot = std::make_unique<SceneLightSlot>();
   setLinkOwner(slot->owner, node.owner);
+  setLinkOwner(slot->attH, attH);
+  setLinkOwner(slot->attV, attV);
   slot->light = light;
   sceneLights_[node.id] = std::move(slot);
   return true;
@@ -1409,7 +1581,11 @@ const SceneRenderLight *ResourceWorld::sceneLight(const ResolvedNode &node) {
   if (!node.owner || node.type != 13)
     return nullptr;
   const auto it = sceneLights_.find(node.id);
-  if (it == sceneLights_.end() || it->second->owner.owner != node.owner)
+  if (it == sceneLights_.end() || it->second->owner.owner != node.owner ||
+      (it->second->light.attHTextureId && *it->second->light.attHTextureId &&
+       !it->second->attH.owner) ||
+      (it->second->light.attVTextureId && *it->second->light.attVTextureId &&
+       !it->second->attV.owner))
     return nullptr;
   return &it->second->light;
 }
@@ -1520,8 +1696,9 @@ ResourceNode *ResourceWorld::createNode(uint16_t slot, const PackView &view,
   const ResourceIdMapping mapping{
       slot, static_cast<uint32_t>(packs_.slotCount()), view.dependencies};
   const uint32_t id = remapResourceId(entry.typeId, mapping);
-  const uint32_t parentId = explicitParent ? explicitParent->value
-                                           : remapResourceId(entry.superId, mapping);
+  const uint32_t parentId = explicitParent
+                                ? explicitParent->value
+                                : remapResourceId(entry.superId, mapping);
 
   // FUN_00536900: the node's own pack is mounted first; for a node of the pack
   // being mounted this does nothing.

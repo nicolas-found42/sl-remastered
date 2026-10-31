@@ -15,6 +15,7 @@ struct GroundParameters {
 
 // Bounded complete-input subset of the scanner used by stock 00463220.
 // Floats are limited to exact integers and halves with magnitude below 8388608.
-// The final road path may be omitted; other missing fields, overflowing
-// numbers and paths longer than 255 bytes fail.
+// Input may end at any field boundary (remaining floats stay zero, as in the
+// stock scan buffer); malformed fields, overflowing numbers and paths longer
+// than 255 bytes fail.
 bool parseGroundParameters(std::string_view text, GroundParameters& out, std::string& error);

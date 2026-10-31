@@ -1,8 +1,8 @@
 #pragma once
 
-#include "physics_body.hpp"
 #include "ground_files.hpp"
 #include "owner_links.hpp"
+#include "physics_body.hpp"
 #include "road_other_initial.hpp"
 
 #include <cstdint>
@@ -18,8 +18,8 @@ struct GroundRuntime {
     setLinkOwner(particleMaterialB, nullptr);
     setLinkOwner(soundMaterial, nullptr);
   }
-  GroundRuntime(const GroundRuntime&) = delete;
-  GroundRuntime& operator=(const GroundRuntime&) = delete;
+  GroundRuntime(const GroundRuntime &) = delete;
+  GroundRuntime &operator=(const GroundRuntime &) = delete;
 
   physics::BodyProto prototype;
   physics::Body body;
@@ -31,21 +31,22 @@ struct GroundRuntime {
 
 private:
   GroundRuntime() = default;
-  friend std::unique_ptr<GroundRuntime> createGroundRuntime(
-      const physics::Vec3&, float, float);
+  friend std::unique_ptr<GroundRuntime>
+  createGroundRuntime(const physics::Vec3 &, float, float);
 };
 
 // 00463220 uses ground_friction unless it is <= 0, then uses 1.
-std::unique_ptr<GroundRuntime> createGroundRuntime(
-    const physics::Vec3& position, float groundFriction, float creationTime = 0);
+std::unique_ptr<GroundRuntime>
+createGroundRuntime(const physics::Vec3 &position, float groundFriction,
+                    float creationTime = 0);
 
 struct ScxModel;
 class ResourceWorld;
-bool bindGroundDefaultMaterials(ResourceWorld& resources, GroundRuntime& ground,
-                                std::string& error);
-bool sceneLoadGroundMesh(ResourceWorld& world, uint32_t id,
-                         const std::filesystem::path& root, ScxModel& model,
-                         std::string& error);
+bool bindGroundDefaultMaterials(ResourceWorld &resources, GroundRuntime &ground,
+                                std::string &error);
+bool sceneLoadGroundMesh(ResourceWorld &world, uint32_t id,
+                         const std::filesystem::path &root, ScxModel &model,
+                         std::string &error);
 class SceneRenderInstance;
 class SceneMaterialResources;
 // Prepared inputs only. This is not a registered ground or a factory result.
@@ -75,8 +76,8 @@ struct GroundPreparation {
   OwnerLink renderResource;
   OwnerLink roadOwner;
   OwnerLink cityOwner;
-  bool bindCityOwner(LinkOwner& owner);
-  bool bindRoadOwner(LinkOwner& owner);
+  bool bindCityOwner(LinkOwner &owner);
+  bool bindRoadOwner(LinkOwner &owner);
   bool initializeRoad(float time);
   std::optional<RoadInitialState> roadInitial;
   std::vector<RoadCrossingInitialState> firstCrossings;
@@ -92,8 +93,9 @@ struct GroundPreparation {
 // 00491d50 selects the feature word as an index in the other body's material
 // array. Caller must establish that this ground owns the contacted body. The
 // base-prototype fallback and contacts without a feature remain unsupported.
-std::optional<GroundMaterial> groundContactMaterial(
-    const GroundPreparation &ground, uint32_t materialWord, std::string &error);
+std::optional<GroundMaterial>
+groundContactMaterial(const GroundPreparation &ground, uint32_t materialWord,
+                      std::string &error);
 
 class GameWorld;
 // One car 00484050 keeps after 0057b420 accepts a placement. The three floats
@@ -106,6 +108,8 @@ struct TrafficCar {
   float gap = 0;
 };
 
+class SectorCollisionManager;
+
 // Object 00463220 returns and 0053e860 stores on the city. It owns the
 // prepared inputs. roadWorld is the pointer 00580cc0 writes at road+0x84.
 // addTrafficN reads the road through getInfo(0x39), which returns factory+0x88.
@@ -113,7 +117,8 @@ struct TrafficCar {
 // read by 00484050.
 struct GroundFactoryResult {
   ~GroundFactoryResult() {
-    for (auto &observer : observers) setLinkOwner(*observer, nullptr);
+    for (auto &observer : observers)
+      setLinkOwner(*observer, nullptr);
     setLinkOwner(city, nullptr);
   }
   GroundFactoryResult(const GroundFactoryResult &) = delete;
@@ -123,6 +128,8 @@ struct GroundFactoryResult {
   std::shared_ptr<GroundPreparation> preparation;
   GameWorld *roadWorld = nullptr;
   OwnerLink city;
+  // Embedded manager at ground instance +0xb4, initialized by 00463220.
+  std::shared_ptr<SectorCollisionManager> sectorCollision;
   std::vector<std::unique_ptr<OwnerLink>> observers;
   std::vector<TrafficCar> traffic;
   // 00589b80 stores these when getInfo(0x3d) is non-null (factory+0x8c). Stock
@@ -157,8 +164,8 @@ struct GroundFactoryResult {
     float bz = 0.f;
   };
   std::vector<WaterLimit> waterLimits;
-  // 00486a20: fog packet 0x4a with int color and near/far scaled by _DAT_005e7334
-  // (10.0 in stock).
+  // 00486a20: fog packet 0x4a with int color and near/far scaled by
+  // _DAT_005e7334 (10.0 in stock).
   struct FogSetting {
     int32_t color = 0;
     float nearDist = 0.f;
@@ -172,11 +179,13 @@ bool groundRoadTablePublished(const GroundFactoryResult &result);
 bool groundPedestrianSlotReady(const GroundFactoryResult &result);
 void setGroundPedestrianDensity(GroundFactoryResult &result, float density);
 void addGroundPedestrianType(GroundFactoryResult &result, uint32_t templateId);
-void setGroundWater(GroundFactoryResult &result, float posX, float posY, float posZ,
-                    float dirX, float dirY, float dirZ, float extentA, float extentB);
-void addGroundWaterLimit(GroundFactoryResult &result, float ax, float ay, float az, float bx,
-                         float by, float bz);
-void addGroundFog(GroundFactoryResult &result, int32_t color, float nearDist, float farDist);
+void setGroundWater(GroundFactoryResult &result, float posX, float posY,
+                    float posZ, float dirX, float dirY, float dirZ,
+                    float extentA, float extentB);
+void addGroundWaterLimit(GroundFactoryResult &result, float ax, float ay,
+                         float az, float bx, float by, float bz);
+void addGroundFog(GroundFactoryResult &result, int32_t color, float nearDist,
+                  float farDist);
 
 // 00484050's return: how many placements were kept. Zero when count is not
 // positive or the road table 00580910 publishes is absent. Lane-capacity
@@ -185,11 +194,12 @@ void addGroundFog(GroundFactoryResult &result, int32_t color, float nearDist, fl
 int placeGroundTraffic(GroundFactoryResult &result, uint32_t templateId,
                        int32_t count, float along, float across, float gap);
 
-std::shared_ptr<GroundFactoryResult> finishGroundFactory(
-    std::shared_ptr<GroundPreparation> preparation, GameWorld &world,
-    std::string &error);
+std::shared_ptr<GroundFactoryResult>
+finishGroundFactory(std::shared_ptr<GroundPreparation> preparation,
+                    GameWorld &world, std::string &error);
 
-bool bindGroundFallbackMaterial(ResourceWorld& resources, GroundPreparation& ground,
-                                std::string& error);
-std::unique_ptr<GroundPreparation> prepareGround(
-    std::string_view arguments, float gravity, float groundFriction, float creationTime, std::string& error);
+bool bindGroundFallbackMaterial(ResourceWorld &resources,
+                                GroundPreparation &ground, std::string &error);
+std::unique_ptr<GroundPreparation>
+prepareGround(std::string_view arguments, float gravity, float groundFriction,
+              float creationTime, std::string &error);

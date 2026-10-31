@@ -5,6 +5,8 @@
 class ResourceWorld;
 class Render2D;
 struct ResolvedNode;
+// FUN_00539880's accepted render-source node types (6, 12, 13, 14, 20).
+bool renderRefCreateTypeTemplate(const ResolvedNode&);
 // Bounded draw-time material cache; callers must establish the stock load request.
 NativeResult cacheDrawMaterial(ResourceWorld&, Render2D&, const ResolvedNode&);
 
@@ -38,6 +40,10 @@ NativeResult renderRefGetTypeId(const std::vector<VmValue>& args, const VmObject
                                 const std::vector<const TufaClass*>* classes);
 NativeResult renderRefSetMatrix(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
                                 const std::vector<const TufaClass*>* classes);
+NativeResult renderRefSetMatrixBone(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                                    const std::vector<const TufaClass*>* classes);
+NativeResult renderRefSetColor(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                               const std::vector<const TufaClass*>*);
 NativeResult renderRefSetLight(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
                                const std::vector<const TufaClass*>* classes);
 NativeResult renderRefSetFlare(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,

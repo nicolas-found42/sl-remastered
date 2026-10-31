@@ -68,13 +68,15 @@ NativeResult cacheDrawMaterial(ResourceWorld &resources, Render2D &renderer,
     if (!resolved.packNode || resolved.packNode->loaded())
       return std::string{"ResourceRef.cache: loaded material unavailable"};
     auto parsed = sceneLoadMaterial(resources, resolved.id);
-    if (!parsed.material || (parsed.flags != 0 && parsed.flags != 4100 && parsed.flags != 4096))
-      return "ResourceRef.cache: unsupported font material: " + parsed.error;
+    if (!parsed.material)
+      return "ResourceRef.cache: unsupported material: " + parsed.error;
     material = std::move(parsed.material);
   }
-  if ((material->flags() != 0 && material->flags() != 4100 && material->flags() != 4096) ||
-      material->textureCount() != 1)
-    return std::string{"ResourceRef.cache: unsupported font material"};
+  // Fonts carry flags 0/4100/4096; general render materials (e.g.
+  // particles.rpk) carry other flag words such as 256. The mesh font loader
+  // key stays flags==4100.
+  if (material->textureCount() != 1)
+    return std::string{"ResourceRef.cache: unsupported material texture count"};
   const auto meshNode = resources.lookup(material->meshId(), 5);
   const auto textureNode = resources.lookup(material->textureId(0), 7);
   if (meshNode.status != LookupStatus::Found ||
@@ -430,10 +432,6 @@ NativeResult renderRefGetTypeId(const std::vector<VmValue> &args,
   return VmValue{id};
 }
 
-namespace {
-
-// FUN_00539880 reads param_2's linked node type (+0x4c) for cases 6, 0xc, 0xd,
-// 0xe, and 0x14. It does not require a pre-bound type-14 material table entry.
 bool renderRefCreateTypeTemplate(const ResolvedNode &type) {
   if (!type)
     return false;
@@ -448,8 +446,6 @@ bool renderRefCreateTypeTemplate(const ResolvedNode &type) {
     return false;
   }
 }
-
-} // namespace
 
 NativeResult renderRefCreate(const std::vector<VmValue> &args,
                              const VmObject *receiver, VmArena *arena,
@@ -495,10 +491,10 @@ NativeResult renderRefCreate(const std::vector<VmValue> &args,
   if (!game.renderer)
     return std::string{
         "RenderRef.create: renderer object creation unsupported"};
-  if (parent.type != 1 || (!parent.worldNode && !parent.packNode) ||
-      (parent.worldNode && !parent.worldNode->loaded) ||
-      (parent.packNode && !parent.packNode->loaded()))
-    return std::string{"RenderRef.create: parent loading unsupported"};
+  // FUN_00539880 never checks the parent's load state: it copies the parent's
+  // +0x68/+0x6c/+0x70 as they stand (constructor defaults while unloaded).
+  if (parent.type != 1 || (!parent.worldNode && !parent.packNode))
+    return std::string{"RenderRef.create: unsupported parent"};
   const auto *nameObject = std::get<const VmObject *>(args[2]);
   std::string name = "_renderinst";
   if (nameObject) {
@@ -508,6 +504,18 @@ NativeResult renderRefCreate(const std::vector<VmValue> &args,
     if (found == arena->strings.end())
       return std::string{"RenderRef.create: name string unavailable"};
     name = found->first.substr(0, 30);
+  }
+  {
+    static unsigned createCount = 0;
+    if (createCount < 12) {
+      ++createCount;
+      runlog::event(runlog::EventKind::Note,
+                    "RenderRef.create #%u: parent=0x%x type=0x%x name=%s "
+                    "childType=3",
+                    createCount, parent.id,
+                    type && type.worldNode ? type.worldNode->instanceId : 0u,
+                    name.c_str());
+    }
   }
   WorldNode *node =
       parent.worldNode
@@ -555,6 +563,32 @@ uint32_t vmColorArg(const VmValue &value, uint32_t fallback) {
 }
 
 } // namespace
+
+// 00480310 -> 0048c8c0: stores the color word at render instance +0xcc.
+NativeResult renderRefSetColor(const std::vector<VmValue> &args,
+                               const VmObject *receiver, VmArena *arena,
+                               const std::vector<const TufaClass *> *) {
+  if (!arena || !receiver || args.size() != 1 ||
+      !std::holds_alternative<int32_t>(args[0]))
+    return std::string{"invalid RenderRef.setColor call"};
+  const auto *state = nativeResourceState(receiver, arena);
+  if (!state)
+    return std::string{"RenderRef.setColor: invalid resource handle"};
+  if (!arena->gameState || !arena->gameState->resources)
+    return std::string{"RenderRef.setColor: no resource world"};
+  auto &game = *arena->gameState;
+  const auto handle =
+      static_cast<int32_t>(state - arena->resourceStates.data()) + 1;
+  const auto it = game.bindings.find(handle);
+  if (it == game.bindings.end() || !it->second || !it->second->link.owner)
+    return std::monostate{};
+  const auto instance = game.resources->sceneRenderInstance(
+      game.resources->resolve(it->second->link.owner));
+  if (!instance)
+    return std::string{"RenderRef.setColor: render instance unavailable"};
+  instance->setInstanceColor(vmColorArg(args[0], 0xffffffffu));
+  return std::monostate{};
+}
 
 NativeResult renderRefSetLight(const std::vector<VmValue> &args,
                                const VmObject *receiver, VmArena *arena,
@@ -641,6 +675,12 @@ NativeResult renderRefSetFlare(const std::vector<VmValue> &args,
   return std::monostate{};
 }
 
+namespace {
+NativeResult renderRefSetMatrixCommon(const VmValue &positionArg,
+                                      const VmValue &orientationArg,
+                                      const VmObject *receiver, VmArena *arena);
+}
+
 NativeResult renderRefSetMatrix(const std::vector<VmValue> &args,
                                 const VmObject *receiver, VmArena *arena,
                                 const std::vector<const TufaClass *> *) {
@@ -648,6 +688,27 @@ NativeResult renderRefSetMatrix(const std::vector<VmValue> &args,
       !std::holds_alternative<const VmObject *>(args[0]) ||
       !std::holds_alternative<const VmObject *>(args[1]))
     return std::string{"invalid RenderRef.setMatrix call"};
+  return renderRefSetMatrixCommon(args[0], args[1], receiver, arena);
+}
+
+// 004810b0 uses the bone id and parent resource to establish a bone link.
+// The host only models a single unparented bone.
+NativeResult renderRefSetMatrixBone(const std::vector<VmValue> &args,
+                                    const VmObject *receiver, VmArena *arena,
+                                    const std::vector<const TufaClass *> *) {
+  if (!arena || !receiver || args.size() != 4 ||
+      !std::holds_alternative<int32_t>(args[0]) ||
+      !std::holds_alternative<const VmObject *>(args[1]) ||
+      !std::holds_alternative<const VmObject *>(args[2]) ||
+      !std::holds_alternative<const VmObject *>(args[3]))
+    return std::string{"invalid RenderRef.setMatrix call"};
+  return std::string{"RenderRef.setMatrix: bone parent linkage unsupported"};
+}
+
+namespace {
+NativeResult renderRefSetMatrixCommon(const VmValue &positionArg,
+                                      const VmValue &orientationArg,
+                                      const VmObject *receiver, VmArena *arena) {
   const auto *state = nativeResourceState(receiver, arena);
   if (!state)
     return std::string{"RenderRef.setMatrix: invalid resource handle"};
@@ -685,14 +746,16 @@ NativeResult renderRefSetMatrix(const std::vector<VmValue> &args,
   const char *const xyz[] = {"x", "y", "z"};
   const char *const ypr[] = {"y", "p", "r"};
   float position[3]{}, orientation[3]{};
-  if (!readFields(std::get<const VmObject *>(args[0]), xyz, position) ||
-      !readFields(std::get<const VmObject *>(args[1]), ypr, orientation))
+  if (!readFields(std::get<const VmObject *>(positionArg), xyz, position) ||
+      !readFields(std::get<const VmObject *>(orientationArg), ypr, orientation))
     return std::string{"RenderRef.setMatrix: invalid vector or orientation"};
-  if (orientation[0] != 0 || orientation[1] != 0 || orientation[2] != 0)
-    return std::string{"RenderRef.setMatrix: nonzero rotation unsupported"};
-  instance->setBoneTranslation(position[0], position[1], position[2]);
+  // FUN_0048bf50 SetBoneMatrixParentLink: Ypr_toMatrix + position*10 into the
+  // bone-local matrix, then a bone relink. Null position/rotation read as
+  // zeros (identity) exactly like stock.
+  instance->setBoneMatrix(position, orientation);
   return std::monostate{};
 }
+} // namespace
 
 NativeResult
 wrapResourceReference(LinkOwner *target, VmArena *arena,
@@ -1021,8 +1084,20 @@ NativeResult resourceRefDestroy(const std::vector<VmValue> &args,
   auto it = game.bindings.find(handle);
   if (it == game.bindings.end() || !it->second || !it->second->link.owner)
     return std::monostate{};
-  if (auto *node = game.world->nodeFor(it->second->link.owner)) {
-    game.world->queueDestroy(*node);
+  // Stock 0047d1e0 (ResourceRef.destroy) resolves the resource and, when it
+  // is live, posts a render-refresh command record to the resource's queue
+  // (0048a8d0 -> 00427620, a 0x1c record vtable 005f09b4); it does NOT
+  // destroy the instance. Destroying the node here removed freshly installed
+  // car parts when scripts dropped their temporary refs. The port's renderer
+  // refreshes every frame, so the refresh record is a no-op; the binding is
+  // detached like the stock ref release.
+  static bool destroyTraceLogged = false;
+  if (!destroyTraceLogged) {
+    destroyTraceLogged = true;
+    runlog::event(runlog::EventKind::Note,
+                  "ResourceRef.destroy: stock posts a render-refresh record "
+                  "(0047d1e0/00427620), no destruction; port detaches the "
+                  "binding only");
   }
   setLinkOwner(it->second->link, nullptr);
   state->words[2] = 0;

@@ -60,11 +60,24 @@ bool parseGroundParameters(std::string_view text, GroundParameters& out, std::st
   auto result = std::from_chars(first, text.data() + text.size(), value.resourceId, 16);
   if (result.ec != std::errc{} || result.ptr == first) { error = "invalid ground resource id"; return false; }
   p = static_cast<size_t>(result.ptr - text.data());
+  // Stock FUN_00463220 sscanf's into a buffer whose three position floats are
+  // zeroed first; input that ends at a field boundary leaves the remaining
+  // floats untouched (the extra scalars are never read, so they stay zero).
+  // Input that continues but does not parse is still refused.
   for (float& v : value.position) {
+    if (p == text.size()) break;
     if (!comma(text, p) || !number(text, p, v)) { error = "invalid ground position"; return false; }
   }
   for (float& v : value.extraScalars) {
+    if (p == text.size()) break;
     if (!comma(text, p) || !number(text, p, v)) { error = "invalid ground extra scalars"; return false; }
+  }
+  // Stock FUN_00463220 sscanf's "0x%x,%f x6,%s,%s" into zeroed buffers and
+  // ignores the match count, so both paths are optional (garage root: none).
+  if (p == text.size()) {
+    out = std::move(value);
+    error.clear();
+    return true;
   }
   if (!comma(text, p) || !path(text, p, value.materialPath, false) ||
       (p != text.size() &&

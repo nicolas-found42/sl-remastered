@@ -3,35 +3,45 @@
 #include "camera_device_body.hpp"
 #include "camera_device_factory.hpp"
 #include "car_runtime.hpp"
-#include "hotkeys.hpp"
 #include "ground_runtime.hpp"
+#include "hotkeys.hpp"
 #include "natives/lang_string.hpp"
 #include "natives/resource_ref.hpp"
+#include "object_runtime.hpp"
+#include "object_sound.hpp"
+#include "physics_compound.hpp"
 #include "render2d.hpp"
-#include "resource_world.hpp"
 #include "resource_id.hpp"
+#include "resource_world.hpp"
 #include "run_log.hpp"
 #include "scene_2d.hpp"
 #include "scx.hpp"
+#include "sector_collision.hpp"
 #include "timers.hpp"
 
 #include <algorithm>
 #include <atomic>
 #include <cmath>
+#include <coroutine>
 #include <cstdio>
 #include <cstring>
+#include <exception>
 #include <fstream>
 #include <iomanip>
 #include <iterator>
 #include <sstream>
+#include <string_view>
 
 namespace {
 std::optional<CarCameraSettings> carCameraSettings(const VmArena &arena) {
-  const auto distance = vmActiveStaticField(arena, "java.util.Config", "camera_distance");
+  const auto distance =
+      vmActiveStaticField(arena, "java.util.Config", "camera_distance");
   const auto fov = vmActiveStaticField(arena, "java.util.Config", "camera_FOV");
   if (!distance || !fov || !std::holds_alternative<float>(*distance) ||
-      !std::holds_alternative<float>(*fov)) return std::nullopt;
-  return CarCameraSettings{std::get<float>(*distance) * 0.2f, std::get<float>(*fov)};
+      !std::holds_alternative<float>(*fov))
+    return std::nullopt;
+  return CarCameraSettings{std::get<float>(*distance) * 0.2f,
+                           std::get<float>(*fov)};
 }
 class Type1LoadTrace {
 public:
@@ -44,16 +54,21 @@ public:
   ~Type1LoadTrace() {
     if (id_)
       runlog::event(runlog::EventKind::Note,
-                    "load1 {\"v\":1,\"id\":%llu,\"resource\":%u,\"event\":\"end\",\"stage\":\"%s\"}",
+                    "load1 "
+                    "{\"v\":1,\"id\":%llu,\"resource\":%u,\"event\":\"end\","
+                    "\"stage\":\"%s\"}",
                     static_cast<unsigned long long>(id_), resource_, stage_);
   }
   void stage(const char *name) {
     stage_ = name;
     if (id_)
       runlog::event(runlog::EventKind::Note,
-                    "load1 {\"v\":1,\"id\":%llu,\"resource\":%u,\"event\":\"enter\",\"stage\":\"%s\"}",
+                    "load1 "
+                    "{\"v\":1,\"id\":%llu,\"resource\":%u,\"event\":\"enter\","
+                    "\"stage\":\"%s\"}",
                     static_cast<unsigned long long>(id_), resource_, stage_);
   }
+
 private:
   inline static std::atomic<uint64_t> next_{0};
   uint64_t id_ = 0;
@@ -208,11 +223,12 @@ gameTypeCreateNativeInstance(const std::vector<VmValue> &args,
     state.getInfoLog.emplace_back(kind, *value);
     return *value;
   };
-  const auto cameraSettings = prepared.request->nativeDevice == "car" ? carCameraSettings(*arena) : std::nullopt;
-  const auto created =
-      createNativeInstance(*state.world, *prepared.request, &binding,
-                           state.resources, player ? &*player : nullptr,
-                           cameraSettings ? &*cameraSettings : nullptr);
+  const auto cameraSettings = prepared.request->nativeDevice == "car"
+                                  ? carCameraSettings(*arena)
+                                  : std::nullopt;
+  const auto created = createNativeInstance(
+      *state.world, *prepared.request, &binding, state.resources,
+      player ? &*player : nullptr, cameraSettings ? &*cameraSettings : nullptr);
   binding.getInfo = nullptr;
   if (created.status != CreationStatus::Created)
     return std::string(created.status == CreationStatus::StockError
@@ -297,10 +313,13 @@ static NativeResult changeEventMask(const std::vector<VmValue> &args,
   auto *node = game.world->nodeFor(binding->second->link.owner);
   if (!node && game.resources) {
     const auto resolved = game.resources->resolve(binding->second->link.owner);
-    if (resolved.packNode && resolved.type == 1 && resolved.packNode->groundFactory && resolved.packNode->loaded()) {
+    if (resolved.packNode && resolved.type == 1 &&
+        resolved.packNode->groundFactory && resolved.packNode->loaded()) {
       const auto mask = static_cast<uint32_t>(std::get<int32_t>(args[0]));
-      if (set) resolved.packNode->eventMask |= mask;
-      else resolved.packNode->eventMask &= ~mask;
+      if (set)
+        resolved.packNode->eventMask |= mask;
+      else
+        resolved.packNode->eventMask &= ~mask;
       return std::monostate{};
     }
   }
@@ -327,9 +346,12 @@ gameTypeClearEventMask(const std::vector<VmValue> &args,
   return changeEventMask(args, receiver, arena, classes, false);
 }
 
-std::optional<std::string> loadGroundGameResource(VmArena &context, ResourceNode &node) {
+std::optional<std::string>
+loadGroundGameResource(VmArena &context, ResourceNode &node,
+                       const std::vector<VmStaticFields> *staticFields) {
   auto *arena = &context;
-  if (!arena->gameState || !arena->gameState->world || !arena->gameState->resources)
+  if (!arena->gameState || !arena->gameState->world ||
+      !arena->gameState->resources)
     return std::string{"ground loader: resource world unavailable"};
   auto &game = *arena->gameState;
   const auto resolved = game.resources->resolve(&node);
@@ -338,19 +360,50 @@ std::optional<std::string> loadGroundGameResource(VmArena &context, ResourceNode
   if (node.parent && !node.parent->loaded())
     return std::string{"ground loader: parent is not loaded"};
   if (node.loaded())
-    return node.groundFactory ? std::nullopt : std::optional<std::string>{"type-1 instance construction unsupported"};
+    return node.groundFactory ? std::nullopt
+                              : std::optional<std::string>{
+                                    "type-1 instance construction unsupported"};
   Type1LoadTrace trace(resolved.id);
   GameResourcePayload payload;
   std::string error;
-  if (!game.resources->prepareGamePayload(*resolved.packNode, payload,
-                                          error))
+  // Reject unsupported object factories before registering children or
+  // attaching the game-type link.
+  if (!game.resources->inspectGamePayload(node, payload, error))
+    return error;
+  if (payload.runtimeGameType && *payload.runtimeGameType) {
+    PackResource type;
+    if (game.resources->packs().lookup(*payload.runtimeGameType, type, error) &&
+        type.entry.resType == 8 && type.packBytes &&
+        type.entry.payloadOffset <= type.packBytes->size() &&
+        type.entry.payloadSize <=
+            type.packBytes->size() - type.entry.payloadOffset &&
+        type.entry.payloadSize >= 8) {
+      const auto *p = type.packBytes->data() + type.entry.payloadOffset;
+      const size_t size = type.entry.payloadSize;
+      const uint32_t chunkSize = uint32_t(p[4]) | uint32_t(p[5]) << 8 |
+                                 uint32_t(p[6]) << 16 | uint32_t(p[7]) << 24;
+      // ICFG payloads of every game-type class ("object", "trlight", ...)
+      // share the directive set; unsupported directives are rejected by the
+      // object loader itself. Non-ICFG type-8 payloads stay with the
+      // native-directive factories below.
+      if (std::memcmp(p, "ICFG", 4) == 0 && chunkSize <= size - 8) {
+        const auto *begin = reinterpret_cast<const char *>(p + 8);
+        const void *terminator = std::memchr(begin, 0, chunkSize);
+        if (terminator && terminator != begin)
+          return object::loadObjectGameResource(*arena, node, type, payload);
+      }
+    }
+  }
+  if (!game.resources->prepareGamePayload(*resolved.packNode, payload, error))
     return error;
   trace.stage("factory");
   if (payload.runtimeGameType && payload.parameters) {
-    const auto linked = game.resources->resolve(resolved.packNode->gameTypeLink.owner);
+    const auto linked =
+        game.resources->resolve(resolved.packNode->gameTypeLink.owner);
     PackResource topLevel;
     if (linked.packNode && linked.type == 8 &&
-        game.resources->packs().lookup(*payload.runtimeGameType, topLevel, error) &&
+        game.resources->packs().lookup(*payload.runtimeGameType, topLevel,
+                                       error) &&
         linked.packNode->payloadSlot == (*payload.runtimeGameType >> 16) &&
         linked.packNode->payloadOffset == topLevel.entry.payloadOffset &&
         linked.packNode->payloadSize == topLevel.entry.payloadSize) {
@@ -362,114 +415,195 @@ std::optional<std::string> loadGroundGameResource(VmArena &context, ResourceNode
         if (resolved.packNode->groundFactory) {
           trace.stage("factory_completion");
         } else if (ground)
-          return std::string{
-              "type-1 instance construction unsupported: ground reset required before retry"};
+          return std::string{"type-1 instance construction unsupported: ground "
+                             "reset required before retry"};
         else {
-        {
-          const auto *config = game.world->configNode();
-          const auto gravity = vmActiveStaticField(*arena, "java.util.Config", "gravity");
-          const auto friction = vmActiveStaticField(*arena, "java.util.Config", "ground_friction");
-          if (!config || !config->scriptReceiver || !gravity || !friction ||
-              !std::holds_alternative<float>(*gravity) ||
-              !std::holds_alternative<float>(*friction))
-            return std::string{
-                "type-1 instance construction unsupported: ground Config unavailable"};
-          trace.stage("ground_parameters");
-          auto prepared = prepareGround(*payload.parameters, std::get<float>(*gravity),
-              std::get<float>(*friction), game.world->physicsTime(), error);
-          if (!prepared)
-            return std::string{
-                "type-1 instance construction unsupported: ground preparation: "} + error;
-          if (!prepared->bindCityOwner(*resolved.packNode))
-            return std::string{"ground city owner unavailable"};
-          trace.stage("default_materials");
-          if (!bindGroundDefaultMaterials(*game.resources, *prepared->physics, error))
-            return std::string{"ground material resources: "} + error;
-          trace.stage("material_file");
-          if (!prepareGroundMaterialFile(game.resources->packs().root(), prepared->parameters,
-              prepared->physics->prototype.shape.friction, prepared->files.materials, error))
-            return std::string{"ground material file: "} + error;
-          if (!prepared->files.materials || prepared->files.materials->materials.empty()) {
-            trace.stage("fallback_material");
-            if (!bindGroundFallbackMaterial(*game.resources, *prepared, error))
-              return std::string{"ground fallback material: "} + error;
+          {
+            const auto *config = game.world->configNode();
+            const auto configField =
+                [&](const char *name) -> std::optional<VmValue> {
+              if (arena->activeExecution)
+                return vmActiveStaticField(*arena, "java.util.Config", name);
+              if (!staticFields)
+                return std::nullopt;
+              const VmStaticFields *state = nullptr;
+              for (const auto &candidate : *staticFields) {
+                if (!candidate.owner ||
+                    candidate.owner->name != "java.util.Config")
+                  continue;
+                if (state)
+                  return std::nullopt;
+                state = &candidate;
+              }
+              if (!state)
+                return std::nullopt;
+              const VmField *match = nullptr;
+              for (const auto &field : state->fields) {
+                if (field.name != name)
+                  continue;
+                if (match || field.descriptor != "F")
+                  return std::nullopt;
+                match = &field;
+              }
+              return match ? std::optional<VmValue>{match->value}
+                           : std::nullopt;
+            };
+            const auto gravity = configField("gravity");
+            const auto friction = configField("ground_friction");
+            if (!config || !config->scriptReceiver || !gravity || !friction ||
+                !std::holds_alternative<float>(*gravity) ||
+                !std::holds_alternative<float>(*friction) ||
+                !std::isfinite(std::get<float>(*gravity)) ||
+                !std::isfinite(std::get<float>(*friction)))
+              return std::string{"type-1 instance construction unsupported: "
+                                 "ground Config unavailable"};
+            trace.stage("ground_parameters");
+            auto prepared = prepareGround(
+                *payload.parameters, std::get<float>(*gravity),
+                std::get<float>(*friction), game.world->physicsTime(), error);
+            if (!prepared)
+              return std::string{"type-1 instance construction unsupported: "
+                                 "ground preparation: "} +
+                     error + " (parameters \"" + *payload.parameters + "\")";
+            if (!prepared->bindCityOwner(*resolved.packNode))
+              return std::string{"ground city owner unavailable"};
+            trace.stage("default_materials");
+            if (!bindGroundDefaultMaterials(*game.resources, *prepared->physics,
+                                            error))
+              return std::string{"ground material resources: "} + error;
+            trace.stage("material_file");
+            if (!prepareGroundMaterialFile(
+                    game.resources->packs().root(), prepared->parameters,
+                    prepared->physics->prototype.shape.friction,
+                    prepared->files.materials, error))
+              return std::string{"ground material file: "} + error;
+            if (!prepared->files.materials ||
+                prepared->files.materials->materials.empty()) {
+              trace.stage("fallback_material");
+              if (!bindGroundFallbackMaterial(*game.resources, *prepared,
+                                              error))
+                return std::string{"ground fallback material: "} + error;
+            }
+            trace.stage("body_node");
+            WorldNode *body = game.world->addTypedChildUnderExternal(
+                resolved.packNode->handle, *resolved.packNode, 1,
+                resolved.packNode->sectorLink.owner, 2, "groundbody", 0x201);
+            if (!body)
+              return std::string{"type-1 instance construction unsupported: "
+                                 "ground body resource"};
+            body->groundBody = prepared->physics;
+            body->flags |= 0x200000;
+            game.world->noteInstanceCreated(*body);
+            game.world->markLoaded(*body);
+            body->loadPriority = 1.0f;
+            setLinkOwner(prepared->bodyResource, body);
+            ground = std::shared_ptr<GroundPreparation>(std::move(prepared));
+            trace.stage("render_type");
+            PackView cityView;
+            if (game.resources->packs().view(resolved.packNode->payloadSlot,
+                                             cityView,
+                                             error) != PackViewStatus::Ok)
+              return std::string{"ground render resource pack unavailable"};
+            const ResourceIdMapping mapping{
+                cityView.slot,
+                static_cast<uint32_t>(game.resources->packs().slotCount()),
+                cityView.dependencies};
+            const auto renderId =
+                remapResourceId(ground->parameters.resourceId, mapping);
+            const auto renderType = game.resources->lookup(renderId, 14);
+            if (renderType.status != LookupStatus::Found ||
+                !renderType.node.owner)
+              return std::string{"ground render type unavailable"};
+            trace.stage("render_node");
+            auto *render = game.world->addTypedChildUnderExternal(
+                resolved.packNode->handle, *resolved.packNode, 1,
+                resolved.packNode->sectorLink.owner, 3, "r_ground", 0x201);
+            if (!render)
+              return std::string{"ground render node unavailable"};
+            ground->pendingRender =
+                std::make_shared<SceneRenderInstance>(renderType.node.owner);
+            game.world->noteInstanceCreated(*render);
+            setLinkOwner(ground->renderResource, render);
+            trace.stage("render_material");
+            auto material = sceneLoadMaterial(*game.resources, renderId);
+            if (!material.material)
+              return std::string{"ground material preparation: "} +
+                     material.error;
+            ground->pendingMaterial = std::shared_ptr<SceneMaterialResources>(
+                std::move(material.material));
+            trace.stage("mesh");
+            auto mesh = std::make_shared<ScxModel>();
+            if (!sceneLoadGroundMesh(
+                    *game.resources, ground->pendingMaterial->meshId(),
+                    game.resources->packs().root(), *mesh, error))
+              return std::string{"ground mesh preparation: "} + error;
+            ground->pendingMesh = std::move(mesh);
+            trace.stage("bone");
+            ground->pendingRender->prepareUnattachedGroundBone();
+            trace.stage("road_file");
+            if (!prepareGroundRoadFile(game.resources->packs().root(),
+                                       ground->parameters, ground->files.roads,
+                                       error))
+              return std::string{"ground road file: "} + error;
+            if (ground->files.roads) {
+              trace.stage("road_initialization");
+              if (!ground->bindRoadOwner(*resolved.packNode))
+                return std::string{"ground road owner unavailable"};
+              if (!ground->initializeRoad(game.world->physicsTime()))
+                return std::string{"ground road initialization unsupported"};
+            }
+            trace.stage("factory_completion");
+            auto result = finishGroundFactory(ground, *game.world, error);
+            if (!result)
+              return std::string{"ground factory result: "} + error;
+            setLinkOwner(result->city, resolved.packNode);
+            result->sectorCollision =
+                std::make_shared<SectorCollisionManager>(*resolved.packNode);
+            resolved.packNode->groundFactory = std::move(result);
+            resolved.packNode->eventMask |= 0x14;
+            resolved.packNode->stateWord =
+                (resolved.packNode->stateWord & ~uint32_t{0x50}) | 0x21;
+            resolved.packNode->loadPriority = 1.0f;
+            game.world->trackLoadState(linkOwner(*resolved.packNode),
+                                       resolved.packNode->type, true);
           }
-          trace.stage("body_node");
-          WorldNode *body = game.world->addTypedChildUnderExternal(
-              resolved.packNode->handle, *resolved.packNode, 1,
-              resolved.packNode->sectorLink.owner, 2, "groundbody", 0x201);
-          if (!body)
-            return std::string{
-                "type-1 instance construction unsupported: ground body resource"};
-          body->groundBody = prepared->physics;
-          body->flags |= 0x200000;
-          game.world->noteInstanceCreated(*body);
-          game.world->markLoaded(*body);
-          body->loadPriority = 1.0f;
-          setLinkOwner(prepared->bodyResource, body);
-          ground = std::shared_ptr<GroundPreparation>(std::move(prepared));
-          trace.stage("render_type");
-          PackView cityView;
-          if (game.resources->packs().view(resolved.packNode->payloadSlot, cityView, error) != PackViewStatus::Ok)
-            return std::string{"ground render resource pack unavailable"};
-          const ResourceIdMapping mapping{cityView.slot,
-              static_cast<uint32_t>(game.resources->packs().slotCount()), cityView.dependencies};
-          const auto renderId = remapResourceId(ground->parameters.resourceId, mapping);
-          const auto renderType = game.resources->lookup(renderId, 14);
-          if (renderType.status != LookupStatus::Found || !renderType.node.owner)
-            return std::string{"ground render type unavailable"};
-          trace.stage("render_node");
-          auto *render = game.world->addTypedChildUnderExternal(
-              resolved.packNode->handle, *resolved.packNode, 1,
-              resolved.packNode->sectorLink.owner, 3, "r_ground", 0x201);
-          if (!render)
-            return std::string{"ground render node unavailable"};
-          ground->pendingRender = std::make_shared<SceneRenderInstance>(renderType.node.owner);
-          game.world->noteInstanceCreated(*render);
-          setLinkOwner(ground->renderResource, render);
-          trace.stage("render_material");
-          auto material = sceneLoadMaterial(*game.resources, renderId);
-          if (!material.material)
-            return std::string{"ground material preparation: "} + material.error;
-          ground->pendingMaterial = std::shared_ptr<SceneMaterialResources>(std::move(material.material));
-          trace.stage("mesh");
-          auto mesh = std::make_shared<ScxModel>();
-          if (!sceneLoadGroundMesh(*game.resources, ground->pendingMaterial->meshId(),
-                             game.resources->packs().root(), *mesh, error))
-            return std::string{"ground mesh preparation: "} + error;
-          ground->pendingMesh = std::move(mesh);
-          trace.stage("bone");
-          ground->pendingRender->prepareUnattachedGroundBone();
-          trace.stage("road_file");
-          if (!prepareGroundRoadFile(game.resources->packs().root(), ground->parameters,
-                                     ground->files.roads, error))
-            return std::string{"ground road file: "} + error;
-          if (ground->files.roads) {
-            trace.stage("road_initialization");
-            if (!ground->bindRoadOwner(*resolved.packNode))
-              return std::string{"ground road owner unavailable"};
-            if (!ground->initializeRoad(game.world->physicsTime()))
-              return std::string{"ground road initialization unsupported"};
-          }
-          trace.stage("factory_completion");
-          auto result = finishGroundFactory(ground, *game.world, error);
-          if (!result)
-            return std::string{"ground factory result: "} + error;
-          setLinkOwner(result->city, resolved.packNode);
-          resolved.packNode->groundFactory = std::move(result);
-          resolved.packNode->eventMask |= 0x14;
-          resolved.packNode->stateWord =
-              (resolved.packNode->stateWord & ~uint32_t{0x50}) | 0x21;
-          resolved.packNode->loadPriority = 1.0f;
-          game.world->trackLoadState(linkOwner(*resolved.packNode),
-                                     resolved.packNode->type, true);
         }
       }
     }
   }
+  // Stock devices "walk" (FUN_0042ced0) and "road" (FUN_0042c1c0) construct
+  // only a small listener object and defer every behavior to script
+  // commands. The host records the loaded state without instances or
+  // geometry; script-command delivery to these listeners is not implemented.
+  if (!node.groundFactory && payload.runtimeGameType) {
+    const auto listener = readNativeOnlyGameType(
+        game.resources->packs(), *payload.runtimeGameType, error);
+    if (listener &&
+        (listener->device == "walk" || listener->device == "road")) {
+      if (!game.resources->loadListenerGame(*resolved.packNode, error))
+        return std::string{"listener type-1 load: "} + error;
+      return std::nullopt;
+    }
   }
-  if (!node.groundFactory)
+  if (!node.groundFactory) {
+    if (payload.runtimeGameType) {
+      const auto factory = readNativeOnlyGameType(
+          game.resources->packs(), *payload.runtimeGameType, error);
+      if (factory)
+        return std::string{
+                   "type-1 instance construction unsupported: device "} +
+               factory->device;
+      return std::string{
+                 "type-1 instance construction unsupported: script 0x"} +
+             [](uint32_t v) {
+               char b[9];
+               std::snprintf(b, sizeof b, "%08x", v);
+               return std::string{b};
+             }(*payload.runtimeGameType) +
+             ": " + error;
+    }
     return std::string{"type-1 instance construction unsupported"};
+  }
   return std::nullopt;
 }
 
@@ -511,16 +645,20 @@ NativeResult gameTypeAddNotification(const std::vector<VmValue> &args,
       if (binding != game.bindings.end() && binding->second &&
           binding->second->link.owner) {
         if (game.resources) {
-          const auto resolved = game.resources->resolve(binding->second->link.owner);
+          const auto resolved =
+              game.resources->resolve(binding->second->link.owner);
           if (resolved.packNode && resolved.type == 1 &&
-              (!resolved.packNode->loaded() || resolved.packNode->groundFactory)) {
+              (!resolved.packNode->loaded() ||
+               resolved.packNode->groundFactory)) {
             if (!resolved.packNode->loaded()) {
-              if (const auto error = loadGroundGameResource(*arena, *resolved.packNode))
+              if (const auto error =
+                      loadGroundGameResource(*arena, *resolved.packNode))
                 return "GameType.addNotification: " + *error;
             }
             if (resolved.packNode->groundFactory) {
               if (!target)
-                return std::string{"GameType.addNotification: receiver unavailable"};
+                return std::string{
+                    "GameType.addNotification: receiver unavailable"};
               auto text = [&](size_t index, std::string &out) -> bool {
                 const auto *object = std::get<const VmObject *>(args[index]);
                 if (!object)
@@ -533,30 +671,33 @@ NativeResult gameTypeAddNotification(const std::vector<VmValue> &args,
               };
               auto entry = std::make_unique<EventSubscription>();
               entry->mask = static_cast<uint32_t>(std::get<int32_t>(args[1]));
-              entry->replacementMask = static_cast<uint32_t>(std::get<int32_t>(args[2]));
+              entry->replacementMask =
+                  static_cast<uint32_t>(std::get<int32_t>(args[2]));
               if (!text(3, entry->replacementPayload) ||
                   (args.size() == 5 && !text(4, entry->method)))
-                return std::string{"GameType.addNotification: string unavailable"};
+                return std::string{
+                    "GameType.addNotification: string unavailable"};
               setLinkOwner(entry->target, target);
               auto &entries = resolved.packNode->eventSubscriptions;
               entries.erase(std::remove_if(entries.begin(), entries.end(),
                                            [&](const auto &old) {
-                                             return old->target.owner == target &&
+                                             return old->target.owner ==
+                                                        target &&
                                                     old->mask == entry->mask;
                                            }),
                             entries.end());
               entries.push_back(std::move(entry));
               return std::monostate{};
             }
-            return std::string{
-                "GameType.addNotification: type-1 instance construction unsupported"};
+            return std::string{"GameType.addNotification: type-1 instance "
+                               "construction unsupported"};
+          }
         }
+        return std::string{"GameType.addNotification: target load unsupported"};
       }
-      return std::string{"GameType.addNotification: target load unsupported"};
+      return std::monostate{};
     }
     return std::monostate{};
-  }
-  return std::monostate{};
   }
   if (!source->loaded)
     return std::string{"GameType.addNotification: target load unsupported"};
@@ -594,9 +735,11 @@ NativeResult gameTypeAddNotification(const std::vector<VmValue> &args,
 namespace {
 const CarPrototype *nodePrototype(const WorldNode &node, GameWorld &world);
 
-// FUN_00443d40 writes ext_camera as zoom, move offset, look offset, rotation, then distance.
-// FUN_0048ce30 sends look from the look offset and move from the move offset.
-SeatCameraPose seatCameraPoseFromDriver(const CarSeat &seat, const CarPrototype *prototype,
+// FUN_00443d40 writes ext_camera as zoom, move offset, look offset, rotation,
+// then distance. FUN_0048ce30 sends look from the look offset and move from the
+// move offset.
+SeatCameraPose seatCameraPoseFromDriver(const CarSeat &seat,
+                                        const CarPrototype *prototype,
                                         uint32_t target) {
   SeatCameraPose pose;
   pose.target = target;
@@ -606,10 +749,12 @@ SeatCameraPose seatCameraPoseFromDriver(const CarSeat &seat, const CarPrototype 
     driver = &prototype->config.drivers[static_cast<size_t>(seat.cameraPreset)];
   if (driver && driver->hasExtCamera) {
     const auto &v = driver->extCamera;
-    const float distanceScale =
-        prototype->cameraSettings ? prototype->cameraSettings->distanceScale : 0.0f;
-    const float fovScale =
-        prototype->cameraSettings ? prototype->cameraSettings->fieldOfViewScale : 0.0f;
+    const float distanceScale = prototype->cameraSettings
+                                    ? prototype->cameraSettings->distanceScale
+                                    : 0.0f;
+    const float fovScale = prototype->cameraSettings
+                               ? prototype->cameraSettings->fieldOfViewScale
+                               : 0.0f;
     pose.moveOffset = {v[1], v[2], v[3]};
     pose.lookOffset = {v[4], v[5], v[6]};
     pose.moveRotation = {v[7], v[8], v[9]};
@@ -617,7 +762,8 @@ SeatCameraPose seatCameraPoseFromDriver(const CarSeat &seat, const CarPrototype 
     pose.zoom = v[0] * fovScale;
     pose.hasZoom = pose.zoom > 0.0f;
   } else if (driver) {
-    // FUN_004445f0 defaults. The car fields at +0x126c, +0x1270, +0x1274, and +0x1278 stay 0.
+    // FUN_004445f0 defaults. The car fields at +0x126c, +0x1270, +0x1274, and
+    // +0x1278 stay 0.
     pose.moveRotation = {0.0f, -1.0f, -10.0f};
     pose.zoom = 100.0f;
     pose.hasZoom = true;
@@ -625,14 +771,18 @@ SeatCameraPose seatCameraPoseFromDriver(const CarSeat &seat, const CarPrototype 
   return pose;
 }
 
-std::optional<std::string> applySeatCameraPose(ResourceWorld &resources, WorldNode &cameraNode,
+std::optional<std::string> applySeatCameraPose(ResourceWorld &resources,
+                                               WorldNode &cameraNode,
                                                const SeatCameraPose &pose) {
   if (!cameraNode.cameraDevice)
     return std::nullopt;
   const auto found = resources.lookup(pose.target, 0);
-  if (found.status == LookupStatus::StockCrash || found.status == LookupStatus::MountRefused)
-    return "GameRef.queueEvent: car activate camera pose lookup: " + found.detail;
-  LinkOwner *owner = found.status == LookupStatus::Found ? found.node.owner : nullptr;
+  if (found.status == LookupStatus::StockCrash ||
+      found.status == LookupStatus::MountRefused)
+    return "GameRef.queueEvent: car activate camera pose lookup: " +
+           found.detail;
+  LinkOwner *owner =
+      found.status == LookupStatus::Found ? found.node.owner : nullptr;
   setLinkOwner(cameraNode.cameraDevice->lookTarget, owner);
   setLinkOwner(cameraNode.cameraDevice->moveTarget, owner);
   CameraFollowCommand look;
@@ -655,7 +805,7 @@ std::optional<std::string> applySeatCameraPose(ResourceWorld &resources, WorldNo
   }
   return std::nullopt;
 }
-}
+} // namespace
 
 namespace {
 struct GroundEventPending {
@@ -668,7 +818,7 @@ struct GroundEventLink {
   OwnerLink link;
   ~GroundEventLink() { setLinkOwner(link, nullptr); }
 };
-}
+} // namespace
 
 NativeResult gameRefQueueEvent(const std::vector<VmValue> &args,
                                const VmObject *receiver, VmArena *arena,
@@ -701,48 +851,69 @@ NativeResult gameRefQueueEvent(const std::vector<VmValue> &args,
       auto *sourceOwner = target.owner;
       if (const auto *sender = std::get<const VmObject *>(args[0])) {
         const auto *senderState = nativeResourceState(sender, arena);
-        if (!senderState) return std::string{"GameRef.queueEvent: invalid ground sender"};
-        const int32_t senderHandle = static_cast<int32_t>(senderState - arena->resourceStates.data()) + 1;
+        if (!senderState)
+          return std::string{"GameRef.queueEvent: invalid ground sender"};
+        const int32_t senderHandle =
+            static_cast<int32_t>(senderState - arena->resourceStates.data()) +
+            1;
         const auto senderBinding = game.bindings.find(senderHandle);
-        if (senderBinding == game.bindings.end() || !senderBinding->second || !senderBinding->second->link.owner)
+        if (senderBinding == game.bindings.end() || !senderBinding->second ||
+            !senderBinding->second->link.owner)
           return std::string{"GameRef.queueEvent: ground sender unavailable"};
         sourceOwner = senderBinding->second->link.owner;
       }
       setLinkOwner(source.link, sourceOwner);
       const auto *object = std::get<const VmObject *>(args[2]);
       const auto *bytes = object ? stringBytes(*arena, object) : nullptr;
-      if (!bytes) return std::string{"GameRef.queueEvent: ground command string unavailable"};
+      if (!bytes)
+        return std::string{
+            "GameRef.queueEvent: ground command string unavailable"};
       const std::string original = bytes->substr(0, bytes->find('\0'));
       for (const auto &entry : ground.eventSubscriptions) {
-        if (!entry->target.owner || !(entry->mask & event)) continue;
+        if (!entry->target.owner || !(entry->mask & event))
+          continue;
         if ((entry->mask & 0xc0000000u) ||
             ((entry->replacementMask & 0x0fffffffu) &&
              (entry->replacementMask & 0x0fffffffu) != 0x10))
-          return std::string{"GameRef.queueEvent: ground notification flags unsupported"};
+          return std::string{
+              "GameRef.queueEvent: ground notification flags unsupported"};
         auto item = std::make_unique<GroundEventPending>();
         setLinkOwner(item->target, entry->target.owner);
-        item->event = (entry->replacementMask & 0x0fffffffu) ? entry->replacementMask & 0x0fffffffu : event;
-        item->payload = (entry->replacementMask & 0x10000000u) ? entry->replacementPayload : original;
+        item->event = (entry->replacementMask & 0x0fffffffu)
+                          ? entry->replacementMask & 0x0fffffffu
+                          : event;
+        item->payload = (entry->replacementMask & 0x10000000u)
+                            ? entry->replacementPayload
+                            : original;
         item->method = entry->method;
         pending.push_back(std::move(item));
       }
-      if (event != 0x10) return std::string{"GameRef.queueEvent: ground event unsupported"};
+      if (event != 0x10)
+        return std::string{"GameRef.queueEvent: ground event unsupported"};
       const auto command = stockScan(*bytes, "%s");
       if ((ground.eventMask & event) &&
-          (command.values.empty() || (command.values[0].s != "obs_add" && command.values[0].s != "obs_rem")))
+          (command.values.empty() || (command.values[0].s != "obs_add" &&
+                                      command.values[0].s != "obs_rem")))
         return "GameRef.queueEvent: unsupported ground command: " + *bytes;
       auto &factory = *ground.groundFactory;
       const auto parsed = stockScan(*bytes, "%*s %d");
-      const uint32_t id = parsed.values.empty() ? 0u : static_cast<uint32_t>(parsed.values[0].i);
-      if ((ground.eventMask & event) && factory.roadWorld && command.values[0].s == "obs_add" && id) {
+      const uint32_t id = parsed.values.empty()
+                              ? 0u
+                              : static_cast<uint32_t>(parsed.values[0].i);
+      if ((ground.eventMask & event) && factory.roadWorld &&
+          command.values[0].s == "obs_add" && id) {
         const auto found = game.resources->lookup(id, 1);
-        if (found.status == LookupStatus::StockCrash || found.status == LookupStatus::MountRefused)
+        if (found.status == LookupStatus::StockCrash ||
+            found.status == LookupStatus::MountRefused)
           return "GameRef.queueEvent: ground observer lookup: " + found.detail;
         auto observer = std::make_unique<OwnerLink>();
-        if (found.status == LookupStatus::Found) setLinkOwner(*observer, found.node.owner);
+        if (found.status == LookupStatus::Found)
+          setLinkOwner(*observer, found.node.owner);
         factory.observers.push_back(std::move(observer));
-      } else if ((ground.eventMask & event) && factory.roadWorld && command.values[0].s == "obs_rem") {
-        const auto found = std::find_if(factory.observers.begin(), factory.observers.end(),
+      } else if ((ground.eventMask & event) && factory.roadWorld &&
+                 command.values[0].s == "obs_rem") {
+        const auto found = std::find_if(
+            factory.observers.begin(), factory.observers.end(),
             [id](const auto &observer) { return observer->cachedValue == id; });
         if (found != factory.observers.end()) {
           setLinkOwner(**found, nullptr);
@@ -750,45 +921,72 @@ NativeResult gameRefQueueEvent(const std::vector<VmValue> &args,
         }
       }
       for (const auto &item : pending) {
-        if (!source.link.owner) return std::string{"GameRef.queueEvent: ground source destroyed"};
+        if (!source.link.owner)
+          return std::string{"GameRef.queueEvent: ground source destroyed"};
         auto *subscriber = game.world->nodeFor(item->target.owner);
-        if (!subscriber) continue;
+        if (!subscriber)
+          continue;
         if (!subscriber->loaded || !subscriber->nativeDevice.empty() ||
             !subscriber->eventSubscriptionsKnownEmpty)
-          return std::string{"GameRef.queueEvent: ground notification target unsupported"};
-        if (!(subscriber->eventMask & item->event) || !subscriber->scriptReceiver) continue;
+          return std::string{
+              "GameRef.queueEvent: ground notification target unsupported"};
+        if (!(subscriber->eventMask & item->event) ||
+            !subscriber->scriptReceiver)
+          continue;
         const VmField *mode = nullptr;
         for (const auto &field : subscriber->scriptReceiver->fields)
           if (field.name == "asyncMode" && field.descriptor == "I") {
-            if (mode) return std::string{"GameRef.queueEvent: ambiguous notification asyncMode"};
+            if (mode)
+              return std::string{
+                  "GameRef.queueEvent: ambiguous notification asyncMode"};
             mode = &field;
           }
-        if (!mode || !std::holds_alternative<int32_t>(mode->value) || !arena->callScript || !classes)
-          return std::string{"GameRef.queueEvent: ground callback context unavailable"};
+        if (!mode || !std::holds_alternative<int32_t>(mode->value) ||
+            !arena->callScript || !classes)
+          return std::string{
+              "GameRef.queueEvent: ground callback context unavailable"};
         auto reference = vmAllocateNative(*arena, "java.util.resource.GameRef");
-        if (!reference.ok || !std::holds_alternative<const VmObject *>(reference.value))
-          return "GameRef.queueEvent: ground source allocation: " + reference.error;
+        if (!reference.ok ||
+            !std::holds_alternative<const VmObject *>(reference.value))
+          return "GameRef.queueEvent: ground source allocation: " +
+                 reference.error;
         const auto *ref = std::get<const VmObject *>(reference.value);
-        if (!std::holds_alternative<std::monostate>(invokeNative("java.util.resource.ResourceRef", "newNative", "()V", {}, ref, arena, classes)))
-          return std::string{"GameRef.queueEvent: ground source link unavailable"};
+        if (!std::holds_alternative<std::monostate>(
+                invokeNative("java.util.resource.ResourceRef", "newNative",
+                             "()V", {}, ref, arena, classes)))
+          return std::string{
+              "GameRef.queueEvent: ground source link unavailable"};
         auto *resourceState = nativeResourceState(ref, arena);
         if (!resourceState || !source.link.owner || !item->target.owner)
-          return std::string{"GameRef.queueEvent: ground notification target destroyed"};
-        const int32_t h = static_cast<int32_t>(resourceState - arena->resourceStates.data()) + 1;
+          return std::string{
+              "GameRef.queueEvent: ground notification target destroyed"};
+        const int32_t h =
+            static_cast<int32_t>(resourceState - arena->resourceStates.data()) +
+            1;
         auto receiverBinding = std::make_unique<ReceiverBinding>();
         setLinkOwner(receiverBinding->link, source.link.owner);
         resourceState->words[2] = receiverBinding->link.cachedValue;
         game.bindings.emplace(h, std::move(receiverBinding));
         const auto text = internStringResult(item->payload, arena, classes);
         if (!std::holds_alternative<VmValue>(text))
-          return std::string{"GameRef.queueEvent: ground notification string unavailable"};
-        const auto *textObject = std::get_if<const VmObject *>(&std::get<VmValue>(text));
-        if (!textObject) return std::string{"GameRef.queueEvent: invalid ground notification string"};
-        const std::string method = !item->method.empty() ? item->method :
-            (std::get<int32_t>(mode->value) ? "handleEventAsync" : "handleEvent");
-        auto called = arena->callScript(subscriber->scriptReceiver, method,
-                                        {ref, static_cast<int32_t>(item->event), *textObject});
-        if (!called.ok) return "GameRef.queueEvent: ground notification " + method + ": " + called.error;
+          return std::string{
+              "GameRef.queueEvent: ground notification string unavailable"};
+        const auto *textObject =
+            std::get_if<const VmObject *>(&std::get<VmValue>(text));
+        if (!textObject)
+          return std::string{
+              "GameRef.queueEvent: invalid ground notification string"};
+        const std::string method =
+            !item->method.empty()
+                ? item->method
+                : (std::get<int32_t>(mode->value) ? "handleEventAsync"
+                                                  : "handleEvent");
+        auto called = arena->callScript(
+            subscriber->scriptReceiver, method,
+            {ref, static_cast<int32_t>(item->event), *textObject});
+        if (!called.ok)
+          return "GameRef.queueEvent: ground notification " + method + ": " +
+                 called.error;
       }
       return std::monostate{};
     }
@@ -797,7 +995,8 @@ NativeResult gameRefQueueEvent(const std::vector<VmValue> &args,
     return std::string{"GameRef.queueEvent: target loading is unsupported"};
   if (node->nativeDevice == "camera") {
     if (!node->eventSubscriptionsKnownEmpty)
-      return std::string{"GameRef.queueEvent: camera subscriptions unsupported"};
+      return std::string{
+          "GameRef.queueEvent: camera subscriptions unsupported"};
     if (!(node->eventMask & static_cast<uint32_t>(std::get<int32_t>(args[1]))))
       return std::monostate{};
     if (std::get<int32_t>(args[1]) != 0x10)
@@ -807,68 +1006,150 @@ NativeResult gameRefQueueEvent(const std::vector<VmValue> &args,
       return std::string{"GameRef.queueEvent: camera physics unavailable"};
     const auto *object = std::get<const VmObject *>(args[2]);
     const auto *bytes = object ? stringBytes(*arena, object) : nullptr;
-    if (!bytes) return std::string{"GameRef.queueEvent: camera command string unavailable"};
+    if (!bytes)
+      return std::string{
+          "GameRef.queueEvent: camera command string unavailable"};
     const auto name = stockScan(*bytes, "%s");
     CameraFollowCommand follow;
-    if (parseCameraFollowCommand(*bytes, node->cameraDevice->commands.torque, follow)) {
+    if (parseCameraFollowCommand(*bytes, node->cameraDevice->commands.torque,
+                                 follow)) {
       if (!game.resources)
-        return std::string{"GameRef.queueEvent: camera follow target lookup unavailable"};
+        return std::string{
+            "GameRef.queueEvent: camera follow target lookup unavailable"};
       const auto target = game.resources->lookup(follow.target, 0);
-      if (target.status == LookupStatus::StockCrash || target.status == LookupStatus::MountRefused)
-        return "GameRef.queueEvent: camera follow target lookup: " + target.detail;
-      setLinkOwner(follow.look ? node->cameraDevice->lookTarget : node->cameraDevice->moveTarget,
-                   target.status == LookupStatus::Found ? target.node.owner : nullptr);
+      if (target.status == LookupStatus::StockCrash ||
+          target.status == LookupStatus::MountRefused)
+        return "GameRef.queueEvent: camera follow target lookup: " +
+               target.detail;
+      setLinkOwner(follow.look ? node->cameraDevice->lookTarget
+                               : node->cameraDevice->moveTarget,
+                   target.status == LookupStatus::Found ? target.node.owner
+                                                        : nullptr);
       applyCameraFollowCommand(node->cameraDevice->commands, follow);
-      if (!game.world->directCameraFollowReady(*node->cameraDevice))
-        return std::string{"GameRef.queueEvent: camera follow simulation unsupported"};
+      const char *followBlock = nullptr;
+      if (!game.world->directCameraFollowReady(*node->cameraDevice,
+                                               &followBlock)) {
+        const std::string block = followBlock ? followBlock : "";
+        // One target set so far: the device is not armed yet and the
+        // follow step skips it (integrateArmedCameraFollows); the script
+        // sets the other target next. Log the partial-arm gap once.
+        if (block == "look" || block == "move") {
+          runlog::event(runlog::EventKind::Note,
+                        "gap: camera follow with only one target set is not "
+                        "simulated (missing %s)",
+                        block.c_str());
+          return std::monostate{};
+        }
+        return std::string{
+                   "GameRef.queueEvent: camera follow simulation unsupported "
+                   "(block "} +
+               (followBlock ? followBlock : "?") + ")";
+      }
       return std::monostate{};
     }
     if (!name.values.empty() && name.values[0].s == "control") {
       if (!game.resources)
-        return std::string{"GameRef.queueEvent: camera controller lookup unavailable"};
+        return std::string{
+            "GameRef.queueEvent: camera controller lookup unavailable"};
       const auto parsed = stockScan(*bytes, "%*s %d");
-      const uint32_t id = parsed.values.empty() ? 0u : static_cast<uint32_t>(parsed.values[0].i);
+      const uint32_t id = parsed.values.empty()
+                              ? 0u
+                              : static_cast<uint32_t>(parsed.values[0].i);
       const auto target = game.resources->lookup(id, 1);
-      if (target.status == LookupStatus::StockCrash || target.status == LookupStatus::MountRefused)
+      if (target.status == LookupStatus::StockCrash ||
+          target.status == LookupStatus::MountRefused)
         return "GameRef.queueEvent: camera controller lookup: " + target.detail;
       setLinkOwner(node->cameraDevice->controller,
-                   target.status == LookupStatus::Found ? target.node.owner : nullptr);
+                   target.status == LookupStatus::Found ? target.node.owner
+                                                        : nullptr);
       return std::monostate{};
     }
     if (!name.values.empty() && name.values[0].s == "render") {
       if (!game.resources || !game.renderer)
-        return std::string{"GameRef.queueEvent: camera render host unavailable"};
+        return std::string{
+            "GameRef.queueEvent: camera render host unavailable"};
       const auto parsed = stockScan(*bytes, "%*s %d %d %d %d %d");
       if (parsed.values.empty() || parsed.values[0].i == 0)
-        return std::string{"GameRef.queueEvent: camera render viewport unavailable"};
+        return std::string{
+            "GameRef.queueEvent: camera render viewport unavailable"};
       const auto sector = game.resources->resolve(node->sectorLink.owner);
       if (!sector || !sector.packNode || !sector.packNode->groundFactory)
-        return std::string{"GameRef.queueEvent: camera sector fog state unavailable"};
-      const auto range = vmActiveStaticField(*arena, "java.util.Config", "camera_ext_viewrange");
-      if (!range || !std::holds_alternative<float>(*range) || !std::isfinite(std::get<float>(*range)))
+        return std::string{
+            "GameRef.queueEvent: camera sector fog state unavailable"};
+      const auto range = vmActiveStaticField(*arena, "java.util.Config",
+                                             "camera_ext_viewrange");
+      if (!range || !std::holds_alternative<float>(*range) ||
+          !std::isfinite(std::get<float>(*range)))
         return std::string{"GameRef.queueEvent: camera view range unavailable"};
       auto *camera = node->cameraDevice->cameraNode();
       if (!camera || !camera->camera)
         return std::string{"GameRef.queueEvent: camera resource unavailable"};
-      applyCameraSectorEnvironment(*camera->camera, *sector.packNode->groundFactory,
+      applyCameraSectorEnvironment(*camera->camera,
+                                   *sector.packNode->groundFactory,
                                    std::get<float>(*range));
-      const auto viewport = game.resources->lookup(static_cast<uint32_t>(parsed.values[0].i), 18);
+      const auto viewport =
+          game.resources->lookup(static_cast<uint32_t>(parsed.values[0].i), 18);
       if (viewport.status != LookupStatus::Found || !viewport.node.worldNode)
         return std::string{"GameRef.queueEvent: camera viewport unavailable"};
-      uint32_t priority = parsed.values.size() > 3 ? static_cast<uint32_t>(parsed.values[3].i) : 0;
-      if (priority > 0xffff0000u) priority = 0;
+      uint32_t priority = parsed.values.size() > 3
+                              ? static_cast<uint32_t>(parsed.values[3].i)
+                              : 0;
+      if (priority > 0xffff0000u)
+        priority = 0;
       int32_t signedPriority;
       std::memcpy(&signedPriority, &priority, sizeof priority);
       std::string error;
-      if (!node->cameraDevice->attachViewport(*game.resources, *game.renderer, *viewport.node.worldNode,
-                                              signedPriority, std::get<float>(*range), error))
+      if (!node->cameraDevice->attachViewport(
+              *game.resources, *game.renderer, *viewport.node.worldNode,
+              signedPriority, std::get<float>(*range), error))
         return "GameRef.queueEvent: " + error;
+      return std::monostate{};
+    }
+    if (!name.values.empty() && name.values[0].s == "hide") {
+      const auto parsed = stockScan(*bytes, "%*s %d");
+      if (parsed.values.empty() || parsed.values[0].i == 0)
+        return std::monostate{};
+      if (!game.resources)
+        return std::string{"GameRef.queueEvent: camera hide host unavailable"};
+      const auto viewport =
+          game.resources->lookup(static_cast<uint32_t>(parsed.values[0].i), 18);
+      if (viewport.status != LookupStatus::Found || !viewport.node.worldNode)
+        return std::string{
+            "GameRef.queueEvent: camera hide viewport unavailable"};
+      std::string error;
+      if (!node->cameraDevice->detachViewport(*viewport.node.worldNode, error))
+        return "GameRef.queueEvent: " + error;
+      return std::monostate{};
+    }
+    if (!name.values.empty() && name.values[0].s == "deactivate") {
+      // Stock FUN_0043a4b0 clears the active flag (+0x10 bit 0) and unlinks
+      // the camera from its owner's step list; the port has no active flag
+      // or step list for camera devices, so this is a logged gap.
+      static bool reported = false;
+      if (!reported) {
+        reported = true;
+        runlog::event(runlog::EventKind::Note,
+                      "gap: camera deactivate does not unlink the camera "
+                      "from stepping (FUN_0043a4b0)");
+      }
       return std::monostate{};
     }
     if (!applyCameraCommand(node->cameraDevice->commands, *bytes))
       return "GameRef.queueEvent: unsupported camera command: " + *bytes;
-    if (!name.values.empty() && name.values[0].s == "zoom")
-      return std::string{"GameRef.queueEvent: camera zoom simulation unsupported"};
+    if (!name.values.empty() && name.values[0].s == "zoom") {
+      // FUN_004386a0 lerps the +0x180 zoom toward +0x184 every physics step
+      // and FUN_00438b60 consumes it; that per-step lerp is not ported for
+      // free (unarmed) camera bodies, so the zoom command is recorded and the
+      // gap is logged rather than hidden.
+      const auto &commands = node->cameraDevice->commands;
+      if (commands.zoomCurrent != commands.zoomTarget)
+        runlog::event(runlog::EventKind::Note,
+                      "gap: camera zoom lerp not simulated (current %.1f "
+                      "target %.1f speed %.1f)",
+                      static_cast<double>(commands.zoomCurrent),
+                      static_cast<double>(commands.zoomTarget),
+                      static_cast<double>(commands.zoomSpeed));
+    }
     return std::monostate{};
   }
   if (node->nativeDevice.empty() && node->eventSubscriptionsKnownEmpty &&
@@ -993,8 +1274,23 @@ NativeResult gameRefQueueEvent(const std::vector<VmValue> &args,
     if (command == "mode") {
       int32_t mode = 0, styleId = 0;
       char glyph = 0;
-      if (!(input >> mode >> glyph >> styleId) || glyph != 'J' || mode != 0)
+      if (!(input >> mode >> glyph >> styleId))
         return std::string{"GameRef.queueEvent: unsupported cursor mode"};
+      // Stock 00462...: the glyph character picks the host cursor handle
+      // through FUN_004b7bd0; unlisted characters select cursor 0.
+      int32_t hostCursor = 0;
+      switch (glyph) {
+      case '1': case 'G': hostCursor = 1; break;
+      case '2': case 'M': hostCursor = 2; break;
+      case '3': case 'W': hostCursor = 3; break;
+      case '4': case 'A': hostCursor = 4; break;
+      case '5': case 'D': hostCursor = 5; break;
+      case '6': hostCursor = 6; break;
+      case '7': hostCursor = 7; break;
+      case '8': hostCursor = 8; break;
+      case '9': hostCursor = 9; break;
+      default: break;
+      }
       if (!game.resources || !game.world->cursorSelector())
         return std::string{"GameRef.queueEvent: cursor host unavailable"};
       if (node->cursor->pointer.owner)
@@ -1006,7 +1302,8 @@ NativeResult gameRefQueueEvent(const std::vector<VmValue> &args,
           found.status == LookupStatus::MountRefused)
         return "GameRef.queueEvent: cursor style lookup: " + found.detail;
       std::string cursorError;
-      if (!game.world->cursorSelector()(0, game.world->systemCursor() != 0,
+      if (!game.world->cursorSelector()(hostCursor,
+                                        game.world->systemCursor() != 0,
                                         cursorError))
         return "GameRef.queueEvent: cursor host: " + cursorError;
       node->cursor->mode = mode;
@@ -1073,18 +1370,26 @@ NativeResult gameRefQueueEvent(const std::vector<VmValue> &args,
       if (player.controllable.owner == target)
         return std::monostate{};
       if (player.controllable.owner && player.controllable.owner != target)
-        return std::string{"GameRef.queueEvent: switching controllable unsupported"};
+        return std::string{
+            "GameRef.queueEvent: switching controllable unsupported"};
       if (player.camera.owner || player.osd.owner || player.renderTarget.owner)
-        return std::string{"GameRef.queueEvent: controllable activation camera or osd unsupported"};
+        return std::string{"GameRef.queueEvent: controllable activation camera "
+                           "or osd unsupported"};
       if (!(target->eventMask & 0x10))
-        return std::string{"GameRef.queueEvent: controllable car event mask unsupported"};
-      if ((!target->eventSubscriptionsKnownEmpty && target->eventSubscriptions.empty()) ||
-          std::any_of(target->eventSubscriptions.begin(), target->eventSubscriptions.end(),
-                      [](const auto &entry) { return entry && entry->target.owner; }))
-        return std::string{"GameRef.queueEvent: controllable car subscriptions unsupported"};
+        return std::string{
+            "GameRef.queueEvent: controllable car event mask unsupported"};
+      if ((!target->eventSubscriptionsKnownEmpty &&
+           target->eventSubscriptions.empty()) ||
+          std::any_of(target->eventSubscriptions.begin(),
+                      target->eventSubscriptions.end(), [](const auto &entry) {
+                        return entry && entry->target.owner;
+                      }))
+        return std::string{
+            "GameRef.queueEvent: controllable car subscriptions unsupported"};
       auto *seat = target->carInstance->selectSeat(node->instanceId);
       if (!seat)
-        return std::string{"GameRef.queueEvent: controllable car has no available seat"};
+        return std::string{
+            "GameRef.queueEvent: controllable car has no available seat"};
       auto collision = std::make_unique<EventSubscription>();
       collision->mask = 1;
       setLinkOwner(collision->target, node);
@@ -1094,47 +1399,72 @@ NativeResult gameRefQueueEvent(const std::vector<VmValue> &args,
       setLinkOwner(seat->renderInstance, player.renderInstance.owner);
       setLinkOwner(seat->osd, nullptr);
       char damage[64];
-      std::snprintf(damage, sizeof damage, "%.3f", static_cast<double>(player.config.damageMultiplier));
+      std::snprintf(damage, sizeof damage, "%.3f",
+                    static_cast<double>(player.config.damageMultiplier));
       const auto parsedDamage = stockScan(damage, "%f");
-      target->carInstance->damageMultiplier = parsedDamage.values.empty() ? 1.0f : parsedDamage.values[0].f;
+      target->carInstance->damageMultiplier =
+          parsedDamage.values.empty() ? 1.0f : parsedDamage.values[0].f;
       target->eventSubscriptions.push_back(std::move(collision));
       target->eventSubscriptionsKnownEmpty = false;
       node->eventMask |= 1;
       setLinkOwner(player.controllable, target);
+      game.world->logViewportAttachments();
+      if (seat->renderInstance.cachedValue) {
+        auto *playerRender =
+            game.world->findInstance(seat->renderInstance.cachedValue);
+        runlog::event(
+            runlog::EventKind::Note,
+            "player render instance: id=0x%x node=%p type=%u loaded=%d",
+            seat->renderInstance.cachedValue, (const void *)playerRender,
+            playerRender ? static_cast<unsigned>(playerRender->type) : 0u,
+            playerRender && playerRender->loaded ? 1 : 0);
+      }
       if (seat->renderInstance.owner && !player.driverPoseParityReported) {
-        runlog::event(runlog::EventKind::Note, "player car activation: driver skeletal animation not implemented");
-        std::fprintf(stderr, "player car activation: driver skeletal animation not implemented\n");
+        runlog::event(
+            runlog::EventKind::Note,
+            "player car activation: driver skeletal animation not implemented");
         player.driverPoseParityReported = true;
       }
       return std::monostate{};
     }
     if (command == "viewport" || command == "camera") {
       if (!node->player || !game.resources)
-        return std::string{"GameRef.queueEvent: player camera state unavailable"};
+        return std::string{
+            "GameRef.queueEvent: player camera state unavailable"};
       const auto parsed = stockScan(*bytes, "%*s %d");
-      const uint32_t id = parsed.values.empty() ? 0u : static_cast<uint32_t>(parsed.values[0].i);
-      const auto target = game.resources->lookup(id, command == "viewport" ? 18 : 1);
-      if (target.status == LookupStatus::StockCrash || target.status == LookupStatus::MountRefused)
+      const uint32_t id = parsed.values.empty()
+                              ? 0u
+                              : static_cast<uint32_t>(parsed.values[0].i);
+      const auto target =
+          game.resources->lookup(id, command == "viewport" ? 18 : 1);
+      if (target.status == LookupStatus::StockCrash ||
+          target.status == LookupStatus::MountRefused)
         return "GameRef.queueEvent: player target lookup: " + target.detail;
-      LinkOwner *owner = target.status == LookupStatus::Found ? target.node.owner : nullptr;
+      LinkOwner *owner =
+          target.status == LookupStatus::Found ? target.node.owner : nullptr;
       auto &player = *node->player;
       if (command == "viewport") {
         setLinkOwner(player.viewport, owner);
         if (player.renderTarget.owner && player.viewport.owner)
-          return std::string{"GameRef.queueEvent: player render event unsupported"};
+          return std::string{
+              "GameRef.queueEvent: player render event unsupported"};
         return std::monostate{};
       }
       setLinkOwner(player.camera, owner);
       if (owner) {
         auto *camera = game.world->nodeFor(owner);
-        if (!camera || camera->nativeDevice != "camera" || !camera->cameraDevice || !camera->loaded)
-          return std::string{"GameRef.queueEvent: player camera target unsupported"};
+        if (!camera || camera->nativeDevice != "camera" ||
+            !camera->cameraDevice || !camera->loaded)
+          return std::string{
+              "GameRef.queueEvent: player camera target unsupported"};
         if (!camera->eventSubscriptionsKnownEmpty)
-          return std::string{"GameRef.queueEvent: camera subscriptions unsupported"};
+          return std::string{
+              "GameRef.queueEvent: camera subscriptions unsupported"};
         if (camera->eventMask & 0x10) {
           auto *physics = camera->cameraDevice->physicsNode();
           if (!physics || game.world->dynamicBody(*physics).expired())
-            return std::string{"GameRef.queueEvent: camera physics unavailable"};
+            return std::string{
+                "GameRef.queueEvent: camera physics unavailable"};
           setLinkOwner(camera->cameraDevice->controller, node);
         }
       }
@@ -1143,12 +1473,14 @@ NativeResult gameRefQueueEvent(const std::vector<VmValue> &args,
       if (player.controllable.owner) {
         auto *car = game.world->nodeFor(player.controllable.owner);
         auto *camera = owner ? game.world->nodeFor(owner) : nullptr;
-        if (!car || !car->carInstance || car->nativeDevice != "car" || !camera ||
-            !camera->cameraDevice)
-          return std::string{"GameRef.queueEvent: player camera activation target unavailable"};
+        if (!car || !car->carInstance || car->nativeDevice != "car" ||
+            !camera || !camera->cameraDevice)
+          return std::string{"GameRef.queueEvent: player camera activation "
+                             "target unavailable"};
         auto *target = game.world->nodeFor(car->carInstance->physicsRoot.owner);
         if (!target || target->type != 2)
-          return std::string{"GameRef.queueEvent: player camera car physics unavailable"};
+          return std::string{
+              "GameRef.queueEvent: player camera car physics unavailable"};
         if (camera->eventMask & 0x10) {
           CameraFollowCommand look;
           look.look = true;
@@ -1165,48 +1497,67 @@ NativeResult gameRefQueueEvent(const std::vector<VmValue> &args,
         }
         auto *seat = car->carInstance->findSeat(node->instanceId);
         if (!seat)
-          return std::string{"GameRef.queueEvent: player camera seat unavailable"};
+          return std::string{
+              "GameRef.queueEvent: player camera seat unavailable"};
         setLinkOwner(seat->camera, owner);
         size_t occupied = 0, cameras = 0, seatIndex = 0;
         for (size_t i = 0; i < car->carInstance->seats.size(); ++i) {
           const auto &candidate = car->carInstance->seats[i];
-          if (candidate.get() == seat) seatIndex = i;
-          if (candidate && candidate->player.owner) ++occupied;
-          if (candidate && candidate->camera.owner) ++cameras;
+          if (candidate.get() == seat)
+            seatIndex = i;
+          if (candidate && candidate->player.owner)
+            ++occupied;
+          if (candidate && candidate->camera.owner)
+            ++cameras;
         }
         if (cameras && cameras != occupied)
-          return std::string{"GameRef.queueEvent: mixed seat camera activation unsupported"};
-        const auto source = game.resources->resolve(car->carInstance->prototypeSource.owner);
-        const auto *prototype = source.script ? source.script->car.get() : nullptr;
-        if (!prototype || !prototype->cameraSettings || seatIndex >= prototype->config.drivers.size())
-          return std::string{"GameRef.queueEvent: seat camera configuration unavailable"};
+          return std::string{
+              "GameRef.queueEvent: mixed seat camera activation unsupported"};
+        const auto source =
+            game.resources->resolve(car->carInstance->prototypeSource.owner);
+        const auto *prototype =
+            source.script ? source.script->car.get() : nullptr;
+        if (!prototype || !prototype->cameraSettings ||
+            seatIndex >= prototype->config.drivers.size())
+          return std::string{
+              "GameRef.queueEvent: seat camera configuration unavailable"};
         if ((camera->eventMask & 0x10) &&
-            !camera->cameraDevice->applySeatFollow(*target, prototype->config.drivers[seatIndex],
-                                                   *prototype->cameraSettings))
-          return std::string{"GameRef.queueEvent: seat camera configuration unsupported"};
+            !camera->cameraDevice->applySeatFollow(
+                *target, prototype->config.drivers[seatIndex],
+                *prototype->cameraSettings))
+          return std::string{
+              "GameRef.queueEvent: seat camera configuration unsupported"};
         const char *block = "none";
-        if (!game.world->directCameraFollowReady(*camera->cameraDevice, &block)) {
-          runlog::event(runlog::EventKind::Note,
-                        "camfollow1 {\"v\":1,\"p\":%u,\"c\":%u,\"car\":%u,\"body\":%u,\"look\":%u,\"move\":%u,\"r\":%u,\"reason\":\"sim\",\"w\":\"%s\"}",
-                        node->instanceId, camera->instanceId, car->instanceId,
-                        target->instanceId,
-                        camera->cameraDevice->lookTarget.cachedValue,
-                        camera->cameraDevice->moveTarget.cachedValue,
-                        game.world->dynamicBody(*target).expired() ? 0u : 1u,
-                        block ? block : "none");
-          return std::string{"GameRef.queueEvent: player camera follow simulation unsupported"};
+        if (!game.world->directCameraFollowReady(*camera->cameraDevice,
+                                                 &block)) {
+          runlog::event(
+              runlog::EventKind::Note,
+              "camfollow1 "
+              "{\"v\":1,\"p\":%u,\"c\":%u,\"car\":%u,\"body\":%u,\"look\":%u,"
+              "\"move\":%u,\"r\":%u,\"reason\":\"sim\",\"w\":\"%s\"}",
+              node->instanceId, camera->instanceId, car->instanceId,
+              target->instanceId, camera->cameraDevice->lookTarget.cachedValue,
+              camera->cameraDevice->moveTarget.cachedValue,
+              game.world->dynamicBody(*target).expired() ? 0u : 1u,
+              block ? block : "none");
+          return std::string{"GameRef.queueEvent: player camera follow "
+                             "simulation unsupported"};
         }
         return std::monostate{};
       }
       if (player.renderTarget.owner && player.viewport.owner)
-        return std::string{"GameRef.queueEvent: player render event unsupported"};
+        return std::string{
+            "GameRef.queueEvent: player render event unsupported"};
       return std::monostate{};
     }
     if (command == "renderinstance") {
       if (!node->player || !game.resources)
-        return std::string{"GameRef.queueEvent: player renderinstance lookup unavailable"};
+        return std::string{
+            "GameRef.queueEvent: player renderinstance lookup unavailable"};
       const auto parsed = stockScan(*bytes, "%*s %d");
-      const uint32_t id = parsed.values.empty() ? 0u : static_cast<uint32_t>(parsed.values[0].i);
+      const uint32_t id = parsed.values.empty()
+                              ? 0u
+                              : static_cast<uint32_t>(parsed.values[0].i);
       if (node->player->renderInstance.cachedValue == id)
         return std::monostate{};
       if (!id) {
@@ -1214,40 +1565,93 @@ NativeResult gameRefQueueEvent(const std::vector<VmValue> &args,
         return std::monostate{};
       }
       const auto target = game.resources->lookup(id, 0);
-      if (target.status == LookupStatus::StockCrash || target.status == LookupStatus::MountRefused)
-        return "GameRef.queueEvent: player renderinstance lookup: " + target.detail;
+      if (target.status == LookupStatus::StockCrash ||
+          target.status == LookupStatus::MountRefused)
+        return "GameRef.queueEvent: player renderinstance lookup: " +
+               target.detail;
       setLinkOwner(node->player->renderInstance,
-                   target.status == LookupStatus::Found ? target.node.owner : nullptr);
+                   target.status == LookupStatus::Found ? target.node.owner
+                                                        : nullptr);
       return std::monostate{};
     }
     if (command == "osd") {
-      // Stock FUN_0042df70: a different id is linked with FUN_00546070(id, 1, 0),
-      // then `activate 0x%x 0x%x 0x%x` is queued on the current controllable.
-      // The three words are the player instance (device +8), the camera id
+      // Stock FUN_0042df70: a different id is linked with FUN_00546070(id, 1,
+      // 0), then `activate 0x%x 0x%x 0x%x` is queued on the current
+      // controllable. The three words are the player instance (device +8), the
+      // camera id
       // (+0x218c) and the render-instance id (+0x219c).
       if (!node->player || !game.resources)
         return std::string{"GameRef.queueEvent: player osd state unavailable"};
       const auto parsed = stockScan(*bytes, "%*s %d");
-      const uint32_t id = parsed.values.empty() ? 0u : static_cast<uint32_t>(parsed.values[0].i);
+      const uint32_t id = parsed.values.empty()
+                              ? 0u
+                              : static_cast<uint32_t>(parsed.values[0].i);
       auto &player = *node->player;
       if (player.osd.cachedValue == id)
         return std::monostate{};
       const auto target = game.resources->lookup(id, 1);
-      if (target.status == LookupStatus::StockCrash || target.status == LookupStatus::MountRefused)
+      {
+        static bool osdNodeLogged = false;
+        if (!osdNodeLogged) {
+          auto *osdByWorld = game.world->findInstance(id);
+          osdNodeLogged = true;
+          runlog::event(
+              runlog::EventKind::Note,
+              "osd node: id=0x%x lookupFound=%d lookupWorldNode=%p "
+              "worldFind=%p type=%u loaded=%d class=%s",
+              id, target.status == LookupStatus::Found ? 1 : 0,
+              target.status == LookupStatus::Found
+                  ? (const void *)target.node.worldNode
+                  : nullptr,
+              (const void *)osdByWorld,
+              osdByWorld ? static_cast<unsigned>(osdByWorld->type) : 0u,
+              osdByWorld && osdByWorld->loaded ? 1 : 0,
+              osdByWorld && osdByWorld->scriptReceiver &&
+                      osdByWorld->scriptReceiver->runtimeClass
+                  ? osdByWorld->scriptReceiver->runtimeClass->name.c_str()
+                  : "-");
+        }
+      }
+      if (target.status == LookupStatus::StockCrash ||
+          target.status == LookupStatus::MountRefused)
         return "GameRef.queueEvent: player osd lookup: " + target.detail;
-      setLinkOwner(player.osd, target.status == LookupStatus::Found ? target.node.owner : nullptr);
+      setLinkOwner(player.osd, target.status == LookupStatus::Found
+                                   ? target.node.owner
+                                   : nullptr);
+      {
+        static bool osdLogged = false;
+        if (!osdLogged) {
+          osdLogged = true;
+          const char *osdName =
+              target.status == LookupStatus::Found && target.node.packNode
+                  ? target.node.packNode->name.c_str()
+                  : "";
+          runlog::event(runlog::EventKind::Note,
+                        "player osd command: id=0x%x status=%s name=%s", id,
+                        target.status == LookupStatus::Found
+                            ? "found"
+                            : target.detail.c_str(),
+                        osdName);
+        }
+      }
       if (!player.controllable.owner)
-        return std::string{"GameRef.queueEvent: player osd controllable unavailable"};
+        return std::string{
+            "GameRef.queueEvent: player osd controllable unavailable"};
       auto *car = game.world->nodeFor(player.controllable.owner);
       if (!car || !car->scriptReceiver)
-        return std::string{"GameRef.queueEvent: player osd controllable unavailable"};
+        return std::string{
+            "GameRef.queueEvent: player osd controllable unavailable"};
       const auto *carState = nativeResourceState(car->scriptReceiver, arena);
       if (!carState)
-        return std::string{"GameRef.queueEvent: player osd controllable receiver unavailable"};
-      const auto carHandle = static_cast<int32_t>(carState - arena->resourceStates.data()) + 1;
+        return std::string{
+            "GameRef.queueEvent: player osd controllable receiver unavailable"};
+      const auto carHandle =
+          static_cast<int32_t>(carState - arena->resourceStates.data()) + 1;
       const auto carBinding = game.bindings.find(carHandle);
-      if (carBinding == game.bindings.end() || !carBinding->second || !carBinding->second->link.owner)
-        return std::string{"GameRef.queueEvent: player osd controllable receiver unavailable"};
+      if (carBinding == game.bindings.end() || !carBinding->second ||
+          !carBinding->second->link.owner)
+        return std::string{
+            "GameRef.queueEvent: player osd controllable receiver unavailable"};
       char activate[96];
       std::snprintf(activate, sizeof activate, "activate 0x%x 0x%x 0x%x",
                     static_cast<unsigned>(node->instanceId),
@@ -1255,10 +1659,13 @@ NativeResult gameRefQueueEvent(const std::vector<VmValue> &args,
                     static_cast<unsigned>(player.renderInstance.cachedValue));
       const auto text = internStringResult(activate, arena, classes);
       if (!std::holds_alternative<VmValue>(text))
-        return std::string{"GameRef.queueEvent: player osd activate string unavailable"};
-      const auto *textObject = std::get_if<const VmObject *>(&std::get<VmValue>(text));
+        return std::string{
+            "GameRef.queueEvent: player osd activate string unavailable"};
+      const auto *textObject =
+          std::get_if<const VmObject *>(&std::get<VmValue>(text));
       if (!textObject || !*textObject)
-        return std::string{"GameRef.queueEvent: player osd activate string unavailable"};
+        return std::string{
+            "GameRef.queueEvent: player osd activate string unavailable"};
       const VmObject *sender = nullptr;
       const auto queued = gameRefQueueEvent(
           {VmValue{sender}, VmValue{int32_t{0x10}}, VmValue{*textObject}},
@@ -1268,15 +1675,15 @@ NativeResult gameRefQueueEvent(const std::vector<VmValue> &args,
           continue;
         auto *textNode = game.world->nodeFor(textLink.owner);
         if (!textNode || !game.world->queueDestroy(*textNode))
-          return std::string{"GameRef.queueEvent: player osd debug text release unsupported"};
+          return std::string{
+              "GameRef.queueEvent: player osd debug text release unsupported"};
       }
       if (const auto *err = std::get_if<std::string>(&queued))
         return *err;
       return std::monostate{};
     }
-    if (
-        command == "leave" ||
-        command == "control" || command == "release" || command == "display") {
+    if (command == "leave" || command == "control" || command == "release" ||
+        command == "display") {
       return std::monostate{};
     }
   }
@@ -1304,10 +1711,13 @@ NativeResult gameRefQueueEvent(const std::vector<VmValue> &args,
       // 0 skips cockpit text and gauges. A seated player then needs getInfo
       // 0x15, which this path does not implement.
       if (!game.resources || !game.world)
-        return std::string{"GameRef.queueEvent: car activate resource world unavailable"};
+        return std::string{
+            "GameRef.queueEvent: car activate resource world unavailable"};
       const auto parsed = stockScan(*bytes, "%*s %d %d %d");
       const auto word = [&](size_t index) {
-        return parsed.values.size() > index ? static_cast<uint32_t>(parsed.values[index].i) : 0u;
+        return parsed.values.size() > index
+                   ? static_cast<uint32_t>(parsed.values[index].i)
+                   : 0u;
       };
       const uint32_t playerId = word(0);
       const uint32_t cameraId = word(1);
@@ -1318,7 +1728,8 @@ NativeResult gameRefQueueEvent(const std::vector<VmValue> &args,
         seat = inst.findSeat(0);
       if (!seat)
         return std::string{"GameRef.queueEvent: car activate seat unavailable"};
-      auto linkType1 = [&](OwnerLink &link, uint32_t id) -> std::optional<std::string> {
+      auto linkType1 = [&](OwnerLink &link,
+                           uint32_t id) -> std::optional<std::string> {
         if (link.cachedValue == id)
           return std::nullopt;
         if (id == 0) {
@@ -1326,7 +1737,8 @@ NativeResult gameRefQueueEvent(const std::vector<VmValue> &args,
           return std::nullopt;
         }
         const auto found = game.resources->lookup(id, 1);
-        if (found.status == LookupStatus::StockCrash || found.status == LookupStatus::MountRefused)
+        if (found.status == LookupStatus::StockCrash ||
+            found.status == LookupStatus::MountRefused)
           return "GameRef.queueEvent: car activate lookup: " + found.detail;
         if (found.status == LookupStatus::Found)
           setLinkOwner(link, found.node.owner);
@@ -1339,27 +1751,51 @@ NativeResult gameRefQueueEvent(const std::vector<VmValue> &args,
       if (const auto err = linkType1(seat->camera, cameraId))
         return *err;
       if (!alreadySeated && seat->renderInstance.cachedValue != 0)
-        return std::string{"GameRef.queueEvent: car activate driver pose teardown unsupported"};
-      const auto render = resourceRefSet(*game.resources, seat->renderInstance, renderId);
-      if (render.status == RefSetStatus::StockCrash || render.status == RefSetStatus::MountRefused)
-        return "GameRef.queueEvent: car activate render lookup: " + render.detail;
+        return std::string{"GameRef.queueEvent: car activate driver pose "
+                           "teardown unsupported"};
+      const auto render =
+          resourceRefSet(*game.resources, seat->renderInstance, renderId);
+      if (render.status == RefSetStatus::StockCrash ||
+          render.status == RefSetStatus::MountRefused)
+        return "GameRef.queueEvent: car activate render lookup: " +
+               render.detail;
       auto *playerNode = game.world->nodeFor(seat->player.owner);
       if (playerNode && seat->player.cachedValue != 0 && playerNode->loaded) {
         if (playerNode->type == 8)
-          return std::string{"GameRef.queueEvent: car activate driver pose unsupported"};
+          return std::string{
+              "GameRef.queueEvent: car activate driver pose unsupported"};
         if (playerNode->type == 1 && playerNode->scriptReceiver) {
           if (!arena->callScript)
-            return std::string{"GameRef.queueEvent: car activate player getInfo unsupported"};
+            return std::string{
+                "GameRef.queueEvent: car activate player getInfo unsupported"};
           const auto answer = arena->callScript(
               playerNode->scriptReceiver, "getInfo", {VmValue{int32_t{0x1a}}});
           if (!answer.ok)
-            return "GameRef.queueEvent: car activate player getInfo: " + answer.error;
+            return "GameRef.queueEvent: car activate player getInfo: " +
+                   answer.error;
         }
       }
       // FUN_00448e60. Seat count is the car's seat list. Stock reads that count
       // from the event receiver at +0x177c and writes the mode on the car.
       int32_t playerIds = 0;
       int32_t cameraIds = 0;
+      {
+        static bool seatIdsLogged = false;
+        if (!seatIdsLogged) {
+          int32_t p0 = 0, c0 = 0;
+          for (const auto &s : inst.seats) {
+            if (s && s->player.cachedValue)
+              ++p0;
+            if (s && s->camera.cachedValue)
+              ++c0;
+          }
+          seatIdsLogged = true;
+          runlog::event(
+              runlog::EventKind::Note,
+              "car activate seat ids: seats=%zu players=%d cameras=%d",
+              inst.seats.size(), p0, c0);
+        }
+      }
       const auto seatCount = static_cast<int32_t>(inst.seats.size());
       for (int32_t i = 0; i < seatCount; ++i) {
         const auto &candidate = inst.seats[static_cast<size_t>(i)];
@@ -1384,30 +1820,52 @@ NativeResult gameRefQueueEvent(const std::vector<VmValue> &args,
       } else {
         inst.seatCameraMode = 0;
       }
-      // Mode 1 builds a chase pose from the car body. That branch is not this path.
-      if (inst.seatCameraMode != 0)
-        return std::string{"GameRef.queueEvent: car activate camera pose unsupported"};
       int32_t seatIndex = 0;
       for (int32_t i = 0; i < seatCount; ++i)
         if (inst.seats[static_cast<size_t>(i)].get() == seat)
           seatIndex = i;
-      const auto *poseSeat = inst.seats[static_cast<size_t>(seatIndex)].get();
-      // FUN_0048ce30 returns before sending commands when the seat camera id is 0.
+      const auto *poseSeat =
+          inst.seats[static_cast<size_t>(
+                         inst.seatCameraMode ? inst.seatCameraSeat : seatIndex)]
+              .get();
+      // FUN_0048ce30 returns before sending commands when the seat camera id is
+      // 0.
       const auto *prototype = nodePrototype(*node, *game.world);
       if (poseSeat && poseSeat->camera.cachedValue != 0) {
-        inst.seatCameraPose =
-            seatCameraPoseFromDriver(*poseSeat, prototype, inst.cameraPoseTarget);
+        if (inst.seatCameraMode) {
+          if (!inst.carPhysics || !inst.carPhysics->root ||
+              !inst.carPhysics->root->proto || !inst.physicsRoot.owner)
+            return std::string{
+                "GameRef.queueEvent: car activate chase body unavailable"};
+          const float radius = inst.carPhysics->root->proto->shape.boundRadius;
+          const float scale = prototype && prototype->cameraSettings
+                                  ? prototype->cameraSettings->distanceScale
+                                  : 0.0f;
+          SeatCameraPose pose;
+          pose.target = inst.physicsRoot.cachedValue;
+          pose.lookOffset = {0.0f, 0.0f, -20.0f};
+          pose.moveDistance = 0.01f;
+          pose.moveRotation = {0.0f, -(radius * 0.1f + 1.0f),
+                               -(radius + scale)};
+          pose.hasZoom = true;
+          pose.zoom = 100.0f;
+          inst.seatCameraPose = pose;
+        } else {
+          inst.seatCameraPose = seatCameraPoseFromDriver(
+              *poseSeat, prototype, inst.physicsRoot.cachedValue);
+        }
         if (auto *cameraNode = game.world->nodeFor(poseSeat->camera.owner))
-          if (const auto err = applySeatCameraPose(*game.resources, *cameraNode, *inst.seatCameraPose))
+          if (const auto err = applySeatCameraPose(*game.resources, *cameraNode,
+                                                   *inst.seatCameraPose))
             return *err;
       }
       // FUN_00448f20 builds the driver skeleton. Same visual gap as player
       // activation: record it and keep going.
       if (playerNode && playerNode->player && seat->renderInstance.owner &&
           !playerNode->player->driverPoseParityReported) {
-        runlog::event(runlog::EventKind::Note,
-                      "player car activation: driver skeletal animation not implemented");
-        std::fprintf(stderr, "player car activation: driver skeletal animation not implemented\n");
+        runlog::event(
+            runlog::EventKind::Note,
+            "player car activation: driver skeletal animation not implemented");
         playerNode->player->driverPoseParityReported = true;
       }
       for (OwnerLink &link : seat->links)
@@ -1415,22 +1873,47 @@ NativeResult gameRefQueueEvent(const std::vector<VmValue> &args,
           link.cachedValue = 0;
       // Seat osd id is stock +0x5c. Zero skips cockpit text and gauges. The
       // other arm creates them only for the active driver, param_3 == +0x1780.
-      const int32_t activeDriver = prototype ? prototype->config.defaultDriver : 0;
-      constexpr std::array<int, 10> cockpitSlots{{25, 26, 1, 3, 4, 5, 6, 7, 8, 21}};
+      const int32_t activeDriver =
+          prototype ? prototype->config.defaultDriver : 0;
+      constexpr std::array<int, 10> cockpitSlots{
+          {25, 26, 1, 3, 4, 5, 6, 7, 8, 21}};
+      static bool gaugeGateLogged = false;
+      if (seatIndex == activeDriver && !gaugeGateLogged) {
+        gaugeGateLogged = true;
+        runlog::event(
+            runlog::EventKind::Note,
+            "gauge gate: seat=%zu osd=0x%x activeDriver=%d "
+            "links=%zu (25=0x%x 26=0x%x 1=0x%x 3=0x%x)",
+            seatIndex, seat->osd.cachedValue, activeDriver, seat->links.size(),
+            seat->links.size() > 25 ? seat->links[25].cachedValue : 0u,
+            seat->links.size() > 26 ? seat->links[26].cachedValue : 0u,
+            seat->links.size() > 1 ? seat->links[1].cachedValue : 0u,
+            seat->links.size() > 3 ? seat->links[3].cachedValue : 0u);
+      }
       if (seat->osd.cachedValue != 0 && seatIndex == activeDriver) {
         for (const int index : cockpitSlots) {
           if (seat->links[static_cast<size_t>(index)].cachedValue == 0)
-            return std::string{"GameRef.queueEvent: car activate gauges unsupported"};
+            return std::string{
+                "GameRef.queueEvent: car activate gauges unsupported"};
         }
       }
-      // Car +0x1edc, then the player id at each seat, stride 0x4a8 from +0x128.
-      // Every id 0 returns. A nonzero id relinks and calls FUN_00426470(link, 0x15, 0).
-      // That call is not implemented on this path.
+      // FUN_00448d70 (all.c:57388): clear car +0x1edc, scan seats for the
+      // first nonzero player id (+0x128, stride 0x4a8), relink the car's
+      // active-player list at +0x1ee0, and store the player device's message
+      // 0x15 reply. The reply is player +0x242c, a debug value written only
+      // by console AI commands, so a fresh run stores 0. Stock never fails
+      // here; an unlinked or non-player seat just stores 0. The +0x1ee0 list
+      // head itself has no host consumer yet.
       inst.activateInfo = 0;
       for (int32_t i = 0; i < seatCount; ++i) {
         const auto &candidate = inst.seats[static_cast<size_t>(i)];
-        if (candidate && candidate->player.cachedValue != 0)
-          return std::string{"GameRef.queueEvent: car activate info 0x15 unsupported"};
+        if (!candidate || candidate->player.cachedValue == 0)
+          continue;
+        if (auto *occupiedPlayer = game.world->nodeFor(candidate->player.owner))
+          if (occupiedPlayer->nativeDevice == "player" &&
+              occupiedPlayer->player)
+            inst.activateInfo = occupiedPlayer->player->debugAiValue;
+        break;
       }
       return std::monostate{};
     }
@@ -1545,6 +2028,43 @@ NativeResult gameRefQueueEvent(const std::vector<VmValue> &args,
       int32_t schemeId = 0;
       input >> std::setbase(0) >> schemeId;
       inst.colorIndex = schemeId;
+      // FUN_00475ec0: for every body record, when its colour list is
+      // non-empty, FUN_0048c8c0 writes colors[scheme % count] onto that
+      // body's render resource (+0xcc). The render resource is the body's
+      // `renderResource`, which the instance already carries as renderType.
+      inst.bodyTints.clear();
+      if (game.resources && inst.prototypeSource.owner) {
+        const auto proto =
+            game.resources->resolve(inst.prototypeSource.owner);
+        if (proto.script && proto.script->car) {
+          // FUN_00475ec0 walks every indexed body; each record with colours
+          // gets its own render resource written (+0xcc).
+          const auto &config = proto.script->car->config;
+          for (const auto &body : config.bodies) {
+            if (body.kind != CarBodyRecord::Render || body.colors.empty())
+              continue;
+            const size_t index =
+                static_cast<size_t>(schemeId < 0 ? 0 : schemeId) %
+                body.colors.size();
+            // The renderer looks tints up by the remapped resource id
+            // (CarRuntimeInstance::renderType is remapped likewise).
+            uint32_t key = body.renderResource;
+            PackView view;
+            std::string mapErr;
+            if (game.resources->packs().view(
+                    static_cast<uint16_t>(proto.script->resourceId >> 16),
+                    view, mapErr) == PackViewStatus::Ok)
+              key = remapResourceId(
+                  key, ResourceIdMapping{
+                           view.slot,
+                           static_cast<uint32_t>(
+                               game.resources->packs().slotCount()),
+                           view.dependencies});
+            inst.bodyTints[key] =
+                static_cast<uint32_t>(body.colors[index]);
+          }
+        }
+      }
       return std::monostate{};
     }
     if (command == "add_part" || command == "rem_part") {
@@ -1658,16 +2178,67 @@ NativeResult gameRefQueueEvent(const std::vector<VmValue> &args,
       inst.cruiseControl = !inst.cruiseControl;
       return std::monostate{};
     }
-    if (command == "filter" || command == "reset" || command == "reload" ||
-        command == "suspend" ||
-        command == "wakeup" || command == "start" || command == "stop" ||
-        command == "brake" || command == "setsteer" || command == "steerhelp" ||
-        command == "asr" || command == "abs" || command == "esp" ||
-        command == "difflock" || command == "render" || command == "hide" ||
-        command == "activate" || command == "deactivate" || command == "osd" ||
-        command == "damage_multiplier" || command == "control" ||
-        command == "lost") {
+    if (inst.isCar && (command == "brake" || command == "start")) {
+      // 00458c00: brake sets 0x40000; start clears it and 0x4.
+      inst.forcedBrake = command == "brake";
       return std::monostate{};
+    }
+    if (inst.isCar && command == "reset") {
+      float before[3]{};
+      if (inst.carPhysics && inst.carPhysics->root &&
+          inst.carPhysics->root->current < 2)
+        for (unsigned i = 0; i < 3; ++i)
+          before[i] = inst.carPhysics->root->state[inst.carPhysics->root->current]
+                          .vel[i];
+      if (inst.carPhysics)
+        resetCarToRest(*inst.carPhysics);
+      static unsigned resets = 0;
+      if (resets++ < 8) {
+        float length[4]{};
+        if (inst.carPhysics)
+          for (size_t i = 0; i < inst.carPhysics->wheels.size() && i < 4; ++i)
+            if (inst.carPhysics->wheels[i])
+              length[i] = inst.carPhysics->wheels[i]->suspension.length;
+        runlog::event(runlog::EventKind::Note,
+                      "car command 'reset' #%u: root velocity before=(%.2f,%.2f,"
+                      "%.2f), suspension lengths=(%.3f,%.3f,%.3f,%.3f); "
+                      "velocities zeroed, wheel slip cleared, body asleep; "
+                      "steering geometry (0044f4e0/0044fa70) and controller "
+                      "state resets are not ported",
+                      resets, before[0], before[1], before[2], length[0],
+                      length[1], length[2], length[3]);
+      }
+      return std::monostate{};
+    }
+    if (inst.isCar && (command == "suspend" || command == "wakeup")) {
+      if (inst.carPhysics) {
+        if (command == "suspend")
+          suspendCar(*inst.carPhysics);
+        else
+          wakeCar(*inst.carPhysics);
+      }
+      return std::monostate{};
+    }
+    if (command == "filter" || command == "reload" || command == "start" ||
+        command == "stop" || command == "brake" || command == "setsteer" ||
+        command == "steerhelp" || command == "asr" || command == "abs" ||
+        command == "esp" || command == "difflock" || command == "render" ||
+        command == "hide" || command == "activate" || command == "deactivate" ||
+        command == "osd" || command == "damage_multiplier" ||
+        command == "control" || command == "lost") {
+      static std::set<std::string> reportedNoEffect;
+      if (reportedNoEffect.insert(command).second)
+        runlog::event(runlog::EventKind::Note,
+                      "car command '%s' accepted without effect: not ported",
+                      command.c_str());
+      return std::monostate{};
+    }
+    {
+      static std::set<std::string> reportedCarCommands;
+      if (reportedCarCommands.insert(command).second)
+        runlog::event(runlog::EventKind::Note,
+                      "car command unrecognized: '%s' (device %s)",
+                      command.c_str(), node->nativeDevice.c_str());
     }
   }
   if (!node->nativeDevice.empty())
@@ -1744,9 +2315,35 @@ NativeResult gameRefCreate(const std::vector<VmValue> &args,
         prepared.request->nativeDevice == "camera") {
       auto parent = state.resources->lookup(*parentId, 1);
       if (!parent.node ||
-          (parent.node.worldNode && !parent.node.worldNode->loaded) ||
-          (parent.node.packNode && !parent.node.packNode->loaded()))
-        return std::string{"GameRef.create: camera parent unavailable or unloaded"};
+          (parent.node.worldNode && !parent.node.worldNode->loaded))
+        return std::string{
+            "GameRef.create: camera parent unavailable or unloaded"};
+      if (parent.node.packNode && !parent.node.packNode->loaded()) {
+        // FUN_0053a5e0: an unloaded parent is loaded synchronously at
+        // priority 1.0 before the child is created.
+        auto &pack = *parent.node.packNode;
+        pack.field6c = 1.0f;
+        std::string loadError;
+        if (!state.resources->loadEmptyGameParent(pack, loadError) &&
+            !state.resources->loadPassiveSpatialGame(pack, loadError)) {
+          GameResourcePayload payload;
+          std::string inspectError;
+          if (state.resources->inspectGamePayload(pack, payload,
+                                                  inspectError) &&
+              payload.runtimeGameType && *payload.runtimeGameType != 0) {
+            if (const auto failure = loadGroundGameResource(*arena, pack))
+              loadError = *failure;
+            else
+              loadError.clear();
+          }
+          if (!loadError.empty())
+            return "GameRef.create: camera parent load unsupported: " +
+                   loadError;
+        }
+        if (!pack.loaded())
+          return std::string{
+              "GameRef.create: camera parent load did not complete"};
+      }
       auto *script = state.world->findScript(scriptId);
       if (!script)
         return std::string{"GameRef.create: camera type resource unavailable"};
@@ -1760,14 +2357,18 @@ NativeResult gameRefCreate(const std::vector<VmValue> &args,
         script->cameraConfig = std::make_shared<CameraDeviceConfig>(*config);
       }
       if (!script->cameraConfig)
-        return std::string{"GameRef.create: camera factory configuration unavailable"};
+        return std::string{
+            "GameRef.create: camera factory configuration unavailable"};
       const auto &config = *script->cameraConfig;
       script->loaded = true;
       state.resources->noteScriptLoaded(scriptId);
       const auto descriptor = prepareGameInstanceDescriptor(*prepared.request);
-      auto *node = parent.node.worldNode
-          ? state.world->addChild(*parent.node.worldNode, descriptor.name, descriptor.flags)
-          : state.resources->addGameChild(*parent.node.packNode, descriptor.name, descriptor.flags);
+      auto *node =
+          parent.node.worldNode
+              ? state.world->addChild(*parent.node.worldNode, descriptor.name,
+                                      descriptor.flags)
+              : state.resources->addGameChild(
+                    *parent.node.packNode, descriptor.name, descriptor.flags);
       if (!node)
         return std::string{"GameRef.create: camera game node unavailable"};
       state.world->noteInstanceCreated(*node);
@@ -1780,9 +2381,9 @@ NativeResult gameRefCreate(const std::vector<VmValue> &args,
       const auto cameraArgs = parseCameraDeviceArgs(
           prepared.request->constructorArgument.value_or(""),
           config.nearDistance, config.farDistance);
-      auto camera = prepareCameraDeviceResources(*state.world, *state.resources,
-                                                  *node, config, cameraArgs,
-                                                  script->cameraPrototype, error);
+      auto camera = prepareCameraDeviceResources(
+          *state.world, *state.resources, *node, config, cameraArgs,
+          script->cameraPrototype, error);
       if (!camera) {
         state.world->destroy(*node);
         return "GameRef.create: " + error;
@@ -1790,9 +2391,97 @@ NativeResult gameRefCreate(const std::vector<VmValue> &args,
       node->cameraDevice = std::move(camera);
       node->eventMask |= 0x14;
       auto &slot = state.bindings[targetHandle];
-      if (!slot) slot = std::make_unique<ReceiverBinding>();
+      if (!slot)
+        slot = std::make_unique<ReceiverBinding>();
       setLinkOwner(slot->link, node);
-      arena->resourceStates[static_cast<size_t>(targetHandle) - 1].words[2] = node->instanceId;
+      arena->resourceStates[static_cast<size_t>(targetHandle) - 1].words[2] =
+          node->instanceId;
+      return VmValue{static_cast<const VmObject *>(nullptr)};
+    }
+    if (prepared.request->scriptClass.empty() &&
+        prepared.request->nativeDevice == "button") {
+      // Stock factory FUN_00436f30 (prototype) and FUN_004373e0 (instance).
+      if (!prepared.request->nativeConfigPath)
+        return std::string{"GameRef.create: button needs a config path"};
+      auto parent = state.resources->lookup(*parentId, 1);
+      if (!parent.node || (parent.node.worldNode && !parent.node.worldNode->loaded) ||
+          (parent.node.packNode && !parent.node.packNode->loaded()))
+        return std::string{"GameRef.create: button parent unavailable or unloaded"};
+      ScriptNode *script = state.world->findScript(scriptId);
+      if (!script)
+        script = state.world->addScript(scriptId, "");
+      if (!script)
+        return std::string{"GameRef.create: button script allocation failed"};
+      std::string buttonError;
+      if (!loadButtonScriptPrototype(*state.resources, *script,
+                                     *prepared.request->nativeConfigPath,
+                                     buttonError))
+        return "GameRef.create: button prototype: " + buttonError;
+      script->loaded = true;
+      state.resources->noteScriptLoaded(scriptId);
+      const auto &proto = *script->button;
+      const auto desc = prepareGameInstanceDescriptor(*prepared.request);
+      WorldNode *node =
+          parent.node.worldNode
+              ? state.world->addChild(*parent.node.worldNode, desc.name,
+                                      desc.flags)
+              : state.resources->addGameChild(*parent.node.packNode, desc.name,
+                                              desc.flags);
+      if (!node)
+        return std::string{"GameRef.create: button node allocation failed"};
+      state.world->noteInstanceCreated(*node);
+      node->flags |= 0x200;
+      state.world->markLoaded(*node);
+      node->loadPriority = 1.0f;
+      node->eventSubscriptionsKnownEmpty = true;
+      node->nativeDevice = "button";
+      setLinkOwner(node->scriptLink, script);
+      // FUN_004373e0: "%f,%f,%f,%f,%f,%f" = position + euler angles.
+      const auto placement = stockScan(
+          prepared.request->constructorArgument.value_or(""),
+          "%f,%f,%f,%f,%f,%f");
+      float position[3]{}, ypr[3]{};
+      for (size_t i = 0; i < placement.values.size() && i < 6; ++i)
+        (i < 3 ? position[i] : ypr[i - 3]) = placement.values[i].f;
+      if (proto.renderId) {
+        const auto type = state.resources->lookup(proto.renderId);
+        if (!type.node || !renderRefCreateTypeTemplate(type.node)) {
+          state.world->destroy(*node);
+          return std::string{"GameRef.create: button render resource unsupported"};
+        }
+        WorldNode *render =
+            state.world->addTypedChild(*node, 3, "r_object", 0x200);
+        if (!render) {
+          state.world->destroy(*node);
+          return std::string{"GameRef.create: button render allocation failed"};
+        }
+        render->bounds = node->bounds;
+        render->field6c = node->field6c;
+        render->field70 = node->field70;
+        state.world->markLoaded(*render);
+        render->loadPriority = 1.0f;
+        auto instance = std::make_shared<SceneRenderInstance>(type.node.owner);
+        instance->setBoneMatrix(position, ypr);
+        if (!state.resources->bindSceneRenderInstance(
+                state.resources->resolve(render), instance)) {
+          state.world->destroy(*node);
+          return std::string{"GameRef.create: button render binding failed"};
+        }
+      }
+      static bool reportedButtonGap = false;
+      if (!reportedButtonGap) {
+        reportedButtonGap = true;
+        runlog::event(
+            runlog::EventKind::Note,
+            "gap: button body proto and cursor-event subscription (mask "
+            "0x10010, FUN_0048d3d0) are not simulated; render child only");
+      }
+      auto &slot = state.bindings[targetHandle];
+      if (!slot)
+        slot = std::make_unique<ReceiverBinding>();
+      setLinkOwner(slot->link, node);
+      arena->resourceStates[static_cast<size_t>(targetHandle) - 1].words[2] =
+          node->instanceId;
       return VmValue{static_cast<const VmObject *>(nullptr)};
     }
     if (!arena->loadScriptPath || !arena->callScript || !arena->ensureClass)
@@ -1871,10 +2560,12 @@ NativeResult gameRefCreate(const std::vector<VmValue> &args,
         return "script constructor: " + result.error;
       return std::nullopt;
     };
-    const auto cameraSettings = prepared.request->nativeDevice == "car" ? carCameraSettings(*arena) : std::nullopt;
-    const auto created = createNativeInstance(*state.world, *prepared.request,
-                                              &binding, state.resources, nullptr,
-                                              cameraSettings ? &*cameraSettings : nullptr);
+    const auto cameraSettings = prepared.request->nativeDevice == "car"
+                                    ? carCameraSettings(*arena)
+                                    : std::nullopt;
+    const auto created = createNativeInstance(
+        *state.world, *prepared.request, &binding, state.resources, nullptr,
+        cameraSettings ? &*cameraSettings : nullptr);
     binding.getInfo = nullptr;
     binding.initializeReceiver = nullptr;
     if (created.status != CreationStatus::Created)
@@ -2223,7 +2914,8 @@ NativeResult gameRefIsScripted(const std::vector<VmValue> &args,
         const auto cameraSettings = carCameraSettings(*arena);
         if (!loadCarScriptPrototype(*game.resources, *node.script,
                                     *prepared.request->nativeConfigPath, error,
-                                    cameraSettings ? &*cameraSettings : nullptr))
+                                    cameraSettings ? &*cameraSettings
+                                                   : nullptr))
           return "GameRef.isScripted: " + error;
       } else if (!prepared.request->nativeDevice.empty())
         return std::string{
@@ -2478,7 +3170,7 @@ bool TimerState::setTimeWarp(float scale, double milliseconds,
   return true;
 }
 bool TimerState::add(LinkOwner *target, float delay, int32_t id,
-                     std::string &error) {
+                     std::string &error, uint32_t event, int32_t param) {
   error.clear();
   if (!std::isfinite(delay) || !std::isfinite(now_ + delay)) {
     error = "timer deadline is not finite";
@@ -2489,6 +3181,8 @@ bool TimerState::add(LinkOwner *target, float delay, int32_t id,
   auto timer = std::make_unique<Timer>();
   timer->deadline = now_ + delay;
   timer->id = id;
+  timer->event = event;
+  timer->param = param;
   setLinkOwner(timer->target, target);
   timers_.push_back(std::move(timer));
   return true;
@@ -2524,7 +3218,8 @@ bool TimerState::advance(float now, const Delivery &delivery,
     }
     if (timer.deadline > now_)
       continue;
-    if (!delivery(*timer.target.owner, timer.id, error)) {
+    if (!delivery(*timer.target.owner, timer.id, timer.event, timer.param,
+                  error)) {
       advancing_ = false;
       return false;
     }
@@ -2631,10 +3326,20 @@ NativeResult gameTypeRemoveAllTimers(const std::vector<VmValue> &args,
 }
 
 bool dispatchTimerEvent(VmArena &arena, LinkOwner &target, int32_t id,
+                        uint32_t event, int32_t param,
                         const std::vector<const TufaClass *> &classes,
                         const std::vector<VmStaticFields> &states,
                         std::string &error) {
   error.clear();
+  // Stock FUN_0048b750(id 0x80000080) requests never reach the script upcall;
+  // FUN_004674f0 case 0x80 dispatches them natively (object random sound).
+  if (id == ObjectSoundRuntime::kTimerId) {
+    if (!arena.objectSound) {
+      error = "object sound timer host state unavailable";
+      return false;
+    }
+    return arena.objectSound->deliver(target, event, param, error);
+  }
   if (!arena.gameState || !arena.gameState->world) {
     error = "timer game world unavailable";
     return false;
@@ -2783,11 +3488,212 @@ NativeResult inputLastKey(const std::vector<VmValue> &args, const VmObject *,
   return VmValue{static_cast<int32_t>(*key)};
 }
 
-bool dispatchCursorSubscribers(VmArena &arena, WorldNode &source,
-                               const std::string &payload,
-                               const std::vector<const TufaClass *> &classes,
-                               const std::vector<VmStaticFields> &states,
-                               std::string &error, WorldNode *sourceOverride) {
+NativeResult inputGetAxis(const std::vector<VmValue> &args, const VmObject *,
+                          VmArena *arena,
+                          const std::vector<const TufaClass *> *) {
+  if (args.size() != 2 || !std::holds_alternative<int32_t>(args[0]) ||
+      !std::holds_alternative<int32_t>(args[1]))
+    return std::string{"invalid Input.getAxis call"};
+  const int32_t device = std::get<int32_t>(args[0]);
+  const int32_t axis = std::get<int32_t>(args[1]);
+  if (!arena || !arena->gameState || !arena->gameState->world)
+    return std::string{"Input.getAxis: device enumeration unavailable"};
+  const auto &devices = arena->gameState->world->inputDevices();
+  if (!devices)
+    return std::string{"Input.getAxis: device enumeration unavailable"};
+  if (device < 0 || static_cast<size_t>(device) >= devices->size())
+    return VmValue{0.0f};
+  if ((*devices)[static_cast<size_t>(device)] == "SysMouse")
+    return VmValue{0.0f};
+  if ((*devices)[static_cast<size_t>(device)] != "SysKeyboard")
+    return std::string{"Input.getAxis: device type unsupported"};
+  if (axis < 0 || axis >= 256)
+    return VmValue{0.0f};
+  if (!arena->hotkeys || !arena->hotkeys->physicalKey)
+    return std::string{"Input.getAxis: keyboard sampling unavailable"};
+  const auto sample = arena->hotkeys->physicalKey(axis);
+  if (!sample || !std::isfinite(*sample))
+    return std::string{"Input.getAxis: keyboard sample unsupported"};
+  return VmValue{*sample};
+}
+
+namespace {
+struct DispatchGuard {
+  OwnerLink link;
+  explicit DispatchGuard(LinkOwner *owner = nullptr) {
+    setLinkOwner(link, owner);
+  }
+  ~DispatchGuard() { setLinkOwner(link, nullptr); }
+};
+
+struct DispatchTask {
+  struct promise_type {
+    bool value = false;
+    std::exception_ptr exception;
+    std::coroutine_handle<> continuation = std::noop_coroutine();
+    DispatchTask get_return_object() {
+      return DispatchTask{
+          std::coroutine_handle<promise_type>::from_promise(*this)};
+    }
+    std::suspend_always initial_suspend() noexcept { return {}; }
+    struct Final {
+      bool await_ready() noexcept { return false; }
+      std::coroutine_handle<>
+      await_suspend(std::coroutine_handle<promise_type> h) noexcept {
+        return h.promise().continuation;
+      }
+      void await_resume() noexcept {}
+    };
+    Final final_suspend() noexcept { return {}; }
+    void return_value(bool result) noexcept { value = result; }
+    void unhandled_exception() noexcept {
+      exception = std::current_exception();
+    }
+  };
+  using Handle = std::coroutine_handle<promise_type>;
+  Handle handle{};
+  explicit DispatchTask(Handle h) : handle(h) {}
+  DispatchTask() = default;
+  DispatchTask(const DispatchTask &) = delete;
+  DispatchTask &operator=(const DispatchTask &) = delete;
+  DispatchTask(DispatchTask &&other) noexcept
+      : handle(std::exchange(other.handle, {})) {}
+  DispatchTask &operator=(DispatchTask &&other) noexcept {
+    if (this != &other) {
+      if (handle)
+        handle.destroy();
+      handle = std::exchange(other.handle, {});
+    }
+    return *this;
+  }
+  ~DispatchTask() {
+    if (handle)
+      handle.destroy();
+  }
+  struct Awaiter {
+    Handle child;
+    explicit Awaiter(Handle h) : child(h) {}
+    Awaiter(const Awaiter &) = delete;
+    Awaiter(Awaiter &&other) noexcept : child(std::exchange(other.child, {})) {}
+    ~Awaiter() {
+      if (child)
+        child.destroy();
+    }
+    bool await_ready() const noexcept { return false; }
+    std::coroutine_handle<>
+    await_suspend(std::coroutine_handle<> parent) noexcept {
+      child.promise().continuation = parent;
+      return child;
+    }
+    bool await_resume() const {
+      if (child.promise().exception)
+        std::rethrow_exception(child.promise().exception);
+      return child.promise().value;
+    }
+  };
+  Awaiter operator co_await() && noexcept {
+    return Awaiter{std::exchange(handle, {})};
+  }
+};
+
+struct DispatchContext {
+  VmArena &arena;
+  VmScheduler &scheduler;
+  std::vector<const TufaClass *> classesCopy;
+  std::vector<VmStaticFields> statesCopy;
+  const std::vector<const TufaClass *> &classes;
+  const std::vector<VmStaticFields> &states;
+  std::string error;
+  std::shared_ptr<bool> active = std::make_shared<bool>(true);
+  std::shared_ptr<VmHostTask> pending;
+  std::coroutine_handle<> suspended{};
+  DispatchContext(VmArena &a, VmScheduler &s,
+                  const std::vector<const TufaClass *> &c,
+                  const std::vector<VmStaticFields> &v)
+      : arena(a), scheduler(s),
+        classesCopy(s.classes() ? std::vector<const TufaClass *>{} : c),
+        statesCopy(s.staticFields() ? std::vector<VmStaticFields>{} : v),
+        classes(s.classes() ? *s.classes() : classesCopy),
+        states(s.staticFields() ? *s.staticFields() : statesCopy) {}
+};
+
+struct HostDispatch {
+  DispatchContext &context;
+  const VmObject *receiver;
+  std::string method;
+  std::vector<VmValue> arguments;
+  std::function<bool()> alive;
+  VmResult start{};
+  bool await_ready() {
+    const auto active = context.active;
+    start = context.scheduler.startHostTask(
+        receiver, method, std::move(arguments),
+        [active, alive = std::move(alive)] { return *active && alive(); },
+        context.pending);
+    if (start.ok && !context.pending) {
+      start = {false, int32_t{0}, "host task unavailable"};
+    }
+    return !start.ok || context.pending->finished;
+  }
+  void await_suspend(std::coroutine_handle<> h) noexcept {
+    context.suspended = h;
+  }
+  VmResult await_resume() {
+    context.suspended = {};
+    if (!start.ok)
+      return start;
+    auto task = std::move(context.pending);
+    return task->result;
+  }
+};
+
+struct DispatchDriver {
+  DispatchContext context;
+  DispatchTask root;
+  bool started = false;
+  DispatchDriver(VmArena &a, VmScheduler &s,
+                 const std::vector<const TufaClass *> &c,
+                 const std::vector<VmStaticFields> &v)
+      : context(a, s, c, v) {}
+  ~DispatchDriver() { *context.active = false; }
+  bool finished() const { return root.handle && root.handle.done(); }
+  bool resume(std::string &error) {
+    error.clear();
+    if (!started) {
+      started = true;
+      root.handle.resume();
+    } else if (context.pending) {
+      if (!context.pending->finished)
+        return true;
+      context.suspended.resume();
+    }
+    if (finished() && root.handle.promise().exception) {
+      try {
+        std::rethrow_exception(root.handle.promise().exception);
+      } catch (const std::exception &e) {
+        error = std::string{"animation dispatch: "} + e.what();
+      } catch (...) {
+        error = "animation dispatch: unknown exception";
+      }
+      return false;
+    }
+    if (finished() && !root.handle.promise().value) {
+      error = context.error;
+      return false;
+    }
+    return true;
+  }
+};
+} // namespace
+
+static DispatchTask
+dispatchCursorSubscribers(DispatchContext &context, WorldNode &source,
+                          std::string payload, WorldNode *sourceOverride,
+                          std::function<bool()> outerAlive) {
+  auto &arena = context.arena;
+  const auto &classes = context.classes;
+  const auto &states = context.states;
+  auto &error = context.error;
   auto &game = *arena.gameState;
   runlog::event(runlog::EventKind::CursorEvent, "payload %s", payload.c_str());
   struct Pending {
@@ -2796,11 +3702,9 @@ bool dispatchCursorSubscribers(VmArena &arena, WorldNode &source,
     std::string payload, method;
     ~Pending() { setLinkOwner(target, nullptr); }
   };
-  struct Guard {
-    OwnerLink link;
-    ~Guard() { setLinkOwner(link, nullptr); }
-  } sourceGuard;
-  setLinkOwner(sourceGuard.link, sourceOverride ? sourceOverride : &source);
+  auto sourceOwner = std::make_shared<DispatchGuard>(&source);
+  auto sourceGuard = std::make_shared<DispatchGuard>(
+      sourceOverride ? sourceOverride : &source);
   std::vector<std::unique_ptr<Pending>> pending;
   if ((source.eventMask & 0x10000) && source.scriptReceiver) {
     auto item = std::make_unique<Pending>();
@@ -2814,7 +3718,7 @@ bool dispatchCursorSubscribers(VmArena &arena, WorldNode &source,
       continue;
     if (entry->mask & 0xc0000000u) {
       error = "cursor notification flags unsupported";
-      return false;
+      co_return false;
     }
     auto item = std::make_unique<Pending>();
     setLinkOwner(item->target, entry->target.owner);
@@ -2828,14 +3732,19 @@ bool dispatchCursorSubscribers(VmArena &arena, WorldNode &source,
     pending.push_back(std::move(item));
   }
   for (const auto &item : pending) {
+    if (!sourceOwner->link.owner || !sourceGuard->link.owner || !outerAlive()) {
+      error = "cursor event source destroyed";
+      co_return false;
+    }
     auto *target = game.world->nodeFor(item->target.owner);
     if (!target)
       continue;
     if (!target->loaded ||
-        (target != &source && !target->eventSubscriptionsKnownEmpty) ||
+        (target != sourceOwner->link.owner &&
+         !target->eventSubscriptionsKnownEmpty) ||
         !target->nativeDevice.empty()) {
       error = "cursor notification target unsupported";
-      return false;
+      co_return false;
     }
     if (!(target->eventMask & item->event))
       continue;
@@ -2846,13 +3755,13 @@ bool dispatchCursorSubscribers(VmArena &arena, WorldNode &source,
       if (field.name == "asyncMode" && field.descriptor == "I") {
         if (mode) {
           error = "cursor asyncMode ambiguous";
-          return false;
+          co_return false;
         }
         mode = &field;
       }
     if (!mode || !std::holds_alternative<int32_t>(mode->value)) {
       error = "cursor asyncMode unavailable";
-      return false;
+      co_return false;
     }
     const auto *script = target->scriptReceiver;
     const bool async = std::get<int32_t>(mode->value) != 0;
@@ -2860,96 +3769,109 @@ bool dispatchCursorSubscribers(VmArena &arena, WorldNode &source,
                               &nativeRegistry(), &classes, &states);
     if (!ref.ok || !std::holds_alternative<const VmObject *>(ref.value)) {
       error = "cursor source allocation: " + ref.error;
-      return false;
+      co_return false;
     }
     const auto *object = std::get<const VmObject *>(ref.value);
     if (!std::holds_alternative<std::monostate>(
             invokeNative("java.util.resource.ResourceRef", "newNative", "()V",
                          {}, object, &arena, &classes))) {
       error = "cursor source link unavailable";
-      return false;
+      co_return false;
     }
     auto *resource = nativeResourceState(object, &arena);
     if (!resource) {
       error = "cursor source state unavailable";
-      return false;
+      co_return false;
     }
     const int32_t handle =
         static_cast<int32_t>(resource - arena.resourceStates.data()) + 1;
-    if (!sourceGuard.link.owner || !item->target.owner) {
+    if (!sourceGuard->link.owner || !item->target.owner) {
       error = "cursor event target destroyed";
-      return false;
+      co_return false;
     }
     auto binding = std::make_unique<ReceiverBinding>();
-    setLinkOwner(binding->link, sourceGuard.link.owner);
+    setLinkOwner(binding->link, sourceGuard->link.owner);
     resource->words[2] = binding->link.cachedValue;
     game.bindings.emplace(handle, std::move(binding));
     if (arena.ensureClass) {
       const auto ensured = arena.ensureClass("java.lang.String");
       if (!ensured.ok) {
         error = "cursor event string class: " + ensured.error;
-        return false;
+        co_return false;
       }
     }
     const auto text = internStringResult(item->payload, &arena, &classes);
     if (!std::holds_alternative<VmValue>(text)) {
       error = "cursor event string unavailable";
-      return false;
+      co_return false;
     }
     const auto *textObject =
         std::get_if<const VmObject *>(&std::get<VmValue>(text));
     if (!textObject) {
       error = "cursor event string invalid";
-      return false;
+      co_return false;
     }
     const std::string method =
         !item->method.empty() ? item->method
                               : (async ? "handleEventAsync" : "handleEvent");
-    if (!sourceGuard.link.owner || !item->target.owner) {
+    if (!sourceGuard->link.owner || !item->target.owner ||
+        !sourceOwner->link.owner || !outerAlive()) {
       error = "cursor event target destroyed";
-      return false;
+      co_return false;
     }
-    auto result =
-        vmHostCall(arena, script, method,
-                   {object, static_cast<int32_t>(item->event), *textObject},
-                   &nativeRegistry(), &classes, &states);
-    if (!result.ok) {
+    auto targetGuard = std::make_shared<DispatchGuard>(item->target.owner);
+    // Stock starts each event dispatch on its own thread (FUN_00425490 ->
+    // FUN_0041f340, body run by FUN_0041fbc0) and does not join it. Awaiting
+    // here deadlocks a modal handler: its wait() parks this task, and the
+    // click that would notify it can only arrive on a later dispatch. Start
+    // the task and continue; the scheduler owns it and ticks it each frame.
+    // Liveness is node-based, not tied to this coroutine's lifetime.
+    std::shared_ptr<VmHostTask> task;
+    const auto started = context.scheduler.startHostTask(
+        script, method,
+        {object, static_cast<int32_t>(item->event), *textObject},
+        [sourceGuard, targetGuard] {
+          return sourceGuard->link.owner && targetGuard->link.owner;
+        },
+        task);
+    if (!started.ok) {
       error = "cursor notification " + method + " [" + item->payload +
-              "]: " + result.error;
-      return false;
+              "]: " + started.error;
+      co_return false;
     }
-    if (!sourceGuard.link.owner) {
+    if (!task) {
+      error = "cursor notification " + method + " [" + item->payload +
+              "]: host task unavailable";
+      co_return false;
+    }
+    if (!sourceGuard->link.owner || !sourceOwner->link.owner || !outerAlive()) {
       error = "cursor event source destroyed";
-      return false;
+      co_return false;
     }
   }
-  return true;
+  co_return true;
 }
 
-bool dispatchAnimationCallbacks(VmArena &arena, float delta,
-                                const std::vector<const TufaClass *> &classes,
-                                const std::vector<VmStaticFields> &states,
-                                std::string &error) {
+static DispatchTask dispatchAnimationCallbacks(DispatchContext &context,
+                                               float delta) {
+  auto &arena = context.arena;
+  const auto &classes = context.classes;
+  auto &error = context.error;
   error.clear();
   if (!arena.gameState || !arena.gameState->world || !std::isfinite(delta)) {
     error = "animation callback world or delta unavailable";
-    return false;
+    co_return false;
   }
   auto &world = *arena.gameState->world;
   world.pruneDetachedHooks(GameHook::Kind1c);
-  struct Guard {
-    OwnerLink link;
-    ~Guard() { setLinkOwner(link, nullptr); }
-  };
-  std::vector<std::unique_ptr<Guard>> pending;
+  std::vector<std::shared_ptr<DispatchGuard>> pending;
   for (const auto *node : world.hooks(GameHook::Kind1c)) {
     if (!node) {
       error = "animation callback external target unsupported";
-      return false;
+      co_return false;
     }
-    auto guard = std::make_unique<Guard>();
-    setLinkOwner(guard->link, const_cast<WorldNode *>(node));
-    pending.push_back(std::move(guard));
+    pending.push_back(
+        std::make_shared<DispatchGuard>(const_cast<WorldNode *>(node)));
   }
   for (const auto &guard : pending) {
     if (!guard->link.owner)
@@ -2958,7 +3880,7 @@ bool dispatchAnimationCallbacks(VmArena &arena, float delta,
     if (!node || node->type != 1 || !node->loaded || !node->field6c ||
         node->loadPriority < std::min(*node->field6c, 1.0f)) {
       error = "animation callback loading unsupported";
-      return false;
+      co_return false;
     }
     world.noteRecentUse(*node, node->type, node->stamp74,
                         node->recentUseQueued);
@@ -2966,12 +3888,12 @@ bool dispatchAnimationCallbacks(VmArena &arena, float delta,
       arena.gameState->playerAnimationDelta = delta;
       if (node->player->animationOverlay.cachedValue) {
         error = "player animation overlay unsupported";
-        return false;
+        co_return false;
       }
       for (const auto &text : node->player->debugText)
         if (text.cachedValue) {
           error = "player debug text cleanup unsupported";
-          return false;
+          co_return false;
         }
       continue;
     }
@@ -2980,21 +3902,21 @@ bool dispatchAnimationCallbacks(VmArena &arena, float delta,
         auto &cursor = *node->cursor;
         if (!arena.gameState->mouseHelp || *arena.gameState->mouseHelp != 0) {
           error = "active cursor MouseHelp unsupported";
-          return false;
+          co_return false;
         }
         auto *controller = world.nodeFor(cursor.controller.owner);
         if (!world.systemCursor() || !world.cursorInput() || !controller ||
             !controller->playerInput || !arena.gameState->resources ||
             !arena.gameState->renderer || cursor.pointer.owner) {
           error = "active cursor input or camera unavailable";
-          return false;
+          co_return false;
         }
         const auto input = world.cursorInput()();
         const auto button = controller->playerInput->sampleAxis(45);
         if (!input || !button || !std::isfinite((*input)[0]) ||
             !std::isfinite((*input)[1])) {
           error = "active cursor input unavailable";
-          return false;
+          co_return false;
         }
         const float oldX = cursor.x, oldY = cursor.y;
         cursor.x = std::clamp((*input)[0], -1.0f, 1.0f);
@@ -3007,15 +3929,23 @@ bool dispatchAnimationCallbacks(VmArena &arena, float delta,
         int width = 0, height = 0;
         if (!arena.gameState->renderer->outputSize(width, height, error) ||
             width <= 0 || height <= 0)
-          return false;
-        for (auto *viewport : world.activeViewports()) {
+          co_return false;
+        // Stock picks from the list tail: viewports and cameras are walked
+        // highest priority first (FUN_004fdc40 returns the +0xbc tail and
+        // FUN_004fdca0 steps via the +8 previous link), so a modal dialog's
+        // OSD viewport wins over the viewport behind it.
+        auto pickViewports = world.activeViewports();
+        std::reverse(pickViewports.begin(), pickViewports.end());
+        for (auto *viewport : pickViewports) {
           if (!viewport->viewport || !viewport->viewport->renderAttachments)
             continue;
-          for (auto *owner : viewport->viewport->renderAttachments->active()) {
+          auto pickCameras = viewport->viewport->renderAttachments->active();
+          std::reverse(pickCameras.begin(), pickCameras.end());
+          for (auto *owner : pickCameras) {
             auto *camera = world.nodeFor(owner);
             if (!camera) {
               error = "cursor camera unavailable";
-              return false;
+              co_return false;
             }
             auto resolved = arena.gameState->resources->resolve(camera);
             auto scene =
@@ -3024,14 +3954,14 @@ bool dispatchAnimationCallbacks(VmArena &arena, float delta,
                     : nullptr;
             if (!scene) {
               error = "cursor camera scene unavailable";
-              return false;
+              co_return false;
             }
             const auto type =
                 arena.gameState->resources->lookup(scene->typeId(), 12);
             if (type.status != LookupStatus::Found || !type.node.worldNode ||
                 !type.node.worldNode->camera) {
               error = "cursor camera type unavailable";
-              return false;
+              co_return false;
             }
             scene->processRootBoneUpdate();
             const auto &matrix = scene->derivedRootBoneMatrix();
@@ -3041,12 +3971,12 @@ bool dispatchAnimationCallbacks(VmArena &arena, float delta,
                 cameraViewState(*type.node.worldNode->camera, matrix, aspect);
             if (!view) {
               error = "cursor camera projection unavailable";
-              return false;
+              co_return false;
             }
             auto *sector = cameraTraversalRoot(*camera);
             if (!sector) {
               error = "cursor camera sector unavailable";
-              return false;
+              co_return false;
             }
             std::vector<PhysicsBox> boxes;
             std::vector<WorldNode *> candidates;
@@ -3056,7 +3986,7 @@ bool dispatchAnimationCallbacks(VmArena &arena, float delta,
                   box->physicsBox->position[0] !=
                       box->physicsBox->position[1]) {
                 error = "cursor box unsupported";
-                return false;
+                co_return false;
               }
               const WorldNode *ancestor = box;
               while (ancestor && ancestor != sector)
@@ -3080,28 +4010,31 @@ bool dispatchAnimationCallbacks(VmArena &arena, float delta,
         }
         if (hit && !world.parent(*hit)) {
           error = "cursor box parent unavailable";
-          return false;
+          co_return false;
         }
         auto parentId = [&](WorldNode *box) -> uint32_t {
           const auto *parent = box ? world.parent(*box) : nullptr;
           return parent ? parent->value : 0;
         };
-        Guard hitGuard;
-        setLinkOwner(hitGuard.link, hit);
-        Guard pressedGuard;
+        auto hitGuard = std::make_shared<DispatchGuard>(hit);
         const bool hadPressed = cursor.pressedBox.owner != nullptr;
-        setLinkOwner(pressedGuard.link, cursor.pressedBox.owner);
-        auto emit = [&](WorldNode &target, const std::string &payload,
-                        WorldNode *origin = nullptr) {
-          if (!dispatchCursorSubscribers(arena, target, payload, classes,
-                                         states, error, origin))
-            return false;
-          if (!guard->link.owner || (hit && !hitGuard.link.owner) ||
-              (hadPressed && !pressedGuard.link.owner)) {
+        auto pressedGuard =
+            std::make_shared<DispatchGuard>(cursor.pressedBox.owner);
+        auto emit = [&](WorldNode &target, std::string payload,
+                        WorldNode *origin = nullptr) -> DispatchTask {
+          auto alive = [guard, hitGuard, pressedGuard, hadHit = hit != nullptr,
+                        hadPressed] {
+            return guard->link.owner && (!hadHit || hitGuard->link.owner) &&
+                   (!hadPressed || pressedGuard->link.owner);
+          };
+          if (!(co_await dispatchCursorSubscribers(
+                  context, target, std::move(payload), origin, alive)))
+            co_return false;
+          if (!alive()) {
             error = "cursor event destroyed a live cursor or hit";
-            return false;
+            co_return false;
           }
-          return true;
+          co_return true;
         };
         const bool down = *button > 0.2f;
         if (hit != cursor.hoveredBox.owner) {
@@ -3113,10 +4046,10 @@ bool dispatchAnimationCallbacks(VmArena &arena, float delta,
                 " " + std::to_string(static_cast<int32_t>(previous->value)) +
                 " " + std::to_string(movedThisFrame);
             auto *parent = const_cast<WorldNode *>(world.parent(*previous));
-            if (parent && !emit(*parent, payload))
-              return false;
-            if (!emit(*node, payload))
-              return false;
+            if (parent && !(co_await emit(*parent, payload)))
+              co_return false;
+            if (!(co_await emit(*node, payload)))
+              co_return false;
           }
           setLinkOwner(cursor.hoveredBox, hit);
           if (hit) {
@@ -3126,10 +4059,10 @@ bool dispatchAnimationCallbacks(VmArena &arena, float delta,
                 " " + std::to_string(static_cast<int32_t>(hit->value)) + " " +
                 std::to_string(movedThisFrame);
             auto *parent = const_cast<WorldNode *>(world.parent(*hit));
-            if (parent && !emit(*parent, payload))
-              return false;
-            if (!emit(*node, payload))
-              return false;
+            if (parent && !(co_await emit(*parent, payload)))
+              co_return false;
+            if (!(co_await emit(*node, payload)))
+              co_return false;
           }
         }
         const float dragX = cursor.x - cursor.pressPosition[0],
@@ -3144,10 +4077,10 @@ bool dispatchAnimationCallbacks(VmArena &arena, float delta,
               "9 " + std::to_string(static_cast<int32_t>(node->value)) + " " +
               std::to_string(
                   static_cast<int32_t>(pressed ? pressed->value : 0));
-          if (!emit(*node, drag))
-            return false;
-          if (parent && !emit(*parent, drag))
-            return false;
+          if (!(co_await emit(*node, drag)))
+            co_return false;
+          if (parent && !(co_await emit(*parent, drag)))
+            co_return false;
           cursor.dragging = true;
         }
         if (down != cursor.leftDown) {
@@ -3164,10 +4097,10 @@ bool dispatchAnimationCallbacks(VmArena &arena, float delta,
                           contact[0], contact[1], contact[2]);
             auto *parent =
                 hit ? const_cast<WorldNode *>(world.parent(*hit)) : nullptr;
-            if (parent && !emit(*parent, buffer))
-              return false;
-            if (!emit(*node, buffer))
-              return false;
+            if (parent && !(co_await emit(*parent, buffer)))
+              co_return false;
+            if (!(co_await emit(*node, buffer)))
+              co_return false;
           } else {
             auto *pressed = world.nodeFor(cursor.pressedBox.owner);
             auto *parent = pressed
@@ -3178,10 +4111,10 @@ bool dispatchAnimationCallbacks(VmArena &arena, float delta,
                 std::to_string(static_cast<int32_t>(parentId(pressed))) + " " +
                 std::to_string(
                     static_cast<int32_t>(pressed ? pressed->value : 0));
-            if (!emit(*node, payload))
-              return false;
-            if (parent && !emit(*parent, payload))
-              return false;
+            if (!(co_await emit(*node, payload)))
+              co_return false;
+            if (parent && !(co_await emit(*parent, payload)))
+              co_return false;
             if (pressed && parent && !cursor.dragging) {
               const auto &p = cursor.pressContact;
               const auto &position = pressed->physicsBox->position[0];
@@ -3190,8 +4123,8 @@ bool dispatchAnimationCallbacks(VmArena &arena, float delta,
                   parentClick, sizeof(parentClick), "5 %d %d %.3f %.3f %.3f",
                   static_cast<int32_t>(node->value),
                   static_cast<int32_t>(pressed->value), p[0], p[1], p[2]);
-              if (!emit(*parent, parentClick))
-                return false;
+              if (!(co_await emit(*parent, parentClick)))
+                co_return false;
               char click[200];
               std::snprintf(click, sizeof(click),
                             "5 %d %d %.3f %.3f %.3f %.3f %.3f %.3f",
@@ -3199,24 +4132,24 @@ bool dispatchAnimationCallbacks(VmArena &arena, float delta,
                             static_cast<int32_t>(parent->value), p[0], p[1],
                             p[2], contact[0] + position[0],
                             contact[1] + position[1], contact[2] + position[2]);
-              if (!emit(*node, click, parent))
-                return false;
+              if (!(co_await emit(*node, click, parent)))
+                co_return false;
             } else if (cursor.dragging) {
               const auto dragEnd =
                   "10 " + std::to_string(static_cast<int32_t>(node->value)) +
                   " " +
                   std::to_string(
                       static_cast<int32_t>(pressed ? pressed->value : 0));
-              if (!emit(*node, dragEnd))
-                return false;
-              if (parent && !emit(*parent, dragEnd))
-                return false;
+              if (!(co_await emit(*node, dragEnd)))
+                co_return false;
+              if (parent && !(co_await emit(*parent, dragEnd)))
+                co_return false;
               if (pressed && parent && hit) {
                 auto *currentParent =
                     const_cast<WorldNode *>(world.parent(*hit));
                 if (!currentParent) {
                   error = "cursor picked parent unavailable";
-                  return false;
+                  co_return false;
                 }
                 const auto drop =
                     "11 " + std::to_string(static_cast<int32_t>(node->value)) +
@@ -3224,8 +4157,8 @@ bool dispatchAnimationCallbacks(VmArena &arena, float delta,
                     std::to_string(static_cast<int32_t>(currentParent->value)) +
                     " " + std::to_string(static_cast<int32_t>(parent->value)) +
                     " " + std::to_string(static_cast<int32_t>(pressed->value));
-                if (!emit(*currentParent, drop))
-                  return false;
+                if (!(co_await emit(*currentParent, drop)))
+                  co_return false;
                 const auto &position = hit->physicsBox->position[0];
                 char dropCursor[200];
                 std::snprintf(dropCursor, sizeof(dropCursor),
@@ -3237,8 +4170,8 @@ bool dispatchAnimationCallbacks(VmArena &arena, float delta,
                               contact[1] + position[1],
                               contact[2] + position[2],
                               static_cast<int32_t>(pressed->value));
-                if (!emit(*node, dropCursor, currentParent))
-                  return false;
+                if (!(co_await emit(*node, dropCursor, currentParent)))
+                  co_return false;
               }
             }
             setLinkOwner(cursor.pressedBox, nullptr);
@@ -3250,16 +4183,16 @@ bool dispatchAnimationCallbacks(VmArena &arena, float delta,
       }
       if (!arena.gameState->mouseHelp) {
         error = "cursor MouseHelp configuration unavailable";
-        return false;
+        co_return false;
       }
       if (*arena.gameState->mouseHelp != 0) {
         error = "cursor MouseHelp animation unsupported";
-        return false;
+        co_return false;
       }
       if (node->cursor->viewport.cachedValue && !world.systemCursor() &&
           !node->cursor->pointer.cachedValue) {
         error = "software cursor creation unsupported";
-        return false;
+        co_return false;
       }
       continue;
     }
@@ -3275,12 +4208,13 @@ bool dispatchAnimationCallbacks(VmArena &arena, float delta,
                     cls->constants[method.words[2]].text == "()V")
                   hasAnimate = true;
             if (hasAnimate) {
-              const auto result =
-                  vmHostCall(arena, node->scriptReceiver, "animate", {},
-                             &nativeRegistry(), &classes, &states);
+              const auto result = co_await HostDispatch{
+                  context, node->scriptReceiver, "animate", {}, [guard] {
+                    return guard->link.owner != nullptr;
+                  }};
               if (!result.ok) {
                 error = "animation callback: " + result.error;
-                return false;
+                co_return false;
               }
               break;
             }
@@ -3300,19 +4234,85 @@ bool dispatchAnimationCallbacks(VmArena &arena, float delta,
         continue;
       }
       error = "native animation callback unsupported: " + node->nativeDevice;
-      return false;
+      co_return false;
     }
     if (!node->scriptReceiver)
       continue;
-    const auto result = vmHostCall(arena, node->scriptReceiver, "animate", {},
-                                   &nativeRegistry(), &classes, &states);
+    const auto result = co_await HostDispatch{
+        context, node->scriptReceiver, "animate", {}, [guard] {
+          return guard->link.owner != nullptr;
+        }};
     if (!result.ok) {
       error = "animation callback: " + result.error;
-      return false;
+      co_return false;
     }
   }
-  return true;
+  co_return true;
 }
+
+static DispatchTask cursorDispatchRoot(DispatchContext &context,
+                                       std::shared_ptr<DispatchGuard> source,
+                                       std::shared_ptr<DispatchGuard> origin,
+                                       std::string payload) {
+  if (!context.arena.gameState || !context.arena.gameState->world ||
+      !source->link.owner || !origin->link.owner) {
+    context.error = "cursor event target destroyed";
+    co_return false;
+  }
+  auto *node = context.arena.gameState->world->nodeFor(source->link.owner);
+  auto *overrideNode =
+      context.arena.gameState->world->nodeFor(origin->link.owner);
+  if (!node || !overrideNode) {
+    context.error = "cursor event target destroyed";
+    co_return false;
+  }
+  co_return co_await dispatchCursorSubscribers(
+      context, *node, std::move(payload), overrideNode,
+      [source, origin] { return source->link.owner && origin->link.owner; });
+}
+
+struct CursorDispatch::Impl : DispatchDriver {
+  Impl(VmArena &arena, VmScheduler &scheduler, WorldNode &source,
+       std::string payload, const std::vector<const TufaClass *> &classes,
+       const std::vector<VmStaticFields> &states, WorldNode *origin)
+      : DispatchDriver(arena, scheduler, classes, states) {
+    root = cursorDispatchRoot(
+        context, std::make_shared<DispatchGuard>(&source),
+        std::make_shared<DispatchGuard>(origin ? origin : &source),
+        std::move(payload));
+  }
+};
+
+CursorDispatch::CursorDispatch(VmArena &arena, VmScheduler &scheduler,
+                               WorldNode &source, std::string payload,
+                               const std::vector<const TufaClass *> &classes,
+                               const std::vector<VmStaticFields> &states,
+                               WorldNode *origin)
+    : impl_(std::make_unique<Impl>(arena, scheduler, source, std::move(payload),
+                                   classes, states, origin)) {}
+CursorDispatch::~CursorDispatch() = default;
+bool CursorDispatch::resume(std::string &error) { return impl_->resume(error); }
+bool CursorDispatch::finished() const { return impl_->finished(); }
+
+struct AnimationDispatch::Impl : DispatchDriver {
+  Impl(VmArena &arena, VmScheduler &scheduler, float delta,
+       const std::vector<const TufaClass *> &classes,
+       const std::vector<VmStaticFields> &states)
+      : DispatchDriver(arena, scheduler, classes, states) {
+    root = dispatchAnimationCallbacks(context, delta);
+  }
+};
+
+AnimationDispatch::AnimationDispatch(
+    VmArena &arena, VmScheduler &scheduler, float delta,
+    const std::vector<const TufaClass *> &classes,
+    const std::vector<VmStaticFields> &states)
+    : impl_(std::make_unique<Impl>(arena, scheduler, delta, classes, states)) {}
+AnimationDispatch::~AnimationDispatch() = default;
+bool AnimationDispatch::resume(std::string &error) {
+  return impl_->resume(error);
+}
+bool AnimationDispatch::finished() const { return impl_->finished(); }
 
 NativeResult gfxNumDisplayModes(const std::vector<VmValue> &args,
                                 const VmObject *, VmArena *arena,
@@ -3999,6 +4999,10 @@ bool carPartInstall(WorldNode &partNode, WorldNode *explicitTarget,
   if (carRoot && carRoot->carInstance) {
     setLinkOwner(partInst.carLink, carRoot);
     if (carRoot->nativeDevice == "car") {
+      // 004469xx enables the engine when the part installed at slot 0x191
+      // is linked to the car; removing that link clears the same flag.
+      if (targetSlotId == 0x191)
+        carRoot->carInstance->engineRunning = true;
       if (!carRoot->carInstance->chassisObject && partNode.scriptReceiver)
         carRoot->carInstance->chassisObject = partNode.scriptReceiver;
       bool exists = false;
@@ -4101,6 +5105,8 @@ bool carPartRemove(WorldNode &partNode, int32_t slotId, VmArena &arena,
 
   WorldNode *carRoot = resolveCarNode(otherNode, partNode, world);
   if (carRoot && carRoot->nativeDevice == "car" && carRoot->carInstance) {
+    if (otherSlotId == 0x191)
+      carRoot->carInstance->engineRunning = false;
     // Detach before destruction: an erased OwnerLink still sits on the
     // part's LinkOwner list (CarRuntimeInstance destructor pattern).
     const size_t registryBefore = carRoot->carInstance->attachedParts.size();
@@ -4364,6 +5370,10 @@ static NativeResult gameRefGetInfoCommon(int32_t kind, int32_t intArg,
             if (seat && seat->player.owner)
               return VmValue{static_cast<int32_t>(seat->player.cachedValue)};
         return VmValue{int32_t{0}};
+      case 0x15:
+        if (isCar)
+          return VmValue{inst.activateInfo}; // stock car +0x1edc (all.c:68209)
+        break;
       case 0xe8: { // GII_TYPE (in stock 00458c00/00475ec0, or script resource
                    // id)
         if (inst.prototypeSource.cachedValue)
@@ -4656,9 +5666,88 @@ NativeResult gameRefIsEmpty(const std::vector<VmValue> &args,
 NativeResult gameRefSetActiveCollision(const std::vector<VmValue> &args,
                                        const VmObject *receiver, VmArena *arena,
                                        const std::vector<const TufaClass *> *) {
-  if (!arena || !receiver || !args.empty())
+  if (!arena || !receiver || !args.empty() || !arena->gameState ||
+      !arena->gameState->world || !arena->gameState->resources)
     return std::string{"GameRef.setActiveCollision: invalid call"};
+  const auto *state = nativeResourceState(receiver, arena);
+  if (!state)
+    return std::string{"GameRef.setActiveCollision: native link unavailable"};
+  auto &game = *arena->gameState;
+  const int32_t handle =
+      static_cast<int32_t>(state - arena->resourceStates.data()) + 1;
+  const auto binding = game.bindings.find(handle);
+  if (binding == game.bindings.end() || !binding->second ||
+      !binding->second->link.owner)
+    return std::string{"GameRef.setActiveCollision: target unavailable"};
+  const auto target = game.resources->resolve(binding->second->link.owner);
+  if (!target.worldNode || !game.world->queueCollisionUpdate(*target.worldNode))
+    return std::string{"GameRef.setActiveCollision: target unsupported"};
   return std::monostate{};
+}
+
+// 0047e350/0047e490 send a six-float pose through 0048b440.
+// Rebuild the registered compound in parent-first order and update its
+// resource bounds together with the cached script pose.
+static bool placeCar(VmGameState &game, CarRuntimeInstance &car,
+                     const std::array<float, 3> &position,
+                     const std::array<float, 3> &orientation) {
+  PartSlotDirective directive{};
+  for (size_t i = 0; i < 3; ++i)
+    directive.orientation[i] = orientation[i];
+  PartSlotState transform;
+  if (!makePartSlotState(directive, transform))
+    return false;
+  const auto &r = transform.rotation;
+  const physics::Mat34 matrix{r[0], r[1], r[2], 0,    r[3], r[4],
+                              r[5], 0,    r[6], r[7], r[8], 0};
+  if (car.carPhysics && car.carPhysics->root) {
+    auto &compound = *car.carPhysics;
+    auto &root = *compound.root;
+    if (root.current > 1 || !root.proto || compound.teardownOrder.empty())
+      return false;
+    auto &state = root.state[root.current];
+    state.pos = position;
+    state.rot = matrix;
+    state.quat = physics::quatFromMatrix(matrix);
+    physics::updateWorldInertia(*root.proto, state);
+    root.state[root.current ^ 1] = state;
+    // Reverse teardown order is parent-first, including installed parts.
+    for (auto it = compound.teardownOrder.rbegin();
+         it != compound.teardownOrder.rend(); ++it) {
+      auto &body = **it;
+      if (&body != &root) {
+        if (!body.attachment || body.current > 1 || !body.proto)
+          return false;
+        auto &childState = body.state[body.current];
+        physics::predictChildPose(
+            body.attachment->parent->state[body.attachment->parent->current],
+            body.attachment->relative, childState);
+        physics::updateWorldInertia(*body.proto, childState);
+        body.state[body.current ^ 1] = childState;
+      }
+      const auto observation = compound.bodyObservations.find(&body);
+      if (game.world && observation != compound.bodyObservations.end() &&
+          observation->second && observation->second->resource.owner) {
+        if (auto *node =
+                game.world->nodeFor(observation->second->resource.owner)) {
+          const auto &p = body.state[body.current].pos;
+          const float radius = body.proto->shape.boundRadius;
+          node->bounds.mode = 1;
+          node->bounds.values = {p[0], p[1], p[2], radius, radius, radius};
+        }
+      }
+    }
+    if (runlog::active())
+      runlog::event(runlog::EventKind::Note,
+                    "car-placement {\"root\":[%.6f,%.6f,%.6f],"
+                    "\"cached\":[%.6f,%.6f,%.6f]}",
+                    state.pos[0], state.pos[1], state.pos[2], position[0],
+                    position[1], position[2]);
+  }
+  car.position = position;
+  car.ypr = orientation;
+  car.rotation = transform.rotation;
+  return true;
 }
 
 NativeResult gameRefSetMatrix(const std::vector<VmValue> &args,
@@ -4683,16 +5772,15 @@ NativeResult gameRefSetMatrix(const std::vector<VmValue> &args,
   const char *const xyz[] = {"x", "y", "z"};
   const char *const ypr[] = {"y", "p", "r"};
   float pos[3]{}, ori[3]{};
-  const bool hasPos =
-      readFloatFields(std::get<const VmObject *>(args[0]), xyz, pos);
-  const bool hasOri =
-      readFloatFields(std::get<const VmObject *>(args[1]), ypr, ori);
-  if (node.worldNode && node.worldNode->carInstance) {
-    if (hasPos)
-      node.worldNode->carInstance->position = {pos[0], pos[1], pos[2]};
-    if (hasOri)
-      node.worldNode->carInstance->ypr = {ori[0], ori[1], ori[2]};
-  }
+  const auto *positionObject = std::get<const VmObject *>(args[0]);
+  const auto *orientationObject = std::get<const VmObject *>(args[1]);
+  if ((positionObject && !readFloatFields(positionObject, xyz, pos)) ||
+      (orientationObject && !readFloatFields(orientationObject, ypr, ori)))
+    return std::string{"GameRef.setMatrix: invalid pose"};
+  if (node.worldNode && node.worldNode->carInstance &&
+      !placeCar(*arena->gameState, *node.worldNode->carInstance,
+                {pos[0], pos[1], pos[2]}, {ori[0], ori[1], ori[2]}))
+    return std::string{"GameRef.setMatrix: car placement failed"};
   return std::monostate{};
 }
 
@@ -4717,9 +5805,10 @@ NativeResult gameRefSetPos(const std::vector<VmValue> &args,
   const char *const xyz[] = {"x", "y", "z"};
   float pos[3]{};
   if (readFloatFields(std::get<const VmObject *>(args[0]), xyz, pos) &&
-      node.worldNode && node.worldNode->carInstance) {
-    node.worldNode->carInstance->position = {pos[0], pos[1], pos[2]};
-  }
+      node.worldNode && node.worldNode->carInstance &&
+      !placeCar(*arena->gameState, *node.worldNode->carInstance,
+                {pos[0], pos[1], pos[2]}, {}))
+    return std::string{"GameRef.setPos: car placement failed"};
   return std::monostate{};
 }
 

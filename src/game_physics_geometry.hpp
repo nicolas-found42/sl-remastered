@@ -1,6 +1,6 @@
 #pragma once
-#include "resource_world.hpp"
 #include "physics_body.hpp"
+#include "resource_world.hpp"
 #include <array>
 #include <cstdint>
 #include <string>
@@ -8,14 +8,15 @@
 
 // 0053dee0 loads PHYS records; 0049fa60 uses each face as a material word,
 // three vertex indices and a normal. Positions are stored as three floats.
-// No resource-node transforms, material lookup or collision behavior is applied.
+// No resource-node transforms, material lookup or collision behavior is
+// applied.
 struct GamePhysicsTriangle {
   uint32_t materialWord = 0;
-  std::array<uint32_t,3> vertices{};
-  std::array<float,3> normal{};
+  std::array<uint32_t, 3> vertices{};
+  std::array<float, 3> normal{};
 };
 struct GamePhysicsGeometry {
-  std::vector<std::array<float,3>> vertices;
+  std::vector<std::array<float, 3>> vertices;
   std::vector<GamePhysicsTriangle> triangles;
 };
 bool decodeGamePhysicsGeometry(const GamePhysicsChunk &chunk,
@@ -28,17 +29,27 @@ enum class GamePhysicsHitStatus { Miss, Hit, Unsupported };
 struct GamePhysicsHit {
   GamePhysicsHitStatus status = GamePhysicsHitStatus::Unsupported;
   float fraction = 0;
-  std::array<float,3> point{}, normal{};
+  std::array<float, 3> point{}, normal{};
   uint32_t materialWord = 0;
 };
-GamePhysicsHit queryGamePhysicsFace(const GamePhysicsGeometry &geometry, size_t face,
-                                    const std::array<float,3> &start,
-                                    const std::array<float,3> &end);
+GamePhysicsHit queryGamePhysicsFace(const GamePhysicsGeometry &geometry,
+                                    size_t face,
+                                    const std::array<float, 3> &start,
+                                    const std::array<float, 3> &end);
 
 enum class ParentFaceMask { Accepted, Rejected, Unsupported };
-// Bounded 004a0aa0 parent mask: stationary, axis-aligned Box root only.
-// inheritedRejected is the upstream mask entry. This does not perform world
-// traversal or establish that a candidate body is registered in the sector.
-ParentFaceMask queryStationaryParentFace(const GamePhysicsGeometry &geometry,
-    size_t face, const physics::Body &parent, const ResourceBounds &nodeBounds,
-    bool inheritedRejected);
+// 004a0aa0 parent mask for a root box or compound mesh, including sweep
+// and orientation. Inherited rejection is the upstream face mask entry.
+// This does not establish complete world traversal or pair registration.
+ParentFaceMask queryParentFace(const GamePhysicsGeometry &geometry, size_t face,
+                               const physics::Body &parent,
+                               const ResourceBounds &nodeBounds,
+                               bool inheritedRejected);
+
+// 004b3850 directed neighbor membership transition for two extant records.
+// Both node bounds and their sector identity are supplied by the manager.
+// This does not enumerate records or establish complete neighbor coverage.
+enum class SectorNeighborTransition { Keep, Add, Remove, Unsupported };
+SectorNeighborTransition updateSectorNeighbor(bool linked, bool sameSector,
+                                              const ResourceBounds &source,
+                                              const ResourceBounds &target);

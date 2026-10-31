@@ -339,7 +339,19 @@ int main() {
                              {}, ref, &host.arena, &host.classes)),
         "pending resource unsupported"));
     CHECK(resources.pendingPackLoads() == 1 && !soundNode.packNode->loaded());
+    resources.resetLoadingHistory(8);
+    CHECK(!resources.isLoading());
     CHECK(resources.completePendingPackLoads(16, error));
+    CHECK(resources.isLoading());
+    const auto loadingFlag = invokeNative("java.lang.System", "isLoading", "()I",
+                                          {}, nullptr, &host.arena, &host.classes);
+    CHECK(std::holds_alternative<VmValue>(loadingFlag) &&
+          std::get<int32_t>(std::get<VmValue>(loadingFlag)) == 1);
+    for (int i = 0; i < 15; ++i)
+      CHECK(resources.completePendingPackLoads(16, error));
+    CHECK(resources.isLoading());
+    CHECK(resources.completePendingPackLoads(16, error));
+    CHECK(!resources.isLoading());
     CHECK(resources.pendingPackLoads() == 0 &&
           !(soundNode.packNode->flags & 0x2000000u));
     CHECK(soundNode.packNode->loaded() && soundNode.packNode->sound &&
@@ -400,6 +412,22 @@ int main() {
     CHECK(ok(invokeNative("java.util.resource.SfxRef", "stop", "(I)V",
                           {int32_t{7}}, ref, &host.arena, &host.classes)));
     CHECK(effects->voiceCount() == 0);
+    auto loopArgs = playArgs;
+    loopArgs[4] = int32_t{1};
+    CHECK(isId(invokeNative("java.util.resource.SfxRef", "nplay",
+                            "(Ljava.lang.Vector3;FFFII)I", loopArgs, ref,
+                            &host.arena, &host.classes), 7));
+    CHECK(effects->voiceCount() == 1 && effects->tick(error));
+    CHECK(isId(invokeNative("java.util.resource.SfxRef", "nplay",
+                            "(Ljava.lang.Vector3;FFFII)I", loopArgs, ref,
+                            &host.arena, &host.classes), 7));
+    CHECK(effects->tick(error) && effects->voiceCount() == 1);
+    CHECK(effects->tick(error) && effects->voiceCount() == 0);
+    loopArgs[4] = int32_t{2};
+    CHECK(std::holds_alternative<std::string>(
+        invokeNative("java.util.resource.SfxRef", "nplay",
+                     "(Ljava.lang.Vector3;FFFII)I", loopArgs, ref,
+                     &host.arena, &host.classes)));
     host.arena.soundState = nullptr;
     CHECK(ok(host.set(ref, emptyScript)));
     auto scriptNode = resources.resolve(binding.link.owner);
@@ -751,9 +779,10 @@ int main() {
       auto batched = std::make_shared<SceneMaterialResources>(
           nullptr, std::vector<LinkOwner *>{}, 0x8000);
       CHECK(resources.bindSceneMaterial(resources.resolve(node), batched));
-      CHECK(!resources.stockSceneBatchBuffersAbsent());
+      // 0x8000 objects own no batch buffers (FUN_00527950 branch near 00528f00).
+      CHECK(resources.stockSceneBatchBuffersAbsent());
       world.destroy(*node);
-      CHECK(!resources.stockSceneBatchBuffersAbsent());
+      CHECK(resources.stockSceneBatchBuffersAbsent());
     }
   }
   {

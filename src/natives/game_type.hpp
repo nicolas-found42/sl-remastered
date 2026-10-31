@@ -13,6 +13,7 @@
 #include <utility>
 #include <vector>
 
+struct VmStaticFields;
 class FrameVisibilityState;
 class VmVideoControl {
 public:
@@ -67,12 +68,43 @@ NativeResult gfxForceRendering(const std::vector<VmValue> &args,
 NativeResult gfxFlush(const std::vector<VmValue> &args,
                       const VmObject *receiver, VmArena *arena,
                       const std::vector<const TufaClass *> *classes);
-bool dispatchCursorSubscribers(VmArena &arena, WorldNode &source,
-                               const std::string &payload,
-                               const std::vector<const TufaClass *> &classes,
-                               const std::vector<VmStaticFields> &states,
-                               std::string &error,
-                               WorldNode *sourceOverride = nullptr);
+class VmScheduler;
+// Arena, scheduler and world outlive the dispatch. Resume after scheduler
+// ticks; true means pending or successful, and finished() distinguishes
+// completion. Destroying a pending dispatch cancels its host task on the next
+// scheduler tick.
+class CursorDispatch {
+public:
+  CursorDispatch(VmArena &, VmScheduler &, WorldNode &, std::string,
+                 const std::vector<const TufaClass *> &,
+                 const std::vector<VmStaticFields> &,
+                 WorldNode *sourceOverride = nullptr);
+  ~CursorDispatch();
+  CursorDispatch(const CursorDispatch &) = delete;
+  CursorDispatch &operator=(const CursorDispatch &) = delete;
+  bool resume(std::string &error);
+  bool finished() const;
+
+private:
+  struct Impl;
+  std::unique_ptr<Impl> impl_;
+};
+
+class AnimationDispatch {
+public:
+  AnimationDispatch(VmArena &, VmScheduler &, float,
+                    const std::vector<const TufaClass *> &,
+                    const std::vector<VmStaticFields> &);
+  ~AnimationDispatch();
+  AnimationDispatch(const AnimationDispatch &) = delete;
+  AnimationDispatch &operator=(const AnimationDispatch &) = delete;
+  bool resume(std::string &error);
+  bool finished() const;
+
+private:
+  struct Impl;
+  std::unique_ptr<Impl> impl_;
+};
 
 // Handler at 00481a70. Parses (GameRef parent|null, int scriptResourceId,
 // String argument|null, String name|null), runs prepareGameCreation and
@@ -100,7 +132,9 @@ NativeResult gameRefQueueEvent(const std::vector<VmValue> &args,
                                const std::vector<const TufaClass *> *classes);
 // Load the existing bounded ground factory without registering a notification.
 // A failed partially prepared factory must be reset before retrying.
-std::optional<std::string> loadGroundGameResource(VmArena &arena, ResourceNode &node);
+std::optional<std::string> loadGroundGameResource(
+    VmArena &arena, ResourceNode &node,
+    const std::vector<VmStaticFields> *staticFields = nullptr);
 NativeResult
 gameTypeAddNotification(const std::vector<VmValue> &args,
                         const VmObject *receiver, VmArena *arena,
@@ -155,8 +189,8 @@ NativeResult gameTypeAddTimer(const std::vector<VmValue> &, const VmObject *,
 NativeResult gameTypeRemoveAllTimers(const std::vector<VmValue> &,
                                      const VmObject *, VmArena *,
                                      const std::vector<const TufaClass *> *);
-bool dispatchTimerEvent(VmArena &, LinkOwner &, int32_t,
-                        const std::vector<const TufaClass *> &,
+bool dispatchTimerEvent(VmArena &, LinkOwner &, int32_t, uint32_t event,
+                        int32_t param, const std::vector<const TufaClass *> &,
                         const std::vector<VmStaticFields> &, std::string &);
 NativeResult gameTypeRegisterCallback(const std::vector<VmValue> &,
                                       const VmObject *, VmArena *,
@@ -169,10 +203,8 @@ gameTypeUnregisterCallbacks(const std::vector<VmValue> &, const VmObject *,
                             VmArena *, const std::vector<const TufaClass *> *);
 NativeResult inputLastKey(const std::vector<VmValue> &, const VmObject *,
                           VmArena *, const std::vector<const TufaClass *> *);
-bool dispatchAnimationCallbacks(VmArena &, float,
-                                const std::vector<const TufaClass *> &,
-                                const std::vector<VmStaticFields> &,
-                                std::string &);
+NativeResult inputGetAxis(const std::vector<VmValue> &, const VmObject *,
+                          VmArena *, const std::vector<const TufaClass *> *);
 
 NativeResult gfxNumDisplayModes(const std::vector<VmValue> &, const VmObject *,
                                 VmArena *,

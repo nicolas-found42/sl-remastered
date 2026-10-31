@@ -1,18 +1,35 @@
 #include "world_model.hpp"
 #include "camera_device_factory.hpp"
 #include "camera_follow_force.hpp"
+#include "car_physics.hpp"
+#include "physics_compound_step.hpp"
+#include "ground_runtime.hpp"
+#include "resource_world.hpp"
+#include "run_log.hpp"
 #include <algorithm>
 #include <cmath>
+#include <map>
 
 namespace {
 uint32_t &globalFrameCounter() {
   static uint32_t value = 1;
   return value;
 }
+} // namespace
+
+void GameWorld::attachResourceWorld(ResourceWorld &resources) {
+  resourceWorlds_.push_back(&resources);
+}
+void GameWorld::detachResourceWorld(ResourceWorld &resources) {
+  resourceWorlds_.erase(
+      std::remove(resourceWorlds_.begin(), resourceWorlds_.end(), &resources),
+      resourceWorlds_.end());
 }
 
 uint32_t GameWorld::frameCounter() const { return globalFrameCounter(); }
-void GameWorld::setFrameCounter(uint32_t frame) { globalFrameCounter() = frame; }
+void GameWorld::setFrameCounter(uint32_t frame) {
+  globalFrameCounter() = frame;
+}
 
 bool GameWorld::changeCursorVisibility(bool show, std::string &error) {
   const int64_t next = int64_t(cursorDisplayCount_) + (show ? 1 : -1);
@@ -21,7 +38,8 @@ bool GameWorld::changeCursorVisibility(bool show, std::string &error) {
     return false;
   }
   if (!cursorSelector_ || !cursorSelector_(0, next >= 0, error)) {
-    if (!cursorSelector_) error = "cursor host unavailable";
+    if (!cursorSelector_)
+      error = "cursor host unavailable";
     return false;
   }
   cursorDisplayCount_ = static_cast<int32_t>(next);
@@ -33,8 +51,15 @@ CameraResource makeCameraResource(float aspect, float fieldOfView,
                                   float nearDistance, float farDistance,
                                   float lodBias, float lodAmplitude,
                                   int32_t culling, int32_t planeTest) {
-  return {aspect, fieldOfView, nearDistance * 10.0f, farDistance * 10.0f,
-          lodBias, lodAmplitude, culling, planeTest, {}};
+  return {aspect,
+          fieldOfView,
+          nearDistance * 10.0f,
+          farDistance * 10.0f,
+          lodBias,
+          lodAmplitude,
+          culling,
+          planeTest,
+          {}};
 }
 
 LinkOwner *cameraTraversalRoot(WorldNode &cameraRenderInstance) {
@@ -49,8 +74,10 @@ CameraRendererFields makeCameraRendererFields(const CameraResource &camera) {
   const double angle = static_cast<double>(camera.fieldOfView) * halfRadians;
   const float farMetric = static_cast<float>(
       std::sqrt(std::cos(angle) / std::sin(angle)) * camera.farDistance);
-  return {camera.viewportAspect, camera.fieldOfView, camera.nearDistance,
-          farMetric, camera.lodBias, camera.lodAmplitude, camera.planeTest};
+  return {camera.viewportAspect, camera.fieldOfView,
+          camera.nearDistance,   farMetric,
+          camera.lodBias,        camera.lodAmplitude,
+          camera.planeTest};
 }
 
 CameraRendererFields updateCameraRendererFields(const CameraResource &camera,
@@ -66,13 +93,15 @@ CameraRendererFields updateCameraRendererFields(const CameraResource &camera,
   return fields;
 }
 
-std::array<float, 16> cameraProjectionMatrix(const CameraRendererFields &fields) {
+std::array<float, 16>
+cameraProjectionMatrix(const CameraRendererFields &fields) {
   constexpr float degreesToRadians = 0x1.1df46ap-6f;
   const float radians = fields.fieldOfView * degreesToRadians;
   const float halfAngle = radians * 0.5f;
   const float cotangent = static_cast<float>(std::cos(halfAngle)) /
                           static_cast<float>(std::sin(halfAngle));
-  const float depth = fields.farMetric / (fields.nearDistance - fields.farMetric);
+  const float depth =
+      fields.farMetric / (fields.nearDistance - fields.farMetric);
   std::array<float, 16> matrix{};
   matrix[0] = cotangent / fields.viewportAspect;
   matrix[5] = cotangent;
@@ -88,7 +117,8 @@ cameraViewMatrix(const std::array<float, 16> &worldMatrix) {
   for (size_t row = 0; row < 4; ++row) {
     for (size_t col = 0; col < 4; ++col) {
       const float value = worldMatrix[row * 4 + col];
-      if (!std::isfinite(value)) return std::nullopt;
+      if (!std::isfinite(value))
+        return std::nullopt;
       augmented[row][col] = value;
     }
     augmented[row][row + 4] = 1.0;
@@ -96,22 +126,29 @@ cameraViewMatrix(const std::array<float, 16> &worldMatrix) {
   for (size_t col = 0; col < 4; ++col) {
     size_t pivot = col;
     for (size_t row = col + 1; row < 4; ++row)
-      if (std::abs(augmented[row][col]) > std::abs(augmented[pivot][col])) pivot = row;
-    if (augmented[pivot][col] == 0.0) return std::nullopt;
-    for (size_t i = 0; i < 8; ++i) std::swap(augmented[col][i], augmented[pivot][i]);
+      if (std::abs(augmented[row][col]) > std::abs(augmented[pivot][col]))
+        pivot = row;
+    if (augmented[pivot][col] == 0.0)
+      return std::nullopt;
+    for (size_t i = 0; i < 8; ++i)
+      std::swap(augmented[col][i], augmented[pivot][i]);
     const double divisor = augmented[col][col];
-    for (double &value : augmented[col]) value /= divisor;
+    for (double &value : augmented[col])
+      value /= divisor;
     for (size_t row = 0; row < 4; ++row) {
-      if (row == col) continue;
+      if (row == col)
+        continue;
       const double factor = augmented[row][col];
-      for (size_t i = 0; i < 8; ++i) augmented[row][i] -= factor * augmented[col][i];
+      for (size_t i = 0; i < 8; ++i)
+        augmented[row][i] -= factor * augmented[col][i];
     }
   }
   std::array<float, 16> view{};
   for (size_t row = 0; row < 4; ++row)
     for (size_t col = 0; col < 4; ++col) {
       view[row * 4 + col] = static_cast<float>(augmented[row][col + 4]);
-      if (!std::isfinite(view[row * 4 + col])) return std::nullopt;
+      if (!std::isfinite(view[row * 4 + col]))
+        return std::nullopt;
     }
   return view;
 }
@@ -121,20 +158,25 @@ cameraViewState(const CameraResource &camera,
                 const std::array<float, 16> &boneWorldMatrix,
                 float viewportAspect) {
   const auto view = cameraViewMatrix(boneWorldMatrix);
-  if (!view) return std::nullopt;
+  if (!view)
+    return std::nullopt;
   const auto fields = updateCameraRendererFields(camera, viewportAspect);
   const auto projection = cameraProjectionMatrix(fields);
   for (const float value : projection)
-    if (!std::isfinite(value)) return std::nullopt;
+    if (!std::isfinite(value))
+      return std::nullopt;
   return CameraViewState{fields, *view, projection};
 }
 
 std::optional<std::array<std::array<float, 4>, 5>>
 cameraFrustumPlanes(const CameraRendererFields &fields,
                     const std::array<float, 16> &worldMatrix) {
-  for (float value : worldMatrix) if (!std::isfinite(value)) return std::nullopt;
-  if (!std::isfinite(fields.fieldOfView) || !std::isfinite(fields.viewportAspect) ||
-      !std::isfinite(fields.farMetric)) return std::nullopt;
+  for (float value : worldMatrix)
+    if (!std::isfinite(value))
+      return std::nullopt;
+  if (!std::isfinite(fields.fieldOfView) ||
+      !std::isfinite(fields.viewportAspect) || !std::isfinite(fields.farMetric))
+    return std::nullopt;
   const double angle = static_cast<double>(fields.fieldOfView) * 0x1.1df242p-7f;
   const double tangent = std::sin(angle) / std::cos(angle);
   const double horizontal = tangent * fields.viewportAspect;
@@ -145,16 +187,23 @@ cameraFrustumPlanes(const CameraRendererFields &fields,
   std::array<std::array<float, 4>, 5> planes{};
   for (size_t i = 0; i < 3; ++i) {
     planes[0][i] = -worldMatrix[8 + i];
-    planes[1][i] = static_cast<float>(hz * worldMatrix[8 + i] + hx * worldMatrix[i]);
-    planes[2][i] = static_cast<float>(hz * worldMatrix[8 + i] - hx * worldMatrix[i]);
-    planes[3][i] = static_cast<float>(vz * worldMatrix[8 + i] + vy * worldMatrix[4 + i]);
-    planes[4][i] = static_cast<float>(vz * worldMatrix[8 + i] - vy * worldMatrix[4 + i]);
+    planes[1][i] =
+        static_cast<float>(hz * worldMatrix[8 + i] + hx * worldMatrix[i]);
+    planes[2][i] =
+        static_cast<float>(hz * worldMatrix[8 + i] - hx * worldMatrix[i]);
+    planes[3][i] =
+        static_cast<float>(vz * worldMatrix[8 + i] + vy * worldMatrix[4 + i]);
+    planes[4][i] =
+        static_cast<float>(vz * worldMatrix[8 + i] - vy * worldMatrix[4 + i]);
   }
   for (size_t i = 0; i < planes.size(); ++i) {
     const auto &p = planes[i];
-    const float dot = p[0] * worldMatrix[12] + p[1] * worldMatrix[13] + p[2] * worldMatrix[14];
+    const float dot = p[0] * worldMatrix[12] + p[1] * worldMatrix[13] +
+                      p[2] * worldMatrix[14];
     planes[i][3] = (dot + (i == 0 ? fields.farMetric : 0.0f)) * 0.1f + 2.0f;
-    for (float value : planes[i]) if (!std::isfinite(value)) return std::nullopt;
+    for (float value : planes[i])
+      if (!std::isfinite(value))
+        return std::nullopt;
   }
   return planes;
 }
@@ -171,7 +220,8 @@ projectCameraPoint(const std::array<float, 3> &point,
         out[column] += v[row] * m[row * 4 + column];
     return out;
   };
-  const auto cameraPoint = transform({point[0], point[1], point[2], 1.0f}, view);
+  const auto cameraPoint =
+      transform({point[0], point[1], point[2], 1.0f}, view);
   const auto clip = transform(cameraPoint, projection);
   if (!std::isfinite(clip[3]) || clip[3] <= 0.0f)
     return std::nullopt;
@@ -189,19 +239,28 @@ unprojectCameraPoint(const std::array<float, 3> &point,
                      const std::array<float, 16> &world,
                      const std::array<float, 16> &projection) {
   const auto inverse = cameraViewMatrix(projection);
-  if (!inverse) return std::nullopt;
-  for (float value : point) if (!std::isfinite(value)) return std::nullopt;
-  for (float value : world) if (!std::isfinite(value)) return std::nullopt;
+  if (!inverse)
+    return std::nullopt;
+  for (float value : point)
+    if (!std::isfinite(value))
+      return std::nullopt;
+  for (float value : world)
+    if (!std::isfinite(value))
+      return std::nullopt;
   std::array<float, 4> camera{};
   const std::array<float, 4> input{point[0], point[1], point[2], 1.0f};
   for (size_t column = 0; column < 4; ++column)
-    for (size_t row = 0; row < 4; ++row) camera[column] += input[row] * (*inverse)[row * 4 + column];
-  if (!std::isfinite(camera[3]) || camera[3] == 0) return std::nullopt;
+    for (size_t row = 0; row < 4; ++row)
+      camera[column] += input[row] * (*inverse)[row * 4 + column];
+  if (!std::isfinite(camera[3]) || camera[3] == 0)
+    return std::nullopt;
   std::array<float, 3> result{};
   for (size_t column = 0; column < 3; ++column) {
     result[column] = world[12 + column];
-    for (size_t row = 0; row < 3; ++row) result[column] += camera[row] / camera[3] * world[row * 4 + column];
-    if (!std::isfinite(result[column])) return std::nullopt;
+    for (size_t row = 0; row < 3; ++row)
+      result[column] += camera[row] / camera[3] * world[row * 4 + column];
+    if (!std::isfinite(result[column]))
+      return std::nullopt;
   }
   return result;
 }
@@ -210,13 +269,15 @@ std::optional<std::array<float, 2>>
 cameraViewportPoint(const std::array<float, 3> &point,
                     const ViewportInstance &viewport, int32_t outputWidth,
                     int32_t outputHeight) {
-  if (outputWidth <= 0 || outputHeight <= 0 ||
-      !std::isfinite(point[0]) || !std::isfinite(point[1]) ||
-      !std::isfinite(point[2]) || point[0] < -1.0f || point[0] > 1.0f ||
-      point[1] < -1.0f || point[1] > 1.0f || point[2] < 0.0f || point[2] > 1.0f)
+  if (outputWidth <= 0 || outputHeight <= 0 || !std::isfinite(point[0]) ||
+      !std::isfinite(point[1]) || !std::isfinite(point[2]) ||
+      point[0] < -1.0f || point[0] > 1.0f || point[1] < -1.0f ||
+      point[1] > 1.0f || point[2] < 0.0f || point[2] > 1.0f)
     return std::nullopt;
-  const float x = (viewport.left + (point[0] + 1.0f) * 0.5f * viewport.width) * outputWidth;
-  const float y = (viewport.top + (1.0f - point[1]) * 0.5f * viewport.height) * outputHeight;
+  const float x =
+      (viewport.left + (point[0] + 1.0f) * 0.5f * viewport.width) * outputWidth;
+  const float y = (viewport.top + (1.0f - point[1]) * 0.5f * viewport.height) *
+                  outputHeight;
   if (!std::isfinite(x) || !std::isfinite(y))
     return std::nullopt;
   return std::array<float, 2>{x, y};
@@ -226,20 +287,28 @@ std::optional<std::vector<CameraClipVertex>>
 clipCameraTriangle(const std::array<CameraClipVertex, 3> &triangle) {
   for (const auto &vertex : triangle) {
     for (float component : vertex.position)
-      if (!std::isfinite(component)) return std::nullopt;
+      if (!std::isfinite(component))
+        return std::nullopt;
     for (float component : vertex.uv)
-      if (!std::isfinite(component)) return std::nullopt;
+      if (!std::isfinite(component))
+        return std::nullopt;
   }
   std::vector<CameraClipVertex> polygon(triangle.begin(), triangle.end());
   const auto distance = [](const CameraClipVertex &v, int plane) {
     const auto &p = v.position;
     switch (plane) {
-    case 0: return static_cast<double>(p[3]) + p[0];
-    case 1: return static_cast<double>(p[3]) - p[0];
-    case 2: return static_cast<double>(p[3]) + p[1];
-    case 3: return static_cast<double>(p[3]) - p[1];
-    case 4: return static_cast<double>(p[2]);
-    default: return static_cast<double>(p[3]) - p[2];
+    case 0:
+      return static_cast<double>(p[3]) + p[0];
+    case 1:
+      return static_cast<double>(p[3]) - p[0];
+    case 2:
+      return static_cast<double>(p[3]) + p[1];
+    case 3:
+      return static_cast<double>(p[3]) - p[1];
+    case 4:
+      return static_cast<double>(p[2]);
+    default:
+      return static_cast<double>(p[3]) - p[2];
     }
   };
   for (int plane = 0; plane < 6 && !polygon.empty(); ++plane) {
@@ -251,17 +320,22 @@ clipCameraTriangle(const std::array<CameraClipVertex, 3> &triangle) {
       const bool previousInside = previousDistance >= 0.0f;
       const bool currentInside = currentDistance >= 0.0f;
       if (previousInside != currentInside) {
-        const double t = previousDistance / (previousDistance - currentDistance);
+        const double t =
+            previousDistance / (previousDistance - currentDistance);
         CameraClipVertex intersection{};
         for (size_t i = 0; i < 4; ++i)
-          intersection.position[i] = static_cast<float>(previous.position[i] +
-              t * (static_cast<double>(current.position[i]) - previous.position[i]));
+          intersection.position[i] =
+              static_cast<float>(previous.position[i] +
+                                 t * (static_cast<double>(current.position[i]) -
+                                      previous.position[i]));
         for (size_t i = 0; i < 2; ++i)
-          intersection.uv[i] = static_cast<float>(previous.uv[i] +
+          intersection.uv[i] = static_cast<float>(
+              previous.uv[i] +
               t * (static_cast<double>(current.uv[i]) - previous.uv[i]));
         next.push_back(intersection);
       }
-      if (currentInside) next.push_back(current);
+      if (currentInside)
+        next.push_back(current);
       previous = current;
       previousDistance = currentDistance;
     }
@@ -277,8 +351,11 @@ ViewportRenderAttachments::~ViewportRenderAttachments() {
     setLinkOwner(entry->instance, nullptr);
 }
 
-void ViewportRenderAttachments::prepare(LinkOwner &instance, std::optional<uint32_t> priority) {
-  auto matches = [&instance](const auto &entry) { return entry->instance.owner == &instance; };
+void ViewportRenderAttachments::prepare(LinkOwner &instance,
+                                        std::optional<uint32_t> priority) {
+  auto matches = [&instance](const auto &entry) {
+    return entry->instance.owner == &instance;
+  };
   if (std::any_of(pending_.begin(), pending_.end(), matches) ||
       std::any_of(active_.begin(), active_.end(), matches))
     return;
@@ -288,24 +365,33 @@ void ViewportRenderAttachments::prepare(LinkOwner &instance, std::optional<uint3
   pending_.push_back(std::move(entry));
 }
 
-bool ViewportRenderAttachments::activate(LinkOwner &instance, int32_t priority) {
-  active_.erase(std::remove_if(active_.begin(), active_.end(), [](const auto &entry) {
-    return !entry->instance.owner;
-  }), active_.end());
-  auto matches = [&instance](const auto &entry) { return entry->instance.owner == &instance; };
+bool ViewportRenderAttachments::activate(LinkOwner &instance,
+                                         int32_t priority) {
+  active_.erase(
+      std::remove_if(active_.begin(), active_.end(),
+                     [](const auto &entry) { return !entry->instance.owner; }),
+      active_.end());
+  auto matches = [&instance](const auto &entry) {
+    return entry->instance.owner == &instance;
+  };
   auto it = std::find_if(pending_.begin(), pending_.end(), matches);
   if (it == pending_.end())
     return std::any_of(active_.begin(), active_.end(), matches);
-  const std::optional<uint32_t> nextPriority = priority == -1
-      ? (*it)->priority : std::optional<uint32_t>(static_cast<uint32_t>(priority));
-  if (!active_.empty() && (!nextPriority || std::any_of(active_.begin(), active_.end(),
-      [](const auto &other) { return !other->priority; }))) return false;
+  const std::optional<uint32_t> nextPriority =
+      priority == -1 ? (*it)->priority
+                     : std::optional<uint32_t>(static_cast<uint32_t>(priority));
+  if (!active_.empty() &&
+      (!nextPriority ||
+       std::any_of(active_.begin(), active_.end(),
+                   [](const auto &other) { return !other->priority; })))
+    return false;
   auto entry = std::move(*it);
   pending_.erase(it);
   entry->priority = nextPriority;
-  auto position = std::find_if(active_.begin(), active_.end(), [&](const auto &other) {
-    return *other->priority >= *entry->priority;
-  });
+  auto position =
+      std::find_if(active_.begin(), active_.end(), [&](const auto &other) {
+        return *other->priority >= *entry->priority;
+      });
   active_.insert(position, std::move(entry));
   return true;
 }
@@ -321,39 +407,93 @@ std::vector<LinkOwner *> ViewportRenderAttachments::active() const {
 void ViewportRenderAttachments::remove(LinkOwner &instance) {
   const auto removeFrom = [&](auto &entries) {
     for (auto &entry : entries)
-      if (entry->instance.owner == &instance) setLinkOwner(entry->instance, nullptr);
-    entries.erase(std::remove_if(entries.begin(), entries.end(), [](const auto &entry) {
-      return !entry->instance.owner;
-    }), entries.end());
+      if (entry->instance.owner == &instance)
+        setLinkOwner(entry->instance, nullptr);
+    entries.erase(std::remove_if(
+                      entries.begin(), entries.end(),
+                      [](const auto &entry) { return !entry->instance.owner; }),
+                  entries.end());
   };
   removeFrom(pending_);
   removeFrom(active_);
 }
 
 void GameWorld::registerViewport(WorldNode &node, int32_t initialPriority) {
-  viewportInventory_.prepare(node, initialPriority == -1 ? std::nullopt
-      : std::optional<uint32_t>(static_cast<uint32_t>(initialPriority)));
+  viewportInventory_.prepare(
+      node,
+      initialPriority == -1
+          ? std::nullopt
+          : std::optional<uint32_t>(static_cast<uint32_t>(initialPriority)));
 }
 
 bool GameWorld::activateViewport(WorldNode &node) {
   return viewportInventory_.activate(node, -1);
 }
 
-void GameWorld::deactivateViewport(WorldNode &node) { viewportInventory_.remove(node); }
+void GameWorld::deactivateViewport(WorldNode &node) {
+  viewportInventory_.remove(node);
+}
+
+void GameWorld::logViewportAttachments() {
+  static bool logged = false;
+  if (logged || !runlog::active())
+    return;
+  logged = true;
+  std::vector<WorldNode *> allViewports;
+  for (auto &entry : nodes_)
+    if (entry.second && entry.second->viewport &&
+        entry.second->viewport->renderAttachments)
+      allViewports.push_back(entry.second.get());
+  for (auto *node : allViewports) {
+    for (auto *entry : node->viewport->renderAttachments->active()) {
+      auto *draw = nodeFor(entry);
+      runlog::event(
+          runlog::EventKind::Note,
+          "post-activate viewport 0x%x attachment: node=%p type=%u loaded=%d "
+          "id=0x%x",
+          node->instanceId, (const void *)draw,
+          draw ? static_cast<unsigned>(draw->type) : 0u,
+          draw && draw->loaded ? 1 : 0, draw ? draw->instanceId : 0u);
+    }
+  }
+}
 
 std::vector<WorldNode *> GameWorld::activeViewports() {
   std::vector<WorldNode *> result;
   for (auto *owner : viewportInventory_.active()) {
     auto *node = nodeFor(owner);
-    if (node && node->type == 18 && node->viewport && node->viewport->list == ViewportList::Active)
+    if (node && node->type == 18 && node->viewport &&
+        node->viewport->list == ViewportList::Active)
       result.push_back(node);
+  }
+  // HUD attachment inventory: logged once after the player OSD activation
+  // (see GameWorld::logViewportAttachments call from the activate path).
+  if (runlog::active()) {
+    static bool attachmentsLogged = true;
+    if (!attachmentsLogged) {
+      attachmentsLogged = true;
+      for (auto *node : result) {
+        if (!node->viewport || !node->viewport->renderAttachments)
+          continue;
+        for (auto *entry : node->viewport->renderAttachments->active()) {
+          auto *draw = nodeFor(entry);
+          runlog::event(
+              runlog::EventKind::Note,
+              "viewport 0x%x attachment: node=%p type=%u loaded=%d id=0x%x",
+              node->instanceId, (const void *)draw,
+              draw ? static_cast<unsigned>(draw->type) : 0u,
+              draw && draw->loaded ? 1 : 0, draw ? draw->instanceId : 0u);
+        }
+      }
+    }
   }
   return result;
 }
 
-std::optional<int32_t> PlayerInputState::add(
-    int32_t axis, int32_t device, int32_t physicalAxis, float sample,
-    const std::array<float, 4> &range, int32_t deviceType) {
+std::optional<int32_t> PlayerInputState::add(int32_t axis, int32_t device,
+                                             int32_t physicalAxis, float sample,
+                                             const std::array<float, 4> &range,
+                                             int32_t deviceType) {
   if (device < 0 || physicalAxis < 0)
     return -1;
   if (axis < 0 || static_cast<size_t>(axis) >= axes_.size())
@@ -407,25 +547,76 @@ void PlayerInputState::beginFrame(float deltaSeconds) {
   ++inputFrame_;
 }
 
+namespace {
+// Tail of stock FUN_0054d830: the axis record's +0x20 word is a response
+// curve exponent. At or below 1 the smoothed value is returned unchanged;
+// above 1 (clamped to 5) the magnitude is raised by repeated multiplication
+// with the fourth root of itself, once per quarter step above 1.125.
+float axisResponseCurve(float value, float curve) {
+  if (curve <= 1.0f)
+    return value;
+  float magnitude = value;
+  float sign = 1.0f;
+  if (!(0.0f <= magnitude)) {
+    magnitude = -magnitude;
+    sign = -1.0f;
+  }
+  if (magnitude < 1e-05f)
+    return 0.0f;
+  if (curve < 1.0f)
+    return magnitude;
+  if (5.0f < curve)
+    curve = 5.0f;
+  const float root = std::sqrt(magnitude);
+  for (; 1.125f < curve; curve -= 0.25f)
+    magnitude = static_cast<float>(std::sqrt(root)) * magnitude;
+  return sign < 0 ? -magnitude : magnitude;
+}
+} // namespace
+
 std::optional<float> PlayerInputState::sampleAxis(int32_t axis) {
-  if (axis <= 0 || static_cast<size_t>(axis) >= axes_.size() || !sampleInput || !inputType ||
-      !std::isfinite(deltaMilliseconds_) || deltaMilliseconds_ < 0.0f)
+  if (axis <= 0 || static_cast<size_t>(axis) >= axes_.size() || !sampleInput ||
+      !inputType || !std::isfinite(deltaMilliseconds_) ||
+      deltaMilliseconds_ < 0.0f) {
+    lastBlock_ = axis <= 0 || static_cast<size_t>(axis) >= axes_.size()
+                     ? "axis out of range"
+                 : !sampleInput ? "no sampleInput reader"
+                 : !inputType   ? "no inputType reader"
+                                : "invalid frame time";
     return std::nullopt;
+  }
   auto &state = axes_[static_cast<size_t>(axis)];
-  if (state.remaining[1] || state.remaining[2] || state.factors[4] != 1.0f || state.deviceType != 0)
+  if (state.remaining[1] || state.remaining[2] || state.deviceType != 0) {
+    lastBlock_ = state.remaining[1] || state.remaining[2]
+                     ? "axis remaining counters"
+                     : "axis deviceType != 0";
     return std::nullopt;
-  if (state.stamp == inputFrame_) return state.value;
+  }
+  if (state.stamp == inputFrame_)
+    return axisResponseCurve(state.value, state.factors[4]);
   float sum = 0.0f;
   for (auto &mapping : mappings_) {
-    if (mapping.axis != axis) continue;
+    if (mapping.axis != axis)
+      continue;
     const auto sample = sampleInput(mapping.device, mapping.physicalAxis);
     const auto kind = inputType(mapping.device, mapping.physicalAxis);
-    if (!sample || !std::isfinite(*sample) || !kind || *kind != 0) return std::nullopt;
+    if (!sample || !std::isfinite(*sample) || !kind || *kind != 0) {
+      lastBlock_ = !sample ? "device sample unavailable"
+                   : !kind ? "device type unavailable"
+                           : "mapping is not a digital/keyboard axis";
+      return std::nullopt;
+    }
     const float lo = mapping.range[0], hi = mapping.range[1];
-    if (!std::all_of(mapping.range.begin(), mapping.range.end(), [](float value) { return std::isfinite(value); }) ||
-        lo == hi) return std::nullopt;
+    if (!std::all_of(mapping.range.begin(), mapping.range.end(),
+                     [](float value) { return std::isfinite(value); }) ||
+        lo == hi) {
+      lastBlock_ = "invalid mapping range";
+      return std::nullopt;
+    }
     if ((lo <= *sample && *sample <= hi) || (hi <= *sample && *sample <= lo))
-      sum += (*sample - lo) * (mapping.range[3] - mapping.range[2]) / (hi - lo) + mapping.range[2];
+      sum +=
+          (*sample - lo) * (mapping.range[3] - mapping.range[2]) / (hi - lo) +
+          mapping.range[2];
     mapping.sample = *sample;
   }
   sum = std::clamp(sum, -1.0f, 1.0f);
@@ -434,20 +625,27 @@ std::optional<float> PlayerInputState::sampleAxis(int32_t axis) {
     step *= sum * state.value >= 0.0f ? state.factors[2] : state.factors[1];
   else
     step *= state.factors[0];
-  if (!std::isfinite(step) || step < 0.0f) return std::nullopt;
+  if (!std::isfinite(step) || step < 0.0f) {
+    lastBlock_ = "invalid smoothing step";
+    return std::nullopt;
+  }
   step = std::min(step, 1.0f);
   const float difference = sum - state.value;
-  state.value = std::clamp(state.value + std::clamp(difference, -step, step), -1.0f, 1.0f);
+  state.value = std::clamp(state.value + std::clamp(difference, -step, step),
+                           -1.0f, 1.0f);
   state.stamp = inputFrame_;
-  return state.value;
+  return axisResponseCurve(state.value, state.factors[4]);
 }
 
-std::optional<float> GameWorld::playerControlValue(LinkOwner *owner, int32_t axis) {
+std::optional<float> GameWorld::playerControlValue(LinkOwner *owner,
+                                                   int32_t axis) {
   auto *node = nodeFor(owner);
-  if (!node || !node->loaded || node->nativeDevice != "player" || !node->player ||
-      !node->playerInput || node->player->scriptedControlOverride || axis <= 0)
+  if (!node || !node->loaded || node->nativeDevice != "player" ||
+      !node->player || !node->playerInput ||
+      node->player->scriptedControlOverride || axis <= 0)
     return std::nullopt;
-  if (axis >= 76) return 0.0f;
+  if (axis >= 76)
+    return 0.0f;
   return node->playerInput->sampleAxis(axis);
 }
 
@@ -455,15 +653,24 @@ GameWorld::GameWorld() = default;
 
 GameWorld::~GameWorld() {
   physicsWorld_.bodies.clear();
+  objectPhysics_.clear();
+  carChildBodies_.clear();
+  carBodies_.clear();
   dynamicBodies_.clear();
-  for (auto &link : deferredDestroy_) setLinkOwner(*link, nullptr);
+  for (auto &link : deferredDestroy_)
+    setLinkOwner(*link, nullptr);
+  for (auto &link : collisionUpdates_)
+    setLinkOwner(*link, nullptr);
+  for (auto &link : audioListeners_)
+    setLinkOwner(*link, nullptr);
   for (auto &entry : nodes_) {
     for (const auto &observer : nodeDestroyObservers_)
       observer.second(*entry.second);
     if (entry.second->player) {
       setLinkOwner(entry.second->player->font, nullptr);
       setLinkOwner(entry.second->player->animationOverlay, nullptr);
-      for (auto &link : entry.second->player->debugText) setLinkOwner(link, nullptr);
+      for (auto &link : entry.second->player->debugText)
+        setLinkOwner(link, nullptr);
     }
     if (entry.second->cursor) {
       setLinkOwner(entry.second->cursor->controller, nullptr);
@@ -485,7 +692,8 @@ GameWorld::~GameWorld() {
 }
 
 bool GameWorld::registerHook(GameHook kind, WorldNode &node) {
-  if (nodeFor(&node) != &node) return false;
+  if (nodeFor(&node) != &node)
+    return false;
   return registerHook(kind, &node);
 }
 
@@ -508,7 +716,8 @@ void GameWorld::unregisterHook(GameHook kind, LinkOwner *owner) {
 void GameWorld::pruneDetachedHooks(GameHook kind) {
   auto &entries = hooks_[static_cast<size_t>(kind)];
   entries.erase(std::remove_if(entries.begin(), entries.end(),
-                               [](const auto &entry) { return !entry->owner; }), entries.end());
+                               [](const auto &entry) { return !entry->owner; }),
+                entries.end());
 }
 
 std::vector<const WorldNode *> GameWorld::hooks(GameHook kind) const {
@@ -675,8 +884,8 @@ WorldNode *GameWorld::addChild(WorldNode &parent, const std::string &name,
 
 WorldNode *GameWorld::addTypedChild(WorldNode &parent, uint32_t type,
                                     const std::string &name, uint32_t flags) {
-  if (type != 1 && type != 2 && type != 3 && type != 5 && type != 7 && type != 12 &&
-      type != 13 && type != 14 && type != 18)
+  if (type != 1 && type != 2 && type != 3 && type != 5 && type != 7 &&
+      type != 12 && type != 13 && type != 14 && type != 18)
     return nullptr;
   const auto handle = tree_.add(parent.handle);
   if (!handle)
@@ -693,8 +902,8 @@ WorldNode *GameWorld::addTypedChild(WorldNode &parent, uint32_t type,
   return node;
 }
 
-std::optional<ResourceTreeHandle> GameWorld::attachExternal(
-    ResourceTreeHandle parent, LinkOwner &owner) {
+std::optional<ResourceTreeHandle>
+GameWorld::attachExternal(ResourceTreeHandle parent, LinkOwner &owner) {
   const auto handle = tree_.add(parent);
   if (handle)
     externalNodes_.emplace(handle->id, &owner);
@@ -705,25 +914,21 @@ bool GameWorld::detachExternal(ResourceTreeHandle handle) {
   return externalNodes_.count(handle.id) && destroySubtree(handle);
 }
 
-WorldNode *GameWorld::addChildUnderExternal(ResourceTreeHandle parent,
-                                            LinkOwner &owner,
-                                            uint32_t parentType,
-                                            LinkOwner *parentSector,
-                                            const std::string &name,
-                                            uint32_t flags) {
+WorldNode *
+GameWorld::addChildUnderExternal(ResourceTreeHandle parent, LinkOwner &owner,
+                                 uint32_t parentType, LinkOwner *parentSector,
+                                 const std::string &name, uint32_t flags) {
   return addTypedChildUnderExternal(parent, owner, parentType, parentSector, 1,
                                     name, flags);
 }
 
-WorldNode *GameWorld::addTypedChildUnderExternal(ResourceTreeHandle parent,
-                                                 LinkOwner &owner,
-                                                 uint32_t parentType,
-                                                 LinkOwner *parentSector,
-                                                 uint32_t type,
-                                                 const std::string &name,
-                                                 uint32_t flags) {
-  if (type != 1 && type != 2 && type != 3 && type != 5 && type != 7 && type != 12 &&
-      type != 13 && type != 14 && type != 18)
+WorldNode *
+GameWorld::addTypedChildUnderExternal(ResourceTreeHandle parent,
+                                      LinkOwner &owner, uint32_t parentType,
+                                      LinkOwner *parentSector, uint32_t type,
+                                      const std::string &name, uint32_t flags) {
+  if (type != 1 && type != 2 && type != 3 && type != 5 && type != 7 &&
+      type != 12 && type != 13 && type != 14 && type != 18)
     return nullptr;
   const auto found = externalNodes_.find(parent.id);
   if (found == externalNodes_.end() || found->second != &owner)
@@ -801,8 +1006,10 @@ void GameWorld::markLoaded(WorldNode &node) {
   trackLoadState(node, node.type, true);
 }
 
-void GameWorld::noteRecentUse(LinkOwner &owner, uint32_t type, uint32_t &stamp, bool &queued) {
-  if (stamp == frameCounter()) return;
+void GameWorld::noteRecentUse(LinkOwner &owner, uint32_t type, uint32_t &stamp,
+                              bool &queued) {
+  if (stamp == frameCounter())
+    return;
   stamp = frameCounter();
   if (!queued) {
     forgetLoadState(owner);
@@ -812,7 +1019,8 @@ void GameWorld::noteRecentUse(LinkOwner &owner, uint32_t type, uint32_t &stamp, 
 }
 std::vector<LinkOwner *> GameWorld::recentlyUsed(uint32_t type) const {
   const auto found = recentlyUsed_.find(type);
-  return found == recentlyUsed_.end() ? std::vector<LinkOwner *>{} : found->second;
+  return found == recentlyUsed_.end() ? std::vector<LinkOwner *>{}
+                                      : found->second;
 }
 
 void GameWorld::finishRecentUse(LinkOwner &owner, uint32_t type) {
@@ -858,7 +1066,8 @@ bool GameWorld::attachPlayerInput(WorldNode &node) {
   return true;
 }
 
-uint64_t GameWorld::addNodeDestroyObserver(std::function<void(LinkOwner &)> observer) {
+uint64_t
+GameWorld::addNodeDestroyObserver(std::function<void(LinkOwner &)> observer) {
   const uint64_t token = nextNodeDestroyObserver_++;
   nodeDestroyObservers_.emplace(token, std::move(observer));
   return token;
@@ -868,44 +1077,263 @@ void GameWorld::removeNodeDestroyObserver(uint64_t token) {
   nodeDestroyObservers_.erase(token);
 }
 
-bool GameWorld::registerStaticBox(WorldNode &node, const std::array<float, 3> &halfExtents) {
-  if (nodeFor(&node) != &node || node.type != 2 || node.physicsBox) return false;
-  for (float extent : halfExtents) if (!std::isfinite(extent) || extent < 0) return false;
+bool GameWorld::registerStaticBox(WorldNode &node,
+                                  const std::array<float, 3> &halfExtents) {
+  if (nodeFor(&node) != &node || node.type != 2 || node.physicsBox)
+    return false;
+  for (float extent : halfExtents)
+    if (!std::isfinite(extent) || extent < 0)
+      return false;
   PhysicsBox box;
   box.halfExtents = halfExtents;
-  box.radius = std::sqrt(halfExtents[0] * halfExtents[0] + halfExtents[1] * halfExtents[1] + halfExtents[2] * halfExtents[2]) + 0.05f;
-  if (!std::isfinite(box.radius)) return false;
+  box.radius = std::sqrt(halfExtents[0] * halfExtents[0] +
+                         halfExtents[1] * halfExtents[1] +
+                         halfExtents[2] * halfExtents[2]) +
+               0.05f;
+  if (!std::isfinite(box.radius))
+    return false;
   node.physicsBox = box;
   boxGeometries_.push_back(&node);
   boxBodies_.push_back(&node);
   return true;
 }
 
-bool GameWorld::registerDynamicBody(WorldNode &node, std::shared_ptr<physics::Body> body,
-                                    std::shared_ptr<const physics::BodyProto> prototype) {
-  if (nodeFor(&node) != &node || node.type != 2 || !body || !prototype || body->proto != prototype.get() ||
-      dynamicBodies_.count(&node) ||
-      std::find(physicsWorld_.bodies.begin(), physicsWorld_.bodies.end(), body.get()) != physicsWorld_.bodies.end())
+bool GameWorld::registerObjectPhysics(LinkOwner &owner,
+                                      object::InstanceHandle physics) {
+  auto *node = nodeFor(&owner);
+  bool attached = node && node->type == 1;
+  if (!node)
+    for (const auto &entry : externalNodes_)
+      attached |= entry.second == &owner;
+  if (!attached || objectPhysics_.count(&owner) || !physics.valid() ||
+      !physics.root() || !physics.root()->proto ||
+      physics.root()->current > 1 || physics.bodies().empty() ||
+      physics.bodies().front() != physics.root())
+    return false;
+  const auto &bodies = physics.bodies();
+  for (auto it = bodies.begin(); it != bodies.end(); ++it) {
+    const auto *body = *it;
+    if (!body || !body->proto || body->current > 1 ||
+        std::find(bodies.begin(), it, body) != it ||
+        std::find(physicsWorld_.bodies.begin(), physicsWorld_.bodies.end(),
+                  body) != physicsWorld_.bodies.end())
+      return false;
+  }
+  physicsWorld_.bodies.reserve(physicsWorld_.bodies.size() + bodies.size());
+  auto inserted = objectPhysics_.emplace(&owner, std::move(physics));
+  for (auto *body : inserted.first->second.bodies())
+    physicsWorld_.bodies.push_back(body);
+  return true;
+}
+
+bool GameWorld::unregisterObjectPhysics(LinkOwner &owner) {
+  const auto found = objectPhysics_.find(&owner);
+  if (found == objectPhysics_.end())
+    return false;
+  for (const auto *body : found->second.bodies())
+    physicsWorld_.bodies.erase(std::remove(physicsWorld_.bodies.begin(),
+                                           physicsWorld_.bodies.end(), body),
+                               physicsWorld_.bodies.end());
+  objectPhysics_.erase(found);
+  return true;
+}
+
+bool GameWorld::registerDynamicBody(
+    WorldNode &node, std::shared_ptr<physics::Body> body,
+    std::shared_ptr<const physics::BodyProto> prototype) {
+  if (nodeFor(&node) != &node || node.type != 2 || !body || !prototype ||
+      body->proto != prototype.get() || dynamicBodies_.count(&node) ||
+      carChildBodies_.count(&node) ||
+      std::find(physicsWorld_.bodies.begin(), physicsWorld_.bodies.end(),
+                body.get()) != physicsWorld_.bodies.end())
     return false;
   auto *raw = body.get();
-  dynamicBodies_.emplace(&node, std::make_shared<DynamicBodyOwnership>(DynamicBodyOwnership{std::move(prototype), std::move(body)}));
+  dynamicBodies_.emplace(
+      &node, std::make_shared<DynamicBodyOwnership>(
+                 DynamicBodyOwnership{std::move(prototype), std::move(body)}));
   physicsWorld_.bodies.push_back(raw);
   return true;
 }
 
+WorldNode *GameWorld::registerCarPhysics(WorldNode &node,
+                                         std::shared_ptr<CarPhysics> car,
+                                         std::string &error) {
+  error.clear();
+  if (nodeFor(&node) != &node || node.type != 1 || !car || !car->root ||
+      !car->part || !car->part->root || car->part->rootBodyIndex < 0 ||
+      car->teardownOrder.empty() ||
+      car->teardownOrder.back() != car->root.get() ||
+      std::find(physicsWorld_.bodies.begin(), physicsWorld_.bodies.end(),
+                car->root.get()) != physicsWorld_.bodies.end()) {
+    error = "car physics: invalid car or already registered";
+    return nullptr;
+  }
+  for (const auto &entry : car->bodyObservations)
+    if (!entry.second || entry.second->resource.owner) {
+      error = "car physics: body resource already linked";
+      return nullptr;
+    }
+  std::vector<WorldNode *> created;
+  auto makeNode = [&](physics::Body *body, const char *name,
+                      bool root) -> WorldNode * {
+    const auto found = car->bodyObservations.find(body);
+    if (!body || !body->proto || body->current > 1 ||
+        found == car->bodyObservations.end() || found->second->body != body ||
+        !std::isfinite(body->proto->shape.boundRadius) ||
+        body->proto->shape.boundRadius < 0)
+      return nullptr;
+    const auto &pos = body->state[body->current].pos;
+    if (!std::all_of(pos.begin(), pos.end(),
+                     [](float v) { return std::isfinite(v); }))
+      return nullptr;
+    auto *child = addTypedChild(node, 2, name, 0x201);
+    if (!child)
+      return nullptr;
+    created.push_back(child);
+    child->bounds.mode = 0;
+    child->bounds.values = {pos[0],
+                            pos[1],
+                            pos[2],
+                            body->proto->shape.boundRadius,
+                            body->proto->shape.boundRadius,
+                            body->proto->shape.boundRadius};
+    auto owner = std::shared_ptr<physics::Body>(car, body);
+    if (root) {
+      auto prototype =
+          std::shared_ptr<const physics::BodyProto>(car, &car->rootPrototype);
+      if (!registerDynamicBody(*child, std::move(owner), std::move(prototype)))
+        return nullptr;
+      carBodies_.emplace(child, car);
+    } else {
+      carChildBodies_.emplace(child, std::move(owner));
+    }
+    setLinkOwner(found->second->resource, child);
+    noteInstanceCreated(*child);
+    markLoaded(*child);
+    child->loadPriority = 1.0f;
+    return child;
+  };
+  auto fail = [&]() -> WorldNode * {
+    for (auto it = created.rbegin(); it != created.rend(); ++it)
+      destroy(**it);
+    error = "car physics: body resource creation failed";
+    return nullptr;
+  };
+  if (!makeNode(car->part->root.get(), "part_comp", false))
+    return fail();
+  for (auto &child : car->part->children) {
+    if (static_cast<int>(child.bodyIndex) == car->part->rootBodyIndex &&
+        !makeNode(child.body.get(), "bbone", false))
+      return fail();
+    if (static_cast<int>(child.bodyIndex) == car->part->steeringBodyIndex &&
+        !makeNode(child.body.get(), "steer", false))
+      return fail();
+  }
+  if (car->part->clickBody &&
+      !makeNode(car->part->clickBody,
+                car->part->argument == 0 ? "cbone" : "click", false))
+    return fail();
+  auto *root = makeNode(car->root.get(), "car_root", true);
+  if (!root)
+    return fail();
+  for (const auto &wheel : car->wheels) {
+    if (!wheel)
+      return fail();
+    if (wheel->boneBody && !makeNode(wheel->boneBody.get(), "wheelbone", false))
+      return fail();
+    if (wheel->config.hasWheel &&
+        (!makeNode(wheel->hubBody.get(), "hub", false) ||
+         !makeNode(wheel->armBody.get(), "a_arm", false)))
+      return fail();
+  }
+  return root;
+}
+
 bool GameWorld::unregisterDynamicBody(WorldNode &node) {
   const auto found = dynamicBodies_.find(&node);
-  if (found == dynamicBodies_.end()) return false;
+  if (found == dynamicBodies_.end())
+    return false;
   auto *body = found->second->body.get();
-  physicsWorld_.bodies.erase(std::remove(physicsWorld_.bodies.begin(), physicsWorld_.bodies.end(), body), physicsWorld_.bodies.end());
+  physicsWorld_.bodies.erase(std::remove(physicsWorld_.bodies.begin(),
+                                         physicsWorld_.bodies.end(), body),
+                             physicsWorld_.bodies.end());
+  carBodies_.erase(&node);
   dynamicBodies_.erase(found);
   return true;
 }
 
 std::weak_ptr<physics::Body> GameWorld::dynamicBody(WorldNode &node) const {
   const auto found = dynamicBodies_.find(&node);
-  if (found == dynamicBodies_.end()) return {};
-  return std::shared_ptr<physics::Body>(found->second, found->second->body.get());
+  if (found != dynamicBodies_.end())
+    return std::shared_ptr<physics::Body>(found->second,
+                                          found->second->body.get());
+  const auto child = carChildBodies_.find(&node);
+  if (child != carChildBodies_.end())
+    return child->second;
+  return {};
+}
+
+void GameWorld::registerAudioListener(WorldNode &node) {
+  for (size_t i = audioListeners_.size(); i-- > 0;) {
+    if (audioListeners_[i]->owner)
+      continue;
+    if (i + 1 != audioListeners_.size())
+      audioListeners_[i] = std::move(audioListeners_.back());
+    audioListeners_.pop_back();
+  }
+  if (nodeFor(&node) != &node || audioListeners_.size() >= 2)
+    return;
+  for (const auto &link : audioListeners_)
+    if (link->owner == &node)
+      return;
+  auto link = std::make_unique<OwnerLink>();
+  setLinkOwner(*link, &node);
+  audioListeners_.push_back(std::move(link));
+}
+
+void GameWorld::unregisterAudioListener(WorldNode &node) {
+  for (size_t i = 0; i < audioListeners_.size(); ++i) {
+    if (audioListeners_[i]->owner != &node)
+      continue;
+    setLinkOwner(*audioListeners_[i], nullptr);
+    if (i + 1 != audioListeners_.size())
+      audioListeners_[i] = std::move(audioListeners_.back());
+    audioListeners_.pop_back();
+    return;
+  }
+}
+
+bool GameWorld::audioListener(physics::Vec3 &position, physics::Vec3 &forward,
+                              physics::Vec3 &up) {
+  for (size_t i = audioListeners_.size(); i-- > 0;) {
+    if (audioListeners_[i]->owner)
+      continue;
+    if (i + 1 != audioListeners_.size())
+      audioListeners_[i] = std::move(audioListeners_.back());
+    audioListeners_.pop_back();
+  }
+  position = {0, 0, 0};
+  forward = {0, 0, -1};
+  up = {0, -1, 0};
+  if (audioListeners_.empty())
+    return true;
+  auto *node = nodeFor(audioListeners_[0]->owner);
+  auto body = node ? dynamicBody(*node).lock() : nullptr;
+  if (!body || body->current > 1)
+    return false;
+  const auto &state = body->state[body->current];
+  position = state.pos;
+  const auto &r = state.rot;
+  const physics::Vec3 column2{r[2], r[6], r[10]};
+  const physics::Vec3 column1{r[1], r[5], r[9]};
+  auto length2 = [](const physics::Vec3 &v) {
+    return v[0] * v[0] + v[1] * v[1] + v[2] * v[2];
+  };
+  if (length2(column2) >= 0.01f)
+    forward = {-column2[0], -column2[1], -column2[2]};
+  if (length2(column1) >= 0.01f)
+    up = {-column1[0], -column1[1], -column1[2]};
+  return true;
 }
 
 namespace {
@@ -917,39 +1345,86 @@ struct DirectCameraFollow {
 };
 
 // Stock 00438b60 applies the direct look torque before it updates field of
-// view, and this device has no height, plane, or angle fields. A nonzero roll
-// would add torque that cameraFollowForce does not compute.
-bool bindDirectCameraFollow(GameWorld &world, const CameraDeviceResources &device,
-                            DirectCameraFollow &out, const char **block = nullptr) {
+// view, and this device has no plane or angle fields.
+bool bindDirectCameraFollow(GameWorld &world,
+                            const CameraDeviceResources &device,
+                            DirectCameraFollow &out,
+                            const char **block = nullptr) {
   const auto fail = [&](const char *code) {
-    if (block) *block = code;
+    if (block)
+      *block = code;
     return false;
   };
-  if (block) *block = nullptr;
-  if (device.commands.roll != 0.0f) return fail("roll");
-  if (!device.lookTarget.owner) return fail("look");
-  if (!device.moveTarget.owner) return fail("move");
+  if (block)
+    *block = nullptr;
+  if (!device.lookTarget.owner)
+    return fail("look");
+  if (!device.moveTarget.owner)
+    return fail("move");
   auto *physicsNode = device.physicsNode();
-  auto *lookNode = world.nodeFor(device.lookTarget.owner);
-  auto *moveNode = world.nodeFor(device.moveTarget.owner);
-  if (!physicsNode) return fail("phys");
-  if (!lookNode) return fail("lnod");
-  if (!moveNode) return fail("mnod");
+  if (!physicsNode)
+    return fail("phys");
+  // A follow target is a dynamic body, or a ground's static body (the garage
+  // camera looks at and follows its map resource, id 5's ground body).
+  const auto targetBody = [&](LinkOwner *owner, std::shared_ptr<physics::Body> &body) {
+    if (auto *node = world.nodeFor(owner)) {
+      body = world.dynamicBody(*node).lock();
+      if (body)
+        return true;
+      // A car's type-1 node owns no body itself: its physics root is the
+      // type-2 child created with it. [INFERENCE] stock follows the car through
+      // that root (FUN_00545fc0 only stores the node link).
+      if (node->carInstance && node->carInstance->physicsRoot.owner) {
+        if (auto *root = world.nodeFor(node->carInstance->physicsRoot.owner)) {
+          body = world.dynamicBody(*root).lock();
+          if (body)
+            return true;
+        }
+      }
+    }
+    for (auto *resources : world.resourceWorlds()) {
+      const auto resolved = resources->resolve(owner);
+      if (resolved.packNode && resolved.packNode->groundFactory &&
+          resolved.packNode->groundFactory->preparation &&
+          resolved.packNode->groundFactory->preparation->physics) {
+        const auto &ground = resolved.packNode->groundFactory->preparation;
+        body = std::shared_ptr<physics::Body>(ground->physics,
+                                              &ground->physics->body);
+        return true;
+      }
+    }
+    return false;
+  };
+  std::shared_ptr<physics::Body> look, move;
+  if (!targetBody(device.lookTarget.owner, look))
+    return fail("lnod");
+  if (!targetBody(device.moveTarget.owner, move))
+    return fail("mnod");
   auto camera = world.dynamicBody(*physicsNode).lock();
-  auto look = world.dynamicBody(*lookNode).lock();
-  auto move = world.dynamicBody(*moveNode).lock();
-  if (!camera) return fail("cbod");
-  if (!look) return fail("lbod");
-  if (!move) return fail("mbod");
-  if (!camera->proto) return fail("prot");
-  if (camera->current > 1) return fail("curr");
-  if (camera->attachment) return fail("attc");
-  if (camera->flags & physics::kBodyChild) return fail("chld");
-  if (camera->flags & physics::kBodyHasChildren) return fail("kids");
-  if (camera->flags & physics::kBodyBit10) return fail("bitx");
-  if ((camera->flags & physics::kBodyActive) == 0) return fail("idle");
-  if (camera->proto->flags & physics::kProtoStatic) return fail("stat");
-  if (camera->proto->invMass <= 0.0f) return fail("mass");
+  if (!camera)
+    return fail("cbod");
+  if (!look)
+    return fail("lbod");
+  if (!move)
+    return fail("mbod");
+  if (!camera->proto)
+    return fail("prot");
+  if (camera->current > 1)
+    return fail("curr");
+  if (camera->attachment)
+    return fail("attc");
+  if (camera->flags & physics::kBodyChild)
+    return fail("chld");
+  if (camera->flags & physics::kBodyHasChildren)
+    return fail("kids");
+  if (camera->flags & physics::kBodyBit10)
+    return fail("bitx");
+  if ((camera->flags & physics::kBodyActive) == 0)
+    return fail("idle");
+  if (camera->proto->flags & physics::kProtoStatic)
+    return fail("stat");
+  if (camera->proto->invMass <= 0.0f)
+    return fail("mass");
   CameraFollowForceInput input;
   input.otherBranchesInactive = true;
   input.command = device.commands;
@@ -967,7 +1442,34 @@ bool bindDirectCameraFollow(GameWorld &world, const CameraDeviceResources &devic
   out.move = std::move(move);
   return true;
 }
+// Stock 00438b60 wakes a sleeping camera body (FUN_004a7990) whenever it has
+// to apply a follow force. This port wakes it when the force or torque the
+// follow would apply is nonzero, before the step validates its roots.
+void wakeFollowCameraIfForced(const CameraDeviceResources &device,
+                              physics::Body &camera, const physics::Body &look,
+                              const physics::Body &move) {
+  if (!(camera.flags & physics::kBodyAsleep) || camera.current > 1)
+    return;
+  CameraFollowForceInput input;
+  input.otherBranchesInactive = true;
+  input.command = device.commands;
+  input.fieldOfView = device.fieldOfView;
+  input.maxForce = device.maxForce;
+  input.camera = camera.state[camera.current];
+  input.lookTarget = look.state[look.current];
+  input.moveTarget = move.state[move.current];
+  CameraFollowSmoothing smoothing = device.followSmoothing;
+  const auto applied = cameraFollowForce(input, smoothing);
+  if (!applied)
+    return;
+  float magnitude = 0;
+  for (size_t i = 0; i < 3; ++i)
+    magnitude += applied->force[i] * applied->force[i] +
+                 applied->torque[i] * applied->torque[i];
+  if (magnitude > 1e-8f)
+    physics::wakeDetachedCompound({&camera});
 }
+} // namespace
 
 bool GameWorld::directCameraFollowReady(const CameraDeviceResources &camera,
                                         const char **block) {
@@ -979,7 +1481,8 @@ bool GameWorld::armedCameraFollowCount(int &ready, std::string &error) {
   ready = 0;
   for (const auto &entry : nodes_) {
     const auto *device = entry.second->cameraDevice.get();
-    if (!device || !device->lookTarget.owner || !device->moveTarget.owner) continue;
+    if (!device || !device->lookTarget.owner || !device->moveTarget.owner)
+      continue;
     if (!directCameraFollowReady(*device)) {
       error = "empty physics: camera follow is unsupported";
       return false;
@@ -989,17 +1492,66 @@ bool GameWorld::armedCameraFollowCount(int &ready, std::string &error) {
   return true;
 }
 
-bool GameWorld::integrateArmedCameraFollows(float seconds, bool &otherDynamic, std::string &error) {
+bool GameWorld::integrateArmedCameraFollows(float seconds, bool &otherDynamic,
+                                            std::string &error) {
   std::vector<DirectCameraFollow> follows;
+  unsigned devicesWithTargets = 0;
   for (const auto &entry : nodes_) {
     auto *device = entry.second->cameraDevice.get();
-    if (!device || !device->lookTarget.owner || !device->moveTarget.owner) continue;
+    if (!device || !device->lookTarget.owner || !device->moveTarget.owner)
+      continue;
+    ++devicesWithTargets;
     DirectCameraFollow follow;
-    if (!bindDirectCameraFollow(*this, *device, follow)) {
-      error = "empty physics: camera follow is unsupported";
+    const char *bindBlock = nullptr;
+    if (!bindDirectCameraFollow(*this, *device, follow, &bindBlock)) {
+      static bool bindFailLogged = false;
+      if (!bindFailLogged) {
+        bindFailLogged = true;
+        runlog::event(runlog::EventKind::Note,
+                      "camera follow bind failed: node=%u block=%s",
+                      entry.second->instanceId, bindBlock ? bindBlock : "?");
+      }
+      error =
+          std::string("empty physics: camera follow is unsupported (bind ") +
+          (bindBlock ? bindBlock : "?") + ")";
       return false;
     }
     follows.push_back(std::move(follow));
+  }
+  {
+    static double lastDevLog = -1e9;
+    const double now = runlog::monotonicSeconds();
+    if (now - lastDevLog >= 5.0) {
+      lastDevLog = now;
+      runlog::event(runlog::EventKind::Note,
+                    "camera follow devices: withTargets=%u bound=%zu",
+                    devicesWithTargets, follows.size());
+    }
+  }
+  for (const auto &follow : follows)
+    wakeFollowCameraIfForced(*follow.device, *follow.camera, *follow.look,
+                             *follow.move);
+  {
+    static double lastCamLog = -1e9;
+    const double now = runlog::monotonicSeconds();
+    if (!follows.empty() && now - lastCamLog >= 5.0) {
+      lastCamLog = now;
+      for (const auto &fp : follows) {
+      const auto &f = fp;
+      const auto &cp = f.camera->state[f.camera->current].pos;
+      const auto &mp = f.move->state[f.move->current].pos;
+      const auto &lp = f.look->state[f.look->current].pos;
+      const auto &c = f.device->commands;
+      runlog::event(runlog::EventKind::Note,
+                    "camera follow: cam=%.2f,%.2f,%.2f move=%.2f,%.2f,%.2f "
+                    "look=%.2f,%.2f,%.2f dist=%.2f moveOffset=%.2f,%.2f,%.2f "
+                    "lookOffset=%.2f,%.2f,%.2f fov=%.1f",
+                    cp[0], cp[1], cp[2], mp[0], mp[1], mp[2], lp[0], lp[1],
+                    lp[2], c.moveDistance, c.moveOffset[0], c.moveOffset[1],
+                    c.moveOffset[2], c.lookOffset[0], c.lookOffset[1],
+                    c.lookOffset[2], f.device->fieldOfView);
+      }
+    }
   }
   otherDynamic = false;
   for (const auto &entry : dynamicBodies_) {
@@ -1008,10 +1560,12 @@ bool GameWorld::integrateArmedCameraFollows(float seconds, bool &otherDynamic, s
                                     [&](const DirectCameraFollow &follow) {
                                       return follow.camera.get() == body;
                                     });
-    if (!camera) otherDynamic = true;
+    if (!camera)
+      otherDynamic = true;
   }
   if (!std::isfinite(physicsWorld_.pending) || physicsWorld_.pending < 0.0f ||
-      !std::isfinite(physicsWorld_.time) || !std::isfinite(physicsWorld_.pending + seconds)) {
+      !std::isfinite(physicsWorld_.time) ||
+      !std::isfinite(physicsWorld_.pending + seconds)) {
     error = "empty physics: invalid step";
     return false;
   }
@@ -1046,13 +1600,18 @@ bool GameWorld::integrateArmedCameraFollows(float seconds, bool &otherDynamic, s
   physicsWorld_.pending = 0.0f;
   physicsWorld_.lastStep = total;
   for (const auto &follow : follows) {
+    // A sleeping camera is skipped by every stock pass.
+    if (follow.camera->flags & physics::kBodyAsleep)
+      continue;
     if (!physics::accumulateWorldForces(physicsWorld_.params, *follow.camera)) {
       rollback();
-      error = "empty physics: camera follow is unsupported";
+      error = "empty physics: camera follow is unsupported (world forces)";
       return false;
     }
   }
   for (const auto &follow : follows) {
+    if (follow.camera->flags & physics::kBodyAsleep)
+      continue;
     CameraFollowForceInput input;
     input.otherBranchesInactive = true;
     input.command = follow.device->commands;
@@ -1061,21 +1620,29 @@ bool GameWorld::integrateArmedCameraFollows(float seconds, bool &otherDynamic, s
     input.camera = follow.camera->state[follow.camera->current];
     input.lookTarget = follow.look->state[follow.look->current];
     input.moveTarget = follow.move->state[follow.move->current];
-    const auto applied = cameraFollowForce(input, follow.device->followSmoothing);
+    const char *forceBlock = nullptr;
+    const auto applied =
+        cameraFollowForce(input, follow.device->followSmoothing, &forceBlock);
     if (!applied) {
       rollback();
-      error = "empty physics: camera follow is unsupported";
+      error =
+          std::string("empty physics: camera follow is unsupported (force ") +
+          (forceBlock ? forceBlock : "?") + ")";
       return false;
     }
     follow.device->followSmoothing = applied->smoothing;
     physics::addForce(*follow.camera, applied->force, nullptr);
     auto &state = follow.camera->state[follow.camera->current];
-    for (size_t i = 0; i < 3; ++i) state.torque[i] += applied->torque[i];
+    for (size_t i = 0; i < 3; ++i)
+      state.torque[i] += applied->torque[i];
   }
   for (const auto &follow : follows)
-    if (physics::stepBody(*follow.camera, total)) ++physicsWorld_.stepsDone;
+    if (!(follow.camera->flags & physics::kBodyAsleep) &&
+        physics::stepBody(*follow.camera, total))
+      ++physicsWorld_.stepsDone;
   for (const auto &follow : follows)
-    if (physics::commit(*follow.camera) == physics::CommitResult::WentToSleep)
+    if (!(follow.camera->flags & physics::kBodyAsleep) &&
+        physics::commit(*follow.camera) == physics::CommitResult::WentToSleep)
       physics::sleepBodyState(*follow.camera);
   physicsWorld_.time += total;
   if (!std::isfinite(physicsWorld_.time)) {
@@ -1092,6 +1659,19 @@ bool GameWorld::stepArmedCameraFollow(float seconds, std::string &error) {
     error = "camera follow: invalid step";
     return false;
   }
+  if (!carBodies_.empty() || !carChildBodies_.empty()) {
+    error = "camera follow: registered car physics cannot be advanced by "
+            "camera-only step";
+    return false;
+  }
+  if (!objectPhysics_.empty()) {
+    error = "camera follow: registered object physics is unsupported";
+    return false;
+  }
+  if (!collisionUpdates_.empty()) {
+    error = "camera follow: collision queue unsupported";
+    return false;
+  }
   // Stock 00438b60 adds the camera force while other bodies exist. A child
   // link (flag 4) is a joint, and this step does not solve joints, wheel
   // contacts, or collision. Those bodies stay registered and unstepped.
@@ -1103,8 +1683,238 @@ bool GameWorld::stepArmedCameraFollow(float seconds, std::string &error) {
     }
   }
   bool otherDynamic = false;
-  if (!integrateArmedCameraFollows(seconds, otherDynamic, error)) return false;
+  if (!integrateArmedCameraFollows(seconds, otherDynamic, error))
+    return false;
   (void)otherDynamic;
+  error.clear();
+  return true;
+}
+
+std::vector<WorldNode *> GameWorld::carNodes() {
+  std::vector<WorldNode *> result;
+  for (const auto &entry : nodes_) {
+    const auto &car = entry.second->carInstance;
+    if (car && car->isCar && car->carPhysics && car->carPhysics->root &&
+        std::any_of(carBodies_.begin(), carBodies_.end(),
+                    [&](const auto &c) { return c.second == car->carPhysics; }))
+      result.push_back(entry.second.get());
+  }
+  return result;
+}
+
+bool GameWorld::stepRegisteredCars(float seconds, const LiveCarStepHooks &hooks,
+                                   std::string &error) {
+  if (!std::isfinite(seconds) || seconds <= 0.0f) {
+    error = "car step: invalid step";
+    return false;
+  }
+  // Scene objects: static, inactive and sleeping roots are skipped by stock
+  // (004a3f90/004a3bc0). Awake dynamic objects would need the object step
+  // (collision with the car, toppling, sleep); until that exists they stay
+  // registered but are not stepped, so they hold their placed pose and do not
+  // collide. This is a stated gap, noted once per count change.
+  size_t frozenObjects = 0;
+  for (const auto &entry : objectPhysics_) {
+    auto *objectRoot = entry.second.root();
+    if (objectRoot && objectRoot->proto &&
+        !(objectRoot->proto->flags & physics::kProtoStatic) &&
+        (objectRoot->flags & physics::kBodyActive) &&
+        !(objectRoot->flags & physics::kBodyAsleep)) {
+      // The gap stays explicit until object force/contact/wake is modelled.
+      ++frozenObjects;
+    }
+  }
+  static size_t reportedFrozen = static_cast<size_t>(-1);
+  if (frozenObjects != reportedFrozen) {
+    reportedFrozen = frozenObjects;
+    runlog::event(runlog::EventKind::Note,
+                  "car step: %zu awake dynamic scene objects are frozen "
+                  "(object physics step unsupported)",
+                  frozenObjects);
+  }
+  std::vector<DirectCameraFollow> follows;
+  for (const auto &entry : nodes_) {
+    auto *device = entry.second->cameraDevice.get();
+    if (!device || !device->lookTarget.owner || !device->moveTarget.owner)
+      continue;
+    DirectCameraFollow follow;
+    const char *block = nullptr;
+    if (!bindDirectCameraFollow(*this, *device, follow, &block)) {
+      error = std::string("car step: camera follow is unsupported (") +
+              (block ? block : "?") + ")";
+      return false;
+    }
+    follows.push_back(std::move(follow));
+  }
+  for (const auto &follow : follows)
+    wakeFollowCameraIfForced(*follow.device, *follow.camera, *follow.look,
+                             *follow.move);
+  // Roots in registration order, as stock keeps them: a car is its body tree
+  // (root first, every child after its parent), a camera is a lone body with
+  // its follow callback.
+  std::vector<physics::BodyTree> roots;
+  physics::MultiRootWork work;
+  bool carAsleep = false;
+  size_t awakeCars = 0;
+  for (auto *body : physicsWorld_.bodies) {
+    // Static object bodies (roots and children) stay registered but are not
+    // stepped roots.
+    bool staticObjectBody = false;
+    for (const auto &entry : objectPhysics_)
+      for (const auto *objectBody : entry.second.bodies())
+        if (objectBody == body)
+          staticObjectBody = true;
+    if (staticObjectBody)
+      continue;
+    std::shared_ptr<CarPhysics> car;
+    for (const auto &entry : carBodies_)
+      if (entry.second && entry.second->root.get() == body) {
+        car = entry.second;
+        break;
+      }
+    if (car) {
+      physics::BodyTree tree;
+      std::function<void(physics::Body *)> add = [&](physics::Body *b) {
+        tree.push_back(b);
+        const auto children = car->bodyChildren.find(b);
+        if (children != car->bodyChildren.end())
+          for (auto *child : children->second)
+            add(child);
+      };
+      add(body);
+      static std::map<const CarPhysics *, bool> lastAsleep;
+      const bool asleepBefore = tree[0]->flags & physics::kBodyAsleep;
+      if (hooks.wakeCars)
+        physics::wakeDetachedCompound(tree);
+      {
+        const bool asleepNow = tree[0]->flags & physics::kBodyAsleep;
+        const auto seen = lastAsleep.find(car.get());
+        if (seen == lastAsleep.end() || seen->second != asleepNow) {
+          runlog::event(runlog::EventKind::Note,
+                        "car sleep transition: car=%p %s -> %s cause=%s "
+                        "pos=%.2f,%.2f,%.2f",
+                        static_cast<const void *>(car.get()),
+                        seen == lastAsleep.end()
+                            ? "new"
+                            : (seen->second ? "asleep" : "awake"),
+                        asleepNow ? "asleep" : "awake",
+                        hooks.wakeCars ? (asleepBefore ? "controls-wake"
+                                                       : "controls-held")
+                                       : "reset/suspend/contact",
+                        double(body->state[body->current].pos[0]),
+                        double(body->state[body->current].pos[1]),
+                        double(body->state[body->current].pos[2]));
+          lastAsleep[car.get()] = asleepNow;
+        }
+      }
+      // A sleeping tree is skipped by every stock pass (004a3f90, 004a3bc0).
+      // Its suspensions and contacts then have no registered wheel bodies, so
+      // the car's per-frame work is not run while it sleeps.
+      if (tree[0]->flags & physics::kBodyAsleep) {
+        carAsleep = true;
+        continue;
+      }
+      ++awakeCars;
+      roots.push_back(std::move(tree));
+      continue;
+    }
+    const auto follow = std::find_if(
+        follows.begin(), follows.end(),
+        [&](const DirectCameraFollow &f) { return f.camera.get() == body; });
+    if (follow == follows.end()) {
+      // A camera whose look and move targets are not both set (the dealer
+      // camera before its first look/move) has no follow callback to run;
+      // its body stays registered and unstepped, like the camera-only step.
+      bool untargetedCamera = false;
+      for (const auto &entry : nodes_) {
+        const auto *device = entry.second->cameraDevice.get();
+        if (!device || !device->physics.owner)
+          continue;
+        const auto *owned = nodeFor(device->physics.owner);
+        const auto found = owned ? dynamicBodies_.find(const_cast<WorldNode *>(owned))
+                                 : dynamicBodies_.end();
+        if (found != dynamicBodies_.end() && found->second->body.get() == body)
+          untargetedCamera = true;
+      }
+      if (untargetedCamera)
+        continue;
+      error = "car step: dynamic body is neither a car nor a camera follow";
+      return false;
+    }
+    // A sleeping camera is skipped by every stock pass; it is woken above
+    // when a follow force is needed.
+    if (body->flags & physics::kBodyAsleep)
+      continue;
+    roots.push_back({body});
+    CameraFollowStep callback;
+    callback.camera = follow->camera.get();
+    callback.look = follow->look.get();
+    callback.move = follow->move.get();
+    callback.input.otherBranchesInactive = true;
+    callback.input.command = follow->device->commands;
+    callback.input.fieldOfView = follow->device->fieldOfView;
+    callback.input.maxForce = follow->device->maxForce;
+    callback.smoothing = &follow->device->followSmoothing;
+    work.cameraCallbacks.push_back(callback);
+  }
+  if (carAsleep && awakeCars == 0) {
+    // Only camera follows advance: the sleeping cars' wheel and contact work
+    // is not run, and a follow that targets a car reads its resting pose.
+    static bool reported = false;
+    if (!reported) {
+      reported = true;
+      runlog::event(runlog::EventKind::Note,
+                    "car step: every car tree is asleep; only camera follows "
+                    "advance (stock skips sleeping trees in every pass)");
+    }
+    bool otherDynamic = false;
+    return integrateArmedCameraFollows(seconds, otherDynamic, error);
+  }
+  // Stock registers wheel constraints per awake body only: sleeping cars'
+  // suspensions are left out when awake cars share the step.
+  std::vector<physics::SuspensionUpdate *> awakeSuspensions;
+  for (auto *suspension : hooks.suspensions)
+    if (!(suspension->wheelBody &&
+          (suspension->wheelBody->flags & physics::kBodyAsleep)))
+      awakeSuspensions.push_back(suspension);
+  work.contacts = static_cast<bool>(hooks.gatherContacts);
+  work.wheelConstraints = !awakeSuspensions.empty();
+  work.gatherContacts = hooks.gatherContacts;
+  work.finishContacts = hooks.finishContacts;
+  work.onePendingContactPerRoot = hooks.onePendingContactPerRoot;
+  work.beforePrediction = hooks.beforePrediction;
+  work.suspensions = awakeSuspensions;
+  // stepMultiRootWorld registers exactly the stepped roots; the world list
+  // also holds the static object bodies.
+  physics::World stepWorld = physicsWorld_;
+  stepWorld.bodies.clear();
+  for (const auto &tree : roots)
+    stepWorld.bodies.push_back(tree[0]);
+  const auto result =
+      physics::stepMultiRootWorld(stepWorld, roots, seconds, work, error);
+  physicsWorld_.time = stepWorld.time;
+  physicsWorld_.pending = stepWorld.pending;
+  physicsWorld_.lastStep = stepWorld.lastStep;
+  physicsWorld_.stepsDone = stepWorld.stepsDone;
+  if (result == physics::FreeBodyStepResult::Unsupported) {
+    if (error.empty())
+      error = "car step: physics step is unsupported";
+    return false;
+  }
+  if (result == physics::FreeBodyStepResult::Advanced) {
+    // The car body resource nodes carry sphere bounds at the body position
+    // (registerCarPhysics); keep them on the committed pose.
+    for (const auto &entry : carBodies_)
+      if (entry.second && entry.second->root && entry.second->root->current < 2)
+        for (size_t axis = 0; axis < 3; ++axis)
+          entry.first->bounds.values[axis] =
+              entry.second->root->state[entry.second->root->current].pos[axis];
+    for (const auto &entry : carChildBodies_)
+      if (entry.second && entry.second->current < 2)
+        for (size_t axis = 0; axis < 3; ++axis)
+          entry.first->bounds.values[axis] =
+              entry.second->state[entry.second->current].pos[axis];
+  }
   error.clear();
   return true;
 }
@@ -1114,10 +1924,19 @@ bool GameWorld::stepEmptyPhysics(float seconds, std::string &error) {
     error = "empty physics: invalid step";
     return false;
   }
+  if (!carBodies_.empty() || !carChildBodies_.empty()) {
+    error = "empty physics: registered car physics is unsupported";
+    return false;
+  }
   int readyFollows = 0;
-  if (!armedCameraFollowCount(readyFollows, error)) return false;
+  if (!armedCameraFollowCount(readyFollows, error))
+    return false;
   if (readyFollows == 0 && !dynamicBodies_.empty()) {
     error = "empty physics: dynamic bodies are unsupported";
+    return false;
+  }
+  if (!objectPhysics_.empty()) {
+    error = "empty physics: registered object physics is unsupported";
     return false;
   }
   if (!loadList(9, true).empty() || !loadList(10, true).empty()) {
@@ -1125,10 +1944,13 @@ bool GameWorld::stepEmptyPhysics(float seconds, std::string &error) {
     return false;
   }
   for (const auto *owner : loadList(2, true)) {
-    const auto *node = const_cast<GameWorld *>(this)->nodeFor(const_cast<LinkOwner *>(owner));
+    const auto *node =
+        const_cast<GameWorld *>(this)->nodeFor(const_cast<LinkOwner *>(owner));
     if (!node || !node->physicsBox || node->physicsBox->geometryFlags != 5 ||
-        std::find(boxBodies_.begin(), boxBodies_.end(), node) == boxBodies_.end() ||
-        std::find(boxGeometries_.begin(), boxGeometries_.end(), node) == boxGeometries_.end()) {
+        std::find(boxBodies_.begin(), boxBodies_.end(), node) ==
+            boxBodies_.end() ||
+        std::find(boxGeometries_.begin(), boxGeometries_.end(), node) ==
+            boxGeometries_.end()) {
       error = "empty physics: physics state is unsupported";
       return false;
     }
@@ -1148,23 +1970,138 @@ bool GameWorld::stepEmptyPhysics(float seconds, std::string &error) {
       return false;
     }
   }
-  for (const auto &hook : hooks_[static_cast<size_t>(GameHook::Kind9)]) if (hook->owner) {
-    const auto *node = nodeFor(hook->owner);
-    if (!node || (node->nativeDevice != "car" && node->nativeDevice != "part")) {
-      error = "empty physics: physics callback is unsupported";
-      return false;
+  for (const auto &hook : hooks_[static_cast<size_t>(GameHook::Kind9)])
+    if (hook->owner) {
+      const auto *node = nodeFor(hook->owner);
+      if (!node ||
+          (node->nativeDevice != "car" && node->nativeDevice != "part")) {
+        error = "empty physics: physics callback is unsupported";
+        return false;
+      }
     }
-  }
   if (readyFollows == 0) {
-    if (physicsWorld_.stepFreeBodies(seconds) == physics::FreeBodyStepResult::Unsupported) {
+    std::vector<std::pair<WorldNode *, ResourceBounds>> boundsUpdates;
+    const float total = physicsWorld_.pending + seconds;
+    if (std::isfinite(total) && total >= physics::k::minimumStep) {
+      for (const auto &link : collisionUpdates_) {
+        if (!link->owner)
+          continue;
+        auto *queued = nodeFor(link->owner);
+        if (!queued) {
+          error = "empty physics: collision queue owner unsupported";
+          return false;
+        }
+        if (queued->flags & 0x200000u)
+          continue;
+        const auto descendants = childOwners(queued->handle);
+        if (queued->type != 1 || queued->sectorLink.owner != queued ||
+            !descendants) {
+          error = "empty physics: collision hierarchy update unsupported";
+          return false;
+        }
+        ResourceBounds bounds = queued->bounds;
+        if (!descendants->empty()) {
+          std::array<float, 3> lower{}, upper{};
+          bool haveBounds = false;
+          bool eligibleChild = false;
+          for (auto *owner : *descendants) {
+            auto *child = nodeFor(owner);
+            if (!child || child->type != 2 || !child->physicsBox ||
+                !child->loaded || child->bounds.mode > 1) {
+              error = "empty physics: collision hierarchy update unsupported";
+              return false;
+            }
+            eligibleChild |= (child->flags & 0x200000u) == 0;
+            for (size_t axis = 0; axis < 3; ++axis) {
+              const float center = child->bounds.values[axis];
+              const float extent = child->bounds.values[axis + 3];
+              const float lo = center - extent;
+              const float hi = center + extent;
+              if (extent < 0 || !std::isfinite(lo) || !std::isfinite(hi)) {
+                error = "empty physics: collision bounds unsupported";
+                return false;
+              }
+              if (!haveBounds || lo < lower[axis])
+                lower[axis] = lo;
+              if (!haveBounds || upper[axis] < hi)
+                upper[axis] = hi;
+            }
+            haveBounds = true;
+          }
+          bounds.mode = 1;
+          for (size_t axis = 0; axis < 3; ++axis) {
+            const float extent = (upper[axis] - lower[axis]) * 0.5f;
+            const float center = lower[axis] + extent;
+            if (!std::isfinite(extent) || !std::isfinite(center)) {
+              error = "empty physics: collision bounds unsupported";
+              return false;
+            }
+            bounds.values[axis] = center;
+            bounds.values[axis + 3] = extent;
+          }
+          // 004a2430 rejects large extents before checking children, and skips
+          // every child marked 0x200000 without loading its physics resource.
+          const float x = bounds.values[3], y = bounds.values[4],
+                      z = bounds.values[5];
+          const float sizeSquared = x * x + z * z + y * y;
+          if (!(sizeSquared > 10000.0f) && eligibleChild) {
+            error = "empty physics: collision proxy discovery unsupported";
+            return false;
+          }
+        } else if (bounds.mode != 2) {
+          error = "empty physics: collision hierarchy update unsupported";
+          return false;
+        }
+        boundsUpdates.emplace_back(queued, bounds);
+      }
+    }
+    const auto result = physicsWorld_.stepFreeBodies(seconds);
+    if (result == physics::FreeBodyStepResult::Unsupported) {
       error = "empty physics: physics step is unsupported";
       return false;
+    }
+    if (result == physics::FreeBodyStepResult::Advanced) {
+      for (const auto &update : boundsUpdates)
+        update.first->bounds = update.second;
+      for (auto &link : collisionUpdates_) {
+        auto *queued = nodeFor(link->owner);
+        if (queued && !(queued->flags & 0x200000u))
+          queued->flags &= ~uint32_t{0x10000000};
+        setLinkOwner(*link, nullptr);
+      }
+      collisionUpdates_.clear();
     }
     error.clear();
     return true;
   }
+  if (!collisionUpdates_.empty()) {
+    error = "empty physics: collision queue with camera callbacks unsupported";
+    return false;
+  }
+  // Reject unsupported dynamic roots before advancing the camera or the clock.
+  // A failed world step must not leave only the camera integrated.
+  for (const auto &entry : dynamicBodies_) {
+    const auto *body = entry.second->body.get();
+    bool isFollowCamera = false;
+    for (const auto &candidate : nodes_) {
+      const auto *device = candidate.second->cameraDevice.get();
+      if (!device || !device->lookTarget.owner || !device->moveTarget.owner)
+        continue;
+      DirectCameraFollow follow;
+      if (bindDirectCameraFollow(*this, *device, follow) &&
+          follow.camera.get() == body) {
+        isFollowCamera = true;
+        break;
+      }
+    }
+    if (!isFollowCamera) {
+      error = "empty physics: dynamic bodies are unsupported";
+      return false;
+    }
+  }
   bool otherDynamic = false;
-  if (!integrateArmedCameraFollows(seconds, otherDynamic, error)) return false;
+  if (!integrateArmedCameraFollows(seconds, otherDynamic, error))
+    return false;
   if (otherDynamic) {
     error = "empty physics: dynamic bodies are unsupported";
     return false;
@@ -1175,7 +2112,9 @@ bool GameWorld::stepEmptyPhysics(float seconds, std::string &error) {
 
 size_t GameWorld::countNodeType(uint32_t type) const {
   size_t count = 0;
-  for (const auto &entry : nodes_) if (entry.second->type == type) ++count;
+  for (const auto &entry : nodes_)
+    if (entry.second->type == type)
+      ++count;
   return count;
 }
 
@@ -1187,12 +2126,21 @@ PlayerCarNote GameWorld::playerCarNote() const {
       continue;
     if (note.count == 0) {
       note.instanceId = entry.second->instanceId;
-      note.x = car->position[0];
-      note.y = car->position[1];
-      note.z = car->position[2];
-      const float vx = car->linearVelocity[0];
-      const float vy = car->linearVelocity[1];
-      const float vz = car->linearVelocity[2];
+      auto position = car->position;
+      auto velocity = car->linearVelocity;
+      if (car->carPhysics && car->carPhysics->root &&
+          car->carPhysics->root->current < 2) {
+        const auto &state =
+            car->carPhysics->root->state[car->carPhysics->root->current];
+        position = state.pos;
+        velocity = state.vel;
+      }
+      note.x = position[0];
+      note.y = position[1];
+      note.z = position[2];
+      const float vx = velocity[0];
+      const float vy = velocity[1];
+      const float vz = velocity[2];
       note.speed = std::sqrt(vx * vx + vy * vy + vz * vz);
       note.gear = car->currentGear;
       note.rpm = car->engineRpm;
@@ -1202,20 +2150,32 @@ PlayerCarNote GameWorld::playerCarNote() const {
   return note;
 }
 
+std::vector<uint32_t> GameWorld::carInstanceIds() const {
+  std::vector<uint32_t> ids;
+  for (const auto &entry : nodes_)
+    if (entry.second->carInstance && entry.second->carInstance->isCar)
+      ids.push_back(entry.second->instanceId);
+  return ids;
+}
+
 bool GameWorld::hasNodeType(uint32_t type) const {
-  for (const auto &entry : nodes_) if (entry.second->type == type) return true;
+  for (const auto &entry : nodes_)
+    if (entry.second->type == type)
+      return true;
   return false;
 }
 
 bool GameWorld::hasNodeFlag(uint32_t flag) const {
   for (const auto &entry : nodes_)
-    if ((entry.second->flags & flag) != 0) return true;
+    if ((entry.second->flags & flag) != 0)
+      return true;
   return false;
 }
 
 bool GameWorld::hasLoadedNodeType(uint32_t type) const {
   for (const auto &entry : nodes_)
-    if (entry.second->type == type && entry.second->loaded) return true;
+    if (entry.second->type == type && entry.second->loaded)
+      return true;
   return false;
 }
 
@@ -1239,8 +2199,12 @@ void GameWorld::uncountInstance(bool &counted) {
 
 void GameWorld::release(WorldNode &node) {
   unregisterDynamicBody(node);
-  boxGeometries_.erase(std::remove(boxGeometries_.begin(), boxGeometries_.end(), &node), boxGeometries_.end());
-  boxBodies_.erase(std::remove(boxBodies_.begin(), boxBodies_.end(), &node), boxBodies_.end());
+  carChildBodies_.erase(&node);
+  boxGeometries_.erase(
+      std::remove(boxGeometries_.begin(), boxGeometries_.end(), &node),
+      boxGeometries_.end());
+  boxBodies_.erase(std::remove(boxBodies_.begin(), boxBodies_.end(), &node),
+                   boxBodies_.end());
   uncountInstance(node.countedInstance);
   auto &recent = recentlyUsed_[node.type];
   recent.erase(std::remove(recent.begin(), recent.end(), &node), recent.end());
@@ -1248,12 +2212,14 @@ void GameWorld::release(WorldNode &node) {
   setLinkOwner(node.cameraViewport, nullptr);
   for (const auto &observer : nodeDestroyObservers_)
     observer.second(node);
-  playerInputs_.erase(std::remove(playerInputs_.begin(), playerInputs_.end(), &node),
-                      playerInputs_.end());
+  playerInputs_.erase(
+      std::remove(playerInputs_.begin(), playerInputs_.end(), &node),
+      playerInputs_.end());
   if (node.player) {
     setLinkOwner(node.player->font, nullptr);
     setLinkOwner(node.player->animationOverlay, nullptr);
-    for (auto &link : node.player->debugText) setLinkOwner(link, nullptr);
+    for (auto &link : node.player->debugText)
+      setLinkOwner(link, nullptr);
   }
   if (node.cursor) {
     setLinkOwner(node.cursor->controller, nullptr);
@@ -1269,6 +2235,7 @@ void GameWorld::release(WorldNode &node) {
     setLinkOwner(node.cursor->style, nullptr);
   }
   node.carInstance.reset();
+  unregisterObjectPhysics(node);
   if (node.type == 8) {
     auto script = scripts_.find(node.instanceId);
     if (script != scripts_.end()) {
@@ -1304,10 +2271,13 @@ bool GameWorld::destroySubtree(ResourceTreeHandle handle) {
     if (found == nodes_.end()) {
       const auto external = externalNodes_.find(handle.id);
       if (external != externalNodes_.end()) {
+        unregisterObjectPhysics(*external->second);
         forgetLoadState(*external->second);
         for (auto &entry : recentlyUsed_) {
           auto &recent = entry.second;
-          recent.erase(std::remove(recent.begin(), recent.end(), external->second), recent.end());
+          recent.erase(
+              std::remove(recent.begin(), recent.end(), external->second),
+              recent.end());
         }
         externalNodes_.erase(external);
       }
@@ -1320,15 +2290,29 @@ bool GameWorld::destroySubtree(ResourceTreeHandle handle) {
 }
 
 bool GameWorld::queueDestroy(WorldNode &node) {
-  if (nodeFor(&node) != &node || (node.type != 1 && node.type != 3 && node.type != 12)) return false;
+  if (nodeFor(&node) != &node ||
+      (node.type != 1 && node.type != 3 && node.type != 12))
+    return false;
   auto link = std::make_unique<OwnerLink>();
   setLinkOwner(*link, &node);
   deferredDestroy_.push_back(std::move(link));
   return true;
 }
+bool GameWorld::queueCollisionUpdate(WorldNode &node) {
+  if (nodeFor(&node) != &node || node.type != 1)
+    return false;
+  if (node.flags & 0x10000000u)
+    return true;
+  auto link = std::make_unique<OwnerLink>();
+  setLinkOwner(*link, &node);
+  collisionUpdates_.push_back(std::move(link));
+  node.flags |= 0x10000000u;
+  return true;
+}
 
 bool GameWorld::reparent(WorldNode &node, LinkOwner &newParent) {
-  if (!nodes_.count(node.handle.id) || &node == defaultParent()) return false;
+  if (!nodes_.count(node.handle.id) || &node == defaultParent())
+    return false;
   ResourceTreeHandle parentHandle{};
   WorldNode *parentWorld = nodeFor(&newParent);
   if (parentWorld) {
@@ -1341,17 +2325,23 @@ bool GameWorld::reparent(WorldNode &node, LinkOwner &newParent) {
       }
     }
   }
-  if (!parentHandle.id) return false;
-  if (!tree_.move(node.handle, parentHandle)) return false;
-  const auto propagateSector = [&](auto &self, WorldNode &current, const WorldNode *parentNode) -> void {
+  if (!parentHandle.id)
+    return false;
+  if (!tree_.move(node.handle, parentHandle))
+    return false;
+  const auto propagateSector = [&](auto &self, WorldNode &current,
+                                   const WorldNode *parentNode) -> void {
     if (sectorHookedType(current.type)) {
-      if (parentNode) attachSector(current, *parentNode);
-      else if (current.flags & 0x10) setLinkOwner(current.sectorLink, &current);
+      if (parentNode)
+        attachSector(current, *parentNode);
+      else if (current.flags & 0x10)
+        setLinkOwner(current.sectorLink, &current);
     }
     const auto kids = children(current);
     if (kids) {
       for (auto *child : *kids) {
-        if (child) self(self, *child, &current);
+        if (child)
+          self(self, *child, &current);
       }
     }
   };
@@ -1360,8 +2350,14 @@ bool GameWorld::reparent(WorldNode &node, LinkOwner &newParent) {
 }
 
 bool GameWorld::drainDeferredDestroy(std::string &error) {
-  if (drainingDestroy_) { error = "deferred destroy is already draining"; return false; }
-  struct DrainGuard { bool &flag; ~DrainGuard() { flag = false; } } guard{drainingDestroy_};
+  if (drainingDestroy_) {
+    error = "deferred destroy is already draining";
+    return false;
+  }
+  struct DrainGuard {
+    bool &flag;
+    ~DrainGuard() { flag = false; }
+  } guard{drainingDestroy_};
   drainingDestroy_ = true;
   while (!deferredDestroy_.empty()) {
     auto &link = *deferredDestroy_.front();

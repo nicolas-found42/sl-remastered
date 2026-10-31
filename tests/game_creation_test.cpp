@@ -1,7 +1,8 @@
 #include "game_creation.hpp"
+#include "object_physics.hpp"
 
-#include <cstdio>
 #include <cmath>
+#include <cstdio>
 #include <filesystem>
 #include <vector>
 
@@ -29,8 +30,10 @@ int main() {
     auto *second = world.addTypedChild(*root, 2, "second body", 0);
     auto *foreign = other.addRoot();
     auto prototype = std::make_shared<physics::BodyProto>();
-    auto body = std::make_shared<physics::Body>(physics::createBody(*prototype, {}));
-    auto secondBody = std::make_shared<physics::Body>(physics::createBody(*prototype, {}));
+    auto body =
+        std::make_shared<physics::Body>(physics::createBody(*prototype, {}));
+    auto secondBody =
+        std::make_shared<physics::Body>(physics::createBody(*prototype, {}));
     auto invalid = std::make_shared<physics::Body>();
     auto wrongPrototype = std::make_shared<physics::BodyProto>();
     CHECK(!world.registerDynamicBody(*foreign, body, prototype));
@@ -53,7 +56,8 @@ int main() {
     CHECK(world.dynamicBodyCount() == 1);
     bool removedBeforeObserver = false;
     const auto observer = world.addNodeDestroyObserver([&](LinkOwner &owner) {
-      if (&owner == first) removedBeforeObserver = world.dynamicBodyCount() == 0;
+      if (&owner == first)
+        removedBeforeObserver = world.dynamicBodyCount() == 0;
     });
     CHECK(world.destroy(*first));
     CHECK(removedBeforeObserver && world.dynamicBodyCount() == 0);
@@ -63,17 +67,76 @@ int main() {
   }
   {
     GameWorld world;
-    auto *root = world.addRoot(); CHECK(root && !world.hasNodeType(18));
-    auto *viewport = root ? world.addTypedChild(*root, 18, "pending viewport", 0) : nullptr;
-    CHECK(viewport && !viewport->loaded && world.hasNodeType(18) && world.countNodeType(18) == 1);
-    if (viewport) CHECK(world.destroy(*viewport) && !world.hasNodeType(18) && world.countNodeType(18) == 0);
+    auto *root = world.addRoot();
+    LinkOwner external, foreign;
+    auto externalHandle = world.attachExternal(root->handle, external);
+    CHECK(externalHandle);
+    std::string error;
+    auto physics = object::ObjectPhysics::create();
+    object_config::ObjectSlot box;
+    box.kind = object_config::SlotKind::Body;
+    box.shape.kind = object_config::ShapeKind::Box;
+    box.shape.mass = 1;
+    box.shape.params = {1, 1, 1};
+    CHECK(physics->addBody(box, 0, nullptr, error) == 0);
+    auto makeHandle = [&]() {
+      auto instance = physics->instantiate({0, 0, 0}, {0, 0, 0}, error);
+      CHECK(instance.has_value());
+      return instance ? object::adoptInstance(std::move(*instance))
+                      : object::InstanceHandle{};
+    };
+    CHECK(!world.registerObjectPhysics(foreign, makeHandle()));
+    CHECK(world.registerObjectPhysics(external, makeHandle()));
+    CHECK(!world.registerObjectPhysics(external, makeHandle()));
+    CHECK(!world.stepEmptyPhysics(0.01f, error));
+    CHECK(world.physicsTime() == 0);
+    CHECK(world.unregisterObjectPhysics(external));
+    CHECK(!world.unregisterObjectPhysics(external));
+    CHECK(world.stepEmptyPhysics(0.01f, error));
+    CHECK(world.registerObjectPhysics(external, makeHandle()));
+    std::weak_ptr<object::ObjectPhysics> retained = physics;
+    physics.reset();
+    CHECK(!retained.expired());
+    CHECK(world.detachExternal(*externalHandle));
+    CHECK(retained.expired());
+    CHECK(!world.unregisterObjectPhysics(external));
+    CHECK(world.stepEmptyPhysics(0.01f, error));
+    auto staticPhysics = object::ObjectPhysics::create();
+    box.shape.mass = 0;
+    CHECK(staticPhysics->addBody(box, 0, nullptr, error) == 0);
+    auto staticInstance =
+        staticPhysics->instantiate({0, 0, 0}, {0, 0, 0}, error);
+    CHECK(staticInstance.has_value());
+    auto *local = world.addChild(*root, "object physics", 0);
+    CHECK(local && staticInstance);
+    if (local && staticInstance) {
+      CHECK(world.registerObjectPhysics(
+          *local, object::adoptInstance(std::move(*staticInstance))));
+      CHECK(!world.stepEmptyPhysics(0.01f, error));
+      CHECK(world.destroy(*local));
+      CHECK(world.stepEmptyPhysics(0.01f, error));
+    }
+  }
+  {
+    GameWorld world;
+    auto *root = world.addRoot();
+    CHECK(root && !world.hasNodeType(18));
+    auto *viewport =
+        root ? world.addTypedChild(*root, 18, "pending viewport", 0) : nullptr;
+    CHECK(viewport && !viewport->loaded && world.hasNodeType(18) &&
+          world.countNodeType(18) == 1);
+    if (viewport)
+      CHECK(world.destroy(*viewport) && !world.hasNodeType(18) &&
+            world.countNodeType(18) == 0);
   }
 
   // Player input defaults and mapping slot rules (FUN_0054d580, 0054d650,
   // 0054d700, 0054d750). These do not stand in for the missing device factory.
   {
-    const auto part = parseNativePayloadDirective("part cars\\racers\\Duhen_data\\scripts\\chassis.cfg");
-    CHECK(part && part->device == "part" && part->configPath == "cars\\racers\\Duhen_data\\scripts\\chassis.cfg");
+    const auto part = parseNativePayloadDirective(
+        "part cars\\racers\\Duhen_data\\scripts\\chassis.cfg");
+    CHECK(part && part->device == "part" &&
+          part->configPath == "cars\\racers\\Duhen_data\\scripts\\chassis.cfg");
     const auto cursor = parseNativePayloadDirective("cursor");
     CHECK(cursor && cursor->device == "cursor" && !cursor->configPath);
     CHECK(!parseNativePayloadDirective(" \t"));
@@ -112,8 +175,12 @@ int main() {
   {
     PlayerInputState input;
     float key = 1.0f;
-    input.sampleInput = [&](int32_t, int32_t) { return std::optional<float>{key}; };
-    input.inputType = [](int32_t, int32_t) { return std::optional<int32_t>{0}; };
+    input.sampleInput = [&](int32_t, int32_t) {
+      return std::optional<float>{key};
+    };
+    input.inputType = [](int32_t, int32_t) {
+      return std::optional<int32_t>{0};
+    };
     CHECK(input.add(59, 0, 59, 0.0f, {0.0f, 1.0f, 0.0f, 1.0f}, 0) == 1);
     input.beginFrame(0.001f);
     CHECK(input.sampleAxis(59) == 1.0f);
@@ -124,8 +191,9 @@ int main() {
   }
   {
     GameWorld world;
-    auto* root = world.addRoot();
-    auto* player = root ? world.addChild(*root, "control player", 0x21) : nullptr;
+    auto *root = world.addRoot();
+    auto *player =
+        root ? world.addChild(*root, "control player", 0x21) : nullptr;
     CHECK(player);
     if (player) {
       world.markLoaded(*player);
@@ -133,8 +201,12 @@ int main() {
       player->player = std::make_unique<PlayerInstance>();
       player->playerInput = std::make_unique<PlayerInputState>();
       float key = 1.0f;
-      player->playerInput->sampleInput = [&](int32_t, int32_t) { return std::optional<float>{key}; };
-      player->playerInput->inputType = [](int32_t, int32_t) { return std::optional<int32_t>{0}; };
+      player->playerInput->sampleInput = [&](int32_t, int32_t) {
+        return std::optional<float>{key};
+      };
+      player->playerInput->inputType = [](int32_t, int32_t) {
+        return std::optional<int32_t>{0};
+      };
       CHECK(player->playerInput->add(1, 0, 0xcb, 0.0f, {0, 1, 0, -1}, 0) == 1);
       player->playerInput->beginFrame(0.00025f);
       const auto pressed = world.playerControlValue(player, 1);
@@ -145,7 +217,9 @@ int main() {
       CHECK(world.playerControlValue(player, 1) == 0.0f);
       CHECK(world.playerControlValue(player, 76) == 0.0f);
       CHECK(!world.playerControlValue(player, 0));
-      player->playerInput->inputType = [](int32_t, int32_t) { return std::optional<int32_t>{1}; };
+      player->playerInput->inputType = [](int32_t, int32_t) {
+        return std::optional<int32_t>{1};
+      };
       player->playerInput->beginFrame(0.001f);
       CHECK(!world.playerControlValue(player, 1));
       player->player->scriptedControlOverride = true;
@@ -158,7 +232,7 @@ int main() {
   }
   {
     GameWorld world;
-    auto* root = world.addRoot();
+    auto *root = world.addRoot();
     std::string error;
     CHECK(root && world.stepEmptyPhysics(0.00005f, error));
     CHECK(world.physicsTime() == 0.0f);
@@ -167,7 +241,7 @@ int main() {
   }
   {
     GameWorld world;
-    auto* root = world.addRoot();
+    auto *root = world.addRoot();
     std::string error;
     CHECK(root && world.stepEmptyPhysics(0.01f, error));
     CHECK(world.physicsTime() == 0.01f);
@@ -178,17 +252,17 @@ int main() {
     CHECK(!world.stepEmptyPhysics(0.01f, error));
     CHECK(world.physicsTime() == 0.01f);
     world.forgetLoadState(body);
-    auto* box = world.addTypedChild(*root, 2, "box", 1);
+    auto *box = world.addTypedChild(*root, 2, "box", 1);
     CHECK(box && world.registerStaticBox(*box, {1, 1, 1}));
     world.markLoaded(*box);
     CHECK(world.stepEmptyPhysics(0.01f, error));
-    auto* child = world.addChild(*box, "child", 0);
+    auto *child = world.addChild(*box, "child", 0);
     CHECK(child && !world.stepEmptyPhysics(0.01f, error));
     CHECK(world.destroy(*child));
     CHECK(world.stepEmptyPhysics(0.01f, error));
     CHECK(world.destroy(*box));
     CHECK(world.stepEmptyPhysics(0.01f, error));
-    auto* node = world.addChild(*root, "hook", 0);
+    auto *node = world.addChild(*root, "hook", 0);
     CHECK(node && world.registerHook(GameHook::Kind9, *node));
     CHECK(!world.stepEmptyPhysics(0.01f, error));
     world.unregisterHook(GameHook::Kind9, node);
@@ -204,7 +278,8 @@ int main() {
     CHECK(world.registerHook(GameHook::Kind1c, *first));
     CHECK(world.registerHook(GameHook::Kind8, *second));
     CHECK(world.registerHook(GameHook::Kind8, *first));
-    CHECK(world.registerHook(GameHook::Kind8, static_cast<LinkOwner *>(nullptr)));
+    CHECK(
+        world.registerHook(GameHook::Kind8, static_cast<LinkOwner *>(nullptr)));
     world.unregisterHook(GameHook::Kind8, first);
     CHECK((world.hooks(GameHook::Kind8) ==
            std::vector<const WorldNode *>{nullptr, second, first, nullptr}));
@@ -218,14 +293,15 @@ int main() {
     CHECK((world.hooks(GameHook::Kind1c) ==
            std::vector<const WorldNode *>{nullptr}));
     world.pruneDetachedHooks(GameHook::Kind8);
-    CHECK((world.hooks(GameHook::Kind8) == std::vector<const WorldNode *>{second}));
+    CHECK((world.hooks(GameHook::Kind8) ==
+           std::vector<const WorldNode *>{second}));
     world.pruneDetachedHooks(GameHook::Kind1c);
     CHECK(world.hooks(GameHook::Kind1c).empty());
   }
   {
     GameWorld world;
-    auto* root = world.addRoot();
-    auto* node = world.addChild(*root, "cursor", 0);
+    auto *root = world.addRoot();
+    auto *node = world.addChild(*root, "cursor", 0);
     LinkOwner controller;
     CHECK(node);
     if (node) {
@@ -239,26 +315,29 @@ int main() {
   }
   {
     GameWorld world;
-    auto* root = world.addRoot();
-    auto* first = world.addTypedChild(*root, 12, "first", 0);
-    auto* second = world.addTypedChild(*root, 3, "second", 0);
+    auto *root = world.addRoot();
+    auto *first = world.addTypedChild(*root, 12, "first", 0);
+    auto *second = world.addTypedChild(*root, 3, "second", 0);
     CHECK(first && second);
     if (first && second) {
       const uint32_t firstId = first->instanceId, secondId = second->instanceId;
-      CHECK(world.queueDestroy(*first) && world.queueDestroy(*first) && world.queueDestroy(*second));
+      CHECK(world.queueDestroy(*first) && world.queueDestroy(*first) &&
+            world.queueDestroy(*second));
       CHECK(world.deferredDestroyCount() == 3);
       CHECK(world.destroy(*first));
       std::string error;
       CHECK(world.drainDeferredDestroy(error));
       CHECK(!world.findInstance(firstId) && !world.findInstance(secondId));
       CHECK(world.deferredDestroyCount() == 0);
-      auto* third = world.addTypedChild(*root, 12, "third", 0);
-      auto* fourth = world.addTypedChild(*root, 3, "fourth", 0);
+      auto *third = world.addTypedChild(*root, 12, "third", 0);
+      auto *fourth = world.addTypedChild(*root, 3, "fourth", 0);
       CHECK(third && fourth);
       if (third && fourth) {
         std::vector<uint32_t> order;
-        const uint32_t thirdId = third->instanceId, fourthId = fourth->instanceId;
-        const auto observer = world.addNodeDestroyObserver([&](LinkOwner &owner) { order.push_back(owner.value); });
+        const uint32_t thirdId = third->instanceId,
+                       fourthId = fourth->instanceId;
+        const auto observer = world.addNodeDestroyObserver(
+            [&](LinkOwner &owner) { order.push_back(owner.value); });
         CHECK(world.queueDestroy(*third) && world.queueDestroy(*fourth));
         CHECK(world.drainDeferredDestroy(error));
         CHECK((order == std::vector<uint32_t>{thirdId, fourthId}));
@@ -280,10 +359,12 @@ int main() {
         ++scriptGetInfoCalls;
         return 0;
       };
-      GameCreationRequest request{50, "java.io.Controller", {},
-                                  std::string{"0 0 2"}, "controller", "player"};
+      GameCreationRequest request{50,           "java.io.Controller",
+                                  {},           std::string{"0 0 2"},
+                                  "controller", "player"};
       PlayerFactorySetup setup{{3, 0.5f, 12.0f, 4.0f}, &sound, &font};
-      const auto made = createNativeInstance(world, request, &receiver, nullptr, &setup);
+      const auto made =
+          createNativeInstance(world, request, &receiver, nullptr, &setup);
       CHECK(made.status == CreationStatus::Created && made.node);
       if (made.node) {
         CHECK(made.node->player && made.node->playerInput &&
@@ -298,14 +379,16 @@ int main() {
         CHECK(world.hooks(GameHook::Kind9).empty());
         CHECK((world.hooks(GameHook::Kind1c) ==
                std::vector<const WorldNode *>{made.node}));
-        CHECK(world.playerInputs().size() == 1 && world.playerInputs()[0] == made.node);
+        CHECK(world.playerInputs().size() == 1 &&
+              world.playerInputs()[0] == made.node);
         std::string physicsError;
         CHECK(world.stepEmptyPhysics(0.01f, physicsError));
         setLinkOwner(made.node->player->animationOverlay, &overlay);
         setLinkOwner(made.node->player->debugText[0], &debug);
         CHECK(world.destroy(*made.node));
         CHECK(!overlay.head && !debug.head);
-        CHECK(world.playerInputs().empty() && !receiver.link.owner && !font.head);
+        CHECK(world.playerInputs().empty() && !receiver.link.owner &&
+              !font.head);
         CHECK((world.hooks(GameHook::Kind8) ==
                std::vector<const WorldNode *>{nullptr}));
       }
@@ -414,7 +497,8 @@ int main() {
 
     auto deviceRequest = *request.request;
     deviceRequest.nativeDevice = "player";
-    const auto deviceResult = createNativeInstance(world, deviceRequest, &receiver);
+    const auto deviceResult =
+        createNativeInstance(world, deviceRequest, &receiver);
     CHECK(deviceResult.status == CreationStatus::Unsupported &&
           deviceResult.issue == CreationIssue::NativeDeviceUnsupported);
     CHECK(world.nodeCount() == 1 && !receiver.link.owner && kinds.empty());
@@ -513,32 +597,65 @@ int main() {
     const size_t stable = world.nodeCount();
     ReceiverBinding initialized;
     std::vector<int> calls;
-    initialized.initializeReceiver = [&](WorldNode &createdNode) -> std::optional<std::string> {
+    initialized.initializeReceiver =
+        [&](WorldNode &createdNode) -> std::optional<std::string> {
       CHECK(createdNode.scriptLink.owner == script && createdNode.loaded);
-      calls.push_back(1); return std::nullopt;
+      calls.push_back(1);
+      return std::nullopt;
     };
-    initialized.getInfo = [&](int kind) -> std::optional<int32_t> { calls.push_back(kind); return 0; };
-    auto initializedResult = createNativeInstance(world, *request.request, &initialized);
+    initialized.getInfo = [&](int kind) -> std::optional<int32_t> {
+      calls.push_back(kind);
+      return 0;
+    };
+    auto initializedResult =
+        createNativeInstance(world, *request.request, &initialized);
     CHECK(initializedResult.status == CreationStatus::Created);
     CHECK((calls == std::vector<int>{1, 8, 9, 0x1c}));
-    if (initializedResult.node) CHECK(world.destroy(*initializedResult.node));
+    if (initializedResult.node)
+      CHECK(world.destroy(*initializedResult.node));
     ReceiverBinding badInitialization;
-    badInitialization.initializeReceiver = [](WorldNode &) -> std::optional<std::string> { return "constructor failed"; };
-    badInitialization.getInfo = [&](int) -> std::optional<int32_t> { CHECK(false); return 0; };
-    auto failedInitialization = createNativeInstance(world, *request.request, &badInitialization);
-    CHECK(failedInitialization.status == CreationStatus::Unsupported && failedInitialization.detail == "constructor failed");
+    badInitialization.initializeReceiver =
+        [](WorldNode &) -> std::optional<std::string> {
+      return "constructor failed";
+    };
+    badInitialization.getInfo = [&](int) -> std::optional<int32_t> {
+      CHECK(false);
+      return 0;
+    };
+    auto failedInitialization =
+        createNativeInstance(world, *request.request, &badInitialization);
+    CHECK(failedInitialization.status == CreationStatus::Unsupported &&
+          failedInitialization.detail == "constructor failed");
     CHECK(world.nodeCount() == stable && !badInitialization.link.owner);
     ReceiverBinding destroyedInitialization;
-    destroyedInitialization.initializeReceiver = [&](WorldNode &createdNode) -> std::optional<std::string> { CHECK(world.destroy(createdNode)); return std::nullopt; };
-    destroyedInitialization.getInfo = [&](int) -> std::optional<int32_t> { CHECK(false); return 0; };
-    auto destroyedResult = createNativeInstance(world, *request.request, &destroyedInitialization);
-    CHECK(destroyedResult.status == CreationStatus::Unsupported && world.nodeCount() == stable);
+    destroyedInitialization.initializeReceiver =
+        [&](WorldNode &createdNode) -> std::optional<std::string> {
+      CHECK(world.destroy(createdNode));
+      return std::nullopt;
+    };
+    destroyedInitialization.getInfo = [&](int) -> std::optional<int32_t> {
+      CHECK(false);
+      return 0;
+    };
+    auto destroyedResult =
+        createNativeInstance(world, *request.request, &destroyedInitialization);
+    CHECK(destroyedResult.status == CreationStatus::Unsupported &&
+          world.nodeCount() == stable);
     ReceiverBinding destroyedHook;
     WorldNode *hookNode = nullptr;
-    destroyedHook.initializeReceiver = [&](WorldNode &createdNode) -> std::optional<std::string> { hookNode = &createdNode; return std::nullopt; };
-    destroyedHook.getInfo = [&](int) -> std::optional<int32_t> { CHECK(world.destroy(*hookNode)); return 0; };
-    auto destroyedHookResult = createNativeInstance(world, *request.request, &destroyedHook);
-    CHECK(destroyedHookResult.status == CreationStatus::Unsupported && world.nodeCount() == stable);
+    destroyedHook.initializeReceiver =
+        [&](WorldNode &createdNode) -> std::optional<std::string> {
+      hookNode = &createdNode;
+      return std::nullopt;
+    };
+    destroyedHook.getInfo = [&](int) -> std::optional<int32_t> {
+      CHECK(world.destroy(*hookNode));
+      return 0;
+    };
+    auto destroyedHookResult =
+        createNativeInstance(world, *request.request, &destroyedHook);
+    CHECK(destroyedHookResult.status == CreationStatus::Unsupported &&
+          world.nodeCount() == stable);
     ReceiverBinding hook;
     hook.getInfo = [](int kind) -> std::optional<int32_t> {
       return kind == 9 ? 1 : 0;

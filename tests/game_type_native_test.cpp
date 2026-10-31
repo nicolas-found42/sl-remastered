@@ -1,29 +1,32 @@
-#include "ground_runtime.hpp"
-#include "game_spatial_payload.hpp"
-#include "wheel_tire_step.hpp"
-#include "physics_compound.hpp"
 #include "camera_device_body.hpp"
 #include "camera_device_factory.hpp"
+#include "camera_traversal.hpp"
 #include "car_runtime.hpp"
+#include "car_wheel_runtime.hpp"
 #include "class_environment.hpp"
+#include "game_spatial_payload.hpp"
+#include "ground_runtime.hpp"
 #include "hotkeys.hpp"
 #include "natives/game_type.hpp"
 #include "natives/registry.hpp"
 #include "pack_registry.hpp"
-#include "resource_world.hpp"
+#include "physics_compound.hpp"
 #include "render2d.hpp"
+#include "resource_world.hpp"
 #include "timers.hpp"
 #include "vm.hpp"
 #include "vm_test_harness.hpp"
+#include "wheel_tire_step.hpp"
 #include "world_model.hpp"
 
+#include <SDL3/SDL.h>
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <functional>
+#include <limits>
 #include <set>
-#include <SDL3/SDL.h>
 
 namespace {
 ClassEnvironment *environment = nullptr;
@@ -35,25 +38,30 @@ std::vector<VmValue> groundEventArgs;
 VmScriptCall groundEventCallback;
 const VmObject *groundEventReceiver = nullptr;
 
-NativeResult probeCityNotification(const std::vector<VmValue> &,
-                                   const VmObject *receiver, VmArena *arena,
-                                   const std::vector<const TufaClass *> *classes) {
+NativeResult
+probeCityNotification(const std::vector<VmValue> &, const VmObject *receiver,
+                      VmArena *arena,
+                      const std::vector<const TufaClass *> *classes) {
   return gameTypeAddNotification(cityLoadArgs, receiver, arena, classes);
 }
 
 NativeResult probeCity2Ground(const std::vector<VmValue> &, const VmObject *,
-                              VmArena *arena, const std::vector<const TufaClass *> *) {
-  if (!arena || !city2LoadTarget) return std::string{"city2 probe target missing"};
-  if (const auto error = loadGroundGameResource(*arena, *city2LoadTarget)) return *error;
+                              VmArena *arena,
+                              const std::vector<const TufaClass *> *) {
+  if (!arena || !city2LoadTarget)
+    return std::string{"city2 probe target missing"};
+  if (const auto error = loadGroundGameResource(*arena, *city2LoadTarget))
+    return *error;
   return std::monostate{};
 }
 
-NativeResult probeGroundEvent(const std::vector<VmValue> &,
-                              const VmObject *, VmArena *arena,
+NativeResult probeGroundEvent(const std::vector<VmValue> &, const VmObject *,
+                              VmArena *arena,
                               const std::vector<const TufaClass *> *classes) {
   auto previous = std::move(arena->callScript);
   arena->callScript = groundEventCallback;
-  auto result = gameRefQueueEvent(groundEventArgs, groundEventReceiver, arena, classes);
+  auto result =
+      gameRefQueueEvent(groundEventArgs, groundEventReceiver, arena, classes);
   arena->callScript = std::move(previous);
   return result;
 }
@@ -102,6 +110,50 @@ const TufaMethod *findConstructor(const TufaClass &cls,
     }
   return nullptr;
 }
+template <typename Dispatch>
+bool finishDispatch(Dispatch &dispatch, VmScheduler &scheduler,
+                    std::string &error) {
+  // Two things can hold a dispatch:
+  //  * an awaited subscriber (animation callbacks) which only resumes when
+  //    the scheduler has finished its host task, so resume() must be retried
+  //    after every tick, and
+  //  * fire-and-forget cursor subscribers, which outlive the coroutine, so
+  //    the loop also runs until the scheduler is idle.
+  for (unsigned i = 0; i < 1000; ++i) {
+    if (!dispatch.resume(error))
+      return false;
+    if (dispatch.finished() && scheduler.threadCount() == 0)
+      return true;
+    const auto tick = scheduler.tick(10000);
+    if (!tick.ok) {
+      error = tick.error;
+      return false;
+    }
+  }
+  error = "dispatch did not finish";
+  return false;
+}
+
+bool runCursorTest(VmArena &arena, WorldNode &source,
+                   const std::string &payload,
+                   const std::vector<const TufaClass *> &classes,
+                   const std::vector<VmStaticFields> &states,
+                   std::string &error) {
+  VmScheduler scheduler(arena, &nativeRegistry(), &classes, &states,
+                        [] { return 0.0; });
+  CursorDispatch dispatch(arena, scheduler, source, payload, classes, states);
+  return finishDispatch(dispatch, scheduler, error);
+}
+
+bool runAnimationTest(VmArena &arena, float delta,
+                      const std::vector<const TufaClass *> &classes,
+                      const std::vector<VmStaticFields> &states,
+                      std::string &error) {
+  VmScheduler scheduler(arena, &nativeRegistry(), &classes, &states,
+                        [] { return 0.0; });
+  AnimationDispatch dispatch(arena, scheduler, delta, classes, states);
+  return finishDispatch(dispatch, scheduler, error);
+}
 } // namespace
 
 int main() {
@@ -117,6 +169,39 @@ int main() {
     return 1;
   const auto loaded = classes.classes();
 
+  {
+    GameWorld inputWorld;
+    VmGameState inputGame;
+    inputGame.world = &inputWorld;
+    VmArena inputArena;
+    inputArena.gameState = &inputGame;
+    CHECK(std::holds_alternative<std::string>(
+        inputGetAxis({int32_t{0}, int32_t{7}}, nullptr, &inputArena, &loaded)));
+    inputWorld.setInputDevices({"SysKeyboard", "SysMouse", "Joystick"});
+    CHECK(std::holds_alternative<std::string>(
+        inputGetAxis({int32_t{0}, int32_t{7}}, nullptr, &inputArena, &loaded)));
+    HotkeyState inputHotkeys;
+    inputArena.hotkeys = &inputHotkeys;
+    inputHotkeys.physicalKey = [](int32_t key) -> std::optional<float> {
+      return key == 7 ? std::optional<float>{1.0f} : std::nullopt;
+    };
+    CHECK(std::get<float>(std::get<VmValue>(inputGetAxis(
+              {int32_t{0}, int32_t{7}}, nullptr, &inputArena, &loaded))) ==
+          1.0f);
+    CHECK(std::holds_alternative<std::string>(
+        inputGetAxis({int32_t{0}, int32_t{8}}, nullptr, &inputArena, &loaded)));
+    CHECK(std::get<float>(std::get<VmValue>(inputGetAxis(
+              {int32_t{1}, int32_t{7}}, nullptr, &inputArena, &loaded))) ==
+          0.0f);
+    CHECK(std::holds_alternative<std::string>(
+        inputGetAxis({int32_t{2}, int32_t{7}}, nullptr, &inputArena, &loaded)));
+    CHECK(std::holds_alternative<std::string>(
+        invokeNative("java.lang.System", "isLoading", "()I", {}, nullptr,
+                     &inputArena, &loaded)));
+    CHECK(std::holds_alternative<std::string>(
+        invokeNative("java.lang.System", "isLoadingReset", "()V", {}, nullptr,
+                     &inputArena, &loaded)));
+  }
   {
     VmArena displayArena;
     VmGameState displayGame;
@@ -368,7 +453,8 @@ int main() {
     arena.gameState = &game;
     game.resources = &cameraResources;
     const auto allocateCameraRef = [&]() -> const VmObject * {
-      const auto made = vmExecute(expression, allocate, {}, nullptr, &loaded, &states, &arena);
+      const auto made = vmExecute(expression, allocate, {}, nullptr, &loaded,
+                                  &states, &arena);
       const auto *object = std::get_if<const VmObject *>(&made.value);
       return made.ok && object ? *object : nullptr;
     };
@@ -388,60 +474,86 @@ int main() {
       cameraNode->eventSubscriptionsKnownEmpty = true;
       cameraNode->eventMask = 0x14;
       std::string cameraError;
-      CameraDeviceConfig cameraConfig{55, 0.02f, 2, 1, -0.7f, 0.2f, 200, 20, true};
+      CameraDeviceConfig cameraConfig{55,   0.02f, 2,  1,   -0.7f,
+                                      0.2f, 200,   20, true};
       auto prototype = makeCameraDevicePrototype(cameraError);
       cameraNode->cameraDevice = prepareCameraDeviceResources(
-          world, cameraResources, *cameraNode, cameraConfig, {}, prototype, cameraError);
+          world, cameraResources, *cameraNode, cameraConfig, {}, prototype,
+          cameraError);
       CHECK(cameraNode->cameraDevice);
-      CHECK(std::holds_alternative<std::monostate>(invokeNative(
-          "java.util.resource.ResourceRef", "newNative", "()V", {}, cameraRef, &arena, &loaded)));
+      CHECK(std::holds_alternative<std::monostate>(
+          invokeNative("java.util.resource.ResourceRef", "newNative", "()V", {},
+                       cameraRef, &arena, &loaded)));
       const auto *refState = nativeResourceState(cameraRef, &arena);
       CHECK(refState);
       if (cameraNode->cameraDevice && refState) {
-        const auto handle = static_cast<int32_t>(refState - arena.resourceStates.data()) + 1;
+        const auto handle =
+            static_cast<int32_t>(refState - arena.resourceStates.data()) + 1;
         auto &binding = game.bindings[handle];
-        if (!binding) binding = std::make_unique<ReceiverBinding>();
+        if (!binding)
+          binding = std::make_unique<ReceiverBinding>();
         setLinkOwner(binding->link, cameraNode);
         const auto command = [&](int32_t event, const char *text) {
-          return gameRefQueueEvent({VmValue{null}, VmValue{event}, VmValue{cameraString(text)}},
-                                   cameraRef, &arena, &loaded);
+          return gameRefQueueEvent(
+              {VmValue{null}, VmValue{event}, VmValue{cameraString(text)}},
+              cameraRef, &arena, &loaded);
         };
         auto &state = cameraNode->cameraDevice->commands;
-        CHECK(std::holds_alternative<std::monostate>(command(0x10, "dist 3 8")));
+        CHECK(
+            std::holds_alternative<std::monostate>(command(0x10, "dist 3 8")));
         CHECK(state.minDistance == 3 && state.maxDistance == 8);
         CHECK(std::holds_alternative<std::monostate>(command(0x10, "dist 4")));
         CHECK(state.minDistance == 4 && state.maxDistance == 8);
-        CHECK(std::holds_alternative<std::monostate>(command(0x10, "smooth 0.2 0.3")));
+        CHECK(std::holds_alternative<std::monostate>(
+            command(0x10, "smooth 0.2 0.3")));
         CHECK(std::fabs(state.smoothPosition - 0.2f) < 1e-6f);
-        CHECK(std::holds_alternative<std::monostate>(command(0x10, "force 1.6 0.5 -0.7")));
+        CHECK(std::holds_alternative<std::monostate>(
+            command(0x10, "force 1.6 0.5 -0.7")));
         CHECK(std::fabs(state.force - 1.6f) < 1e-6f && state.damping == 0.5f);
-        CHECK(std::holds_alternative<std::monostate>(command(0x10, "torque 0.1")));
+        CHECK(std::holds_alternative<std::monostate>(
+            command(0x10, "torque 0.1")));
         CHECK(std::holds_alternative<std::monostate>(command(0x10, "roll 0")));
-        auto *followTarget = world.addTypedChild(*root, 2, "camera follow target", 0);
+        auto *followTarget =
+            world.addTypedChild(*root, 2, "camera follow target", 0);
         CHECK(followTarget);
         if (followTarget) {
-          const std::string id = std::to_string(static_cast<int32_t>(followTarget->instanceId));
+          const std::string id =
+              std::to_string(static_cast<int32_t>(followTarget->instanceId));
           const auto look = "look " + id + " 1,2,3 0,0,-2 -1";
           const auto move = "move " + id + " 4,5,6 12 0,0,0";
-          CHECK(errorOf(command(0x10, look.c_str())).find("follow simulation unsupported") != std::string::npos);
+          CHECK(std::holds_alternative<std::monostate>(
+              command(0x10, look.c_str())));
           CHECK(cameraNode->cameraDevice->lookTarget.owner == followTarget);
           CHECK(state.lookOffset == (std::array<float, 3>{1, 2, 3}));
-          CHECK(errorOf(command(0x10, move.c_str())).find("follow simulation unsupported") != std::string::npos);
+          CHECK(errorOf(command(0x10, move.c_str()))
+                    .find("follow simulation unsupported") !=
+                std::string::npos);
           CHECK(cameraNode->cameraDevice->moveTarget.owner == followTarget);
           CHECK(state.moveDistance == 12 && state.maxDistance == 12);
           CHECK(world.destroy(*followTarget));
-          CHECK(!cameraNode->cameraDevice->lookTarget.owner && !cameraNode->cameraDevice->moveTarget.owner);
+          CHECK(!cameraNode->cameraDevice->lookTarget.owner &&
+                !cameraNode->cameraDevice->moveTarget.owner);
         }
-        auto *bodiedTarget = world.addTypedChild(*root, 2, "bodied camera follow", 0);
+        auto *bodiedTarget =
+            world.addTypedChild(*root, 2, "bodied camera follow", 0);
         std::string bodyError;
-        auto builtTarget = physics::createBodyProto(1, 1, 1, 0, 0, nullptr, bodyError);
-        auto bodyPrototype = builtTarget ? std::make_shared<physics::BodyProto>(std::move(*builtTarget)) : nullptr;
-        auto body = bodyPrototype ? std::make_shared<physics::Body>(physics::createBody(*bodyPrototype, {10, 0, 0})) : nullptr;
-        CHECK(bodiedTarget && body && world.registerDynamicBody(*bodiedTarget, body, bodyPrototype));
+        auto builtTarget =
+            physics::createBodyProto(1, 1, 1, 0, 0, nullptr, bodyError);
+        auto bodyPrototype =
+            builtTarget
+                ? std::make_shared<physics::BodyProto>(std::move(*builtTarget))
+                : nullptr;
+        auto body = bodyPrototype
+                        ? std::make_shared<physics::Body>(
+                              physics::createBody(*bodyPrototype, {10, 0, 0}))
+                        : nullptr;
+        CHECK(bodiedTarget && body &&
+              world.registerDynamicBody(*bodiedTarget, body, bodyPrototype));
         if (bodiedTarget && body) {
-          const auto id = std::to_string(static_cast<int32_t>(bodiedTarget->instanceId));
-          CHECK(errorOf(command(0x10, ("look " + id + " 0,0,0 0,0,-1 -1").c_str()))
-                    .find("follow simulation unsupported") != std::string::npos);
+          const auto id =
+              std::to_string(static_cast<int32_t>(bodiedTarget->instanceId));
+          CHECK(std::holds_alternative<std::monostate>(
+              command(0x10, ("look " + id + " 0,0,0 0,0,-1 -1").c_str())));
           CHECK(std::holds_alternative<std::monostate>(
               command(0x10, ("move " + id + " 0,1,0 2 0,0,0").c_str())));
           CHECK(cameraNode->cameraDevice->moveTarget.owner == bodiedTarget);
@@ -450,9 +562,13 @@ int main() {
                 !cameraNode->cameraDevice->moveTarget.owner);
         }
         CHECK(!errorOf(command(0x10, "render 1")).empty());
-        auto surface = std::unique_ptr<SDL_Surface, decltype(&SDL_DestroySurface)>(
-            SDL_CreateSurface(16, 16, SDL_PIXELFORMAT_RGBA32), SDL_DestroySurface);
-        auto renderer = surface ? Render2D::forSurface(surface.get(), cameraError) : nullptr;
+        auto surface =
+            std::unique_ptr<SDL_Surface, decltype(&SDL_DestroySurface)>(
+                SDL_CreateSurface(16, 16, SDL_PIXELFORMAT_RGBA32),
+                SDL_DestroySurface);
+        auto renderer = surface
+                            ? Render2D::forSurface(surface.get(), cameraError)
+                            : nullptr;
         CHECK(renderer);
         if (renderer) {
           game.renderer = renderer.get();
@@ -461,25 +577,33 @@ int main() {
           CHECK(!cameraNode->cameraDevice->renderNode()->cameraViewport.owner);
           game.renderer = nullptr;
         }
-        CHECK(std::holds_alternative<std::monostate>(command(0x80, "dist 9 9")));
-        CHECK(state.minDistance == 4);
+        const float minimumBeforeIgnoredEvents = state.minDistance;
+        CHECK(
+            std::holds_alternative<std::monostate>(command(0x80, "dist 9 9")));
+        CHECK(state.minDistance == minimumBeforeIgnoredEvents);
         cameraNode->eventMask &= ~uint32_t{0x10};
-        CHECK(std::holds_alternative<std::monostate>(command(0x10, "dist 9 9")));
-        CHECK(state.minDistance == 4);
+        CHECK(
+            std::holds_alternative<std::monostate>(command(0x10, "dist 9 9")));
+        CHECK(state.minDistance == minimumBeforeIgnoredEvents);
         cameraNode->eventMask |= 0x10;
-        auto *seatCar = world.addChild(*root, "seat follow car", 0x21);
+        auto *seatCar = world.addTypedChild(*root, 2, "seat follow car", 0);
         CHECK(seatCar);
         if (seatCar) {
           CarDriver driver;
           driver.hasExtCamera = true;
           driver.extCamera = {120, 0, 1.8f, 0, 0, 1, -2, 0, 0, 0, 5};
-          CHECK(cameraNode->cameraDevice->applySeatFollow(*seatCar, driver, {0.4f, 1.25f}));
-          CHECK(cameraNode->cameraDevice->lookTarget.owner == seatCar && cameraNode->cameraDevice->moveTarget.owner == seatCar);
-          CHECK(state.lookOffset == (std::array<float, 3>{0, 1.8f, 0}) && state.moveDistance == 2 && state.zoomTarget == 120);
+          CHECK(cameraNode->cameraDevice->applySeatFollow(*seatCar, driver,
+                                                          {0.4f, 1.25f}));
+          CHECK(cameraNode->cameraDevice->lookTarget.owner == seatCar &&
+                cameraNode->cameraDevice->moveTarget.owner == seatCar);
+          CHECK(state.lookOffset == (std::array<float, 3>{0, 1.8f, 0}) &&
+                state.moveDistance == 2 && state.zoomTarget == 120);
           CHECK(world.destroy(*seatCar));
-          CHECK(!cameraNode->cameraDevice->lookTarget.owner && !cameraNode->cameraDevice->moveTarget.owner);
+          CHECK(!cameraNode->cameraDevice->lookTarget.owner &&
+                !cameraNode->cameraDevice->moveTarget.owner);
         }
-        auto *playerNode = world.addChild(*root, "player command fixture", 0x21);
+        auto *playerNode =
+            world.addChild(*root, "player command fixture", 0x21);
         auto *viewportA = world.addTypedChild(*root, 18, "viewport A", 0);
         auto *viewportB = world.addTypedChild(*root, 18, "viewport B", 0);
         const auto *playerRef = allocateCameraRef();
@@ -492,33 +616,50 @@ int main() {
           playerNode->scriptReceiver = playerRef;
           playerNode->eventMask = 0x10;
           playerNode->eventSubscriptionsKnownEmpty = true;
-          CHECK(std::holds_alternative<std::monostate>(invokeNative(
-              "java.util.resource.ResourceRef", "newNative", "()V", {}, playerRef, &arena, &loaded)));
+          CHECK(std::holds_alternative<std::monostate>(
+              invokeNative("java.util.resource.ResourceRef", "newNative", "()V",
+                           {}, playerRef, &arena, &loaded)));
           const auto *playerState = nativeResourceState(playerRef, &arena);
           CHECK(playerState);
           if (playerState) {
-            const auto playerHandle = static_cast<int32_t>(playerState - arena.resourceStates.data()) + 1;
+            const auto playerHandle =
+                static_cast<int32_t>(playerState -
+                                     arena.resourceStates.data()) +
+                1;
             auto &playerBinding = game.bindings[playerHandle];
-            if (!playerBinding) playerBinding = std::make_unique<ReceiverBinding>();
+            if (!playerBinding)
+              playerBinding = std::make_unique<ReceiverBinding>();
             setLinkOwner(playerBinding->link, playerNode);
             const auto sendPlayer = [&](const std::string &text) {
-              return gameRefQueueEvent({VmValue{null}, VmValue{int32_t{0x10}}, VmValue{cameraString(text)}},
+              return gameRefQueueEvent({VmValue{null}, VmValue{int32_t{0x10}},
+                                        VmValue{cameraString(text)}},
                                        playerRef, &arena, &loaded);
             };
-            const auto idText = [](uint32_t id) { int32_t signedId; std::memcpy(&signedId, &id, sizeof id); return std::to_string(signedId); };
+            const auto idText = [](uint32_t id) {
+              int32_t signedId;
+              std::memcpy(&signedId, &id, sizeof id);
+              return std::to_string(signedId);
+            };
             const auto playerOsd = [&]() {
-              const auto result = gameRefGetInfoIntInt({int32_t{0x1a}, int32_t{0}}, playerRef, &arena, &loaded);
+              const auto result = gameRefGetInfoIntInt(
+                  {int32_t{0x1a}, int32_t{0}}, playerRef, &arena, &loaded);
               const auto *value = std::get_if<VmValue>(&result);
               const auto *id = value ? std::get_if<int32_t>(value) : nullptr;
               return id ? *id : int32_t{-1};
             };
             float controlKey = 1.0f;
-            playerNode->playerInput->sampleInput = [&](int32_t, int32_t) { return std::optional<float>{controlKey}; };
-            playerNode->playerInput->inputType = [](int32_t, int32_t) { return std::optional<int32_t>{0}; };
-            CHECK(playerNode->playerInput->add(1, 0, 0xcb, 0, {0, 1, 0, -1}, 0) == 1);
+            playerNode->playerInput->sampleInput = [&](int32_t, int32_t) {
+              return std::optional<float>{controlKey};
+            };
+            playerNode->playerInput->inputType = [](int32_t, int32_t) {
+              return std::optional<int32_t>{0};
+            };
+            CHECK(playerNode->playerInput->add(1, 0, 0xcb, 0, {0, 1, 0, -1},
+                                               0) == 1);
             playerNode->playerInput->beginFrame(0.00025f);
             const auto integerAxis = [&]() {
-              const auto result = gameRefGetInfoIntInt({int32_t{0x19}, int32_t{1}}, playerRef, &arena, &loaded);
+              const auto result = gameRefGetInfoIntInt(
+                  {int32_t{0x19}, int32_t{1}}, playerRef, &arena, &loaded);
               const auto *value = std::get_if<VmValue>(&result);
               const auto *id = value ? std::get_if<int32_t>(value) : nullptr;
               return id ? *id : int32_t{999};
@@ -529,46 +670,92 @@ int main() {
             playerNode->playerInput->beginFrame(0.00025f);
             CHECK(integerAxis() == 0);
             CHECK(playerOsd() == 0);
-            CHECK(std::holds_alternative<std::monostate>(sendPlayer("renderinstance " + idText(viewportA->instanceId))));
-            CHECK(playerNode->player->renderInstance.owner == viewportA && playerOsd() == 0);
-            CHECK(std::holds_alternative<std::monostate>(sendPlayer("renderinstance " + idText(viewportB->instanceId))));
+            CHECK(std::holds_alternative<std::monostate>(
+                sendPlayer("renderinstance " + idText(viewportA->instanceId))));
+            CHECK(playerNode->player->renderInstance.owner == viewportA &&
+                  playerOsd() == 0);
+            CHECK(std::holds_alternative<std::monostate>(
+                sendPlayer("renderinstance " + idText(viewportB->instanceId))));
             CHECK(playerNode->player->renderInstance.owner == viewportB);
-            CHECK(errorOf(sendPlayer("osd " + idText(viewportA->instanceId))).find("controllable unavailable") != std::string::npos);
-            CHECK(playerOsd() == 0 && playerNode->player->renderInstance.owner == viewportB);
+            CHECK(errorOf(sendPlayer("osd " + idText(viewportA->instanceId)))
+                      .find("controllable unavailable") != std::string::npos);
+            CHECK(playerOsd() == 0 &&
+                  playerNode->player->renderInstance.owner == viewportB);
             setLinkOwner(playerNode->player->osd, viewportA);
             CHECK(playerOsd() == static_cast<int32_t>(viewportA->instanceId));
-            CHECK(std::holds_alternative<std::monostate>(sendPlayer("renderinstance 0")));
-            CHECK(!playerNode->player->renderInstance.owner && playerOsd() == static_cast<int32_t>(viewportA->instanceId));
-            CHECK(std::holds_alternative<std::monostate>(sendPlayer("renderinstance " + idText(viewportB->instanceId))));
-            CHECK(std::holds_alternative<std::monostate>(sendPlayer("viewport " + idText(viewportA->instanceId))));
+            CHECK(std::holds_alternative<std::monostate>(
+                sendPlayer("renderinstance 0")));
+            CHECK(!playerNode->player->renderInstance.owner &&
+                  playerOsd() == static_cast<int32_t>(viewportA->instanceId));
+            CHECK(std::holds_alternative<std::monostate>(
+                sendPlayer("renderinstance " + idText(viewportB->instanceId))));
+            CHECK(std::holds_alternative<std::monostate>(
+                sendPlayer("viewport " + idText(viewportA->instanceId))));
             CHECK(playerNode->player->viewport.owner == viewportA);
-            CHECK(std::holds_alternative<std::monostate>(sendPlayer("viewport " + idText(viewportB->instanceId))));
+            CHECK(std::holds_alternative<std::monostate>(
+                sendPlayer("viewport " + idText(viewportB->instanceId))));
             CHECK(playerNode->player->viewport.owner == viewportB);
-            CHECK(std::holds_alternative<std::monostate>(sendPlayer("camera " + idText(cameraNode->instanceId))));
-            CHECK(playerNode->player->camera.owner == cameraNode && cameraNode->cameraDevice->controller.owner == playerNode);
-            CHECK(std::holds_alternative<std::monostate>(sendPlayer("camera " + idText(cameraNode->instanceId))));
+            CHECK(std::holds_alternative<std::monostate>(
+                sendPlayer("camera " + idText(cameraNode->instanceId))));
+            CHECK(playerNode->player->camera.owner == cameraNode &&
+                  cameraNode->cameraDevice->controller.owner == playerNode);
+            CHECK(std::holds_alternative<std::monostate>(
+                sendPlayer("camera " + idText(cameraNode->instanceId))));
             setLinkOwner(playerNode->player->controllable, cameraNode);
-            CHECK(!errorOf(sendPlayer("camera " + idText(cameraNode->instanceId))).empty());
+            CHECK(
+                !errorOf(sendPlayer("camera " + idText(cameraNode->instanceId)))
+                     .empty());
             setLinkOwner(playerNode->player->controllable, nullptr);
-            auto *carNode = world.addChild(*root, "activation car fixture", 0x21);
-            auto *carRoot = world.addTypedChild(*root, 2, "activation car root", 0);
+            auto *carNode =
+                world.addChild(*root, "activation car fixture", 0x21);
+            auto *carRoot =
+                world.addTypedChild(*root, 2, "activation car root", 0);
             CHECK(carNode && carRoot);
             if (carNode && carRoot) {
               carNode->nativeDevice = "car";
               carNode->carInstance = std::make_unique<CarRuntimeInstance>();
               setLinkOwner(carNode->carInstance->physicsRoot, carRoot);
+              carNode->carInstance->seats.push_back(
+                  std::make_unique<CarSeat>());
+              setLinkOwner(carNode->carInstance->seats[0]->player, playerNode);
+              auto *carScript = world.addScript(0x151, "fixture.ActivationCar");
+              CHECK(carScript);
+              if (!carScript)
+                return 1;
+              carScript->car = std::make_unique<CarPrototype>();
+              CarDriver driver;
+              driver.hasExtCamera = true;
+              driver.extCamera = {120, 0, 1.8f, 0, 0, 1, -2, 0, 0, 0, 5};
+              carScript->car->config.drivers.push_back(driver);
+              carScript->car->cameraSettings = CarCameraSettings{0.4f, 1.25f};
+              setLinkOwner(carNode->carInstance->prototypeSource, carScript);
+              auto targetProtoData =
+                  physics::createBodyProto(1, 1, 1, 0, 0, nullptr, cameraError);
+              auto targetProto = targetProtoData
+                                     ? std::make_shared<physics::BodyProto>(
+                                           std::move(*targetProtoData))
+                                     : nullptr;
+              auto targetBody =
+                  targetProto
+                      ? std::make_shared<physics::Body>(
+                            physics::createBody(*targetProto, {10, 0, 0}))
+                      : nullptr;
+              CHECK(targetBody && world.registerDynamicBody(
+                                      *carRoot, targetBody, targetProto));
               setLinkOwner(playerNode->player->controllable, carNode);
-              CHECK(errorOf(sendPlayer("camera " + idText(cameraNode->instanceId)))
-                        .find("follow simulation unsupported") != std::string::npos);
+              CHECK(std::holds_alternative<std::monostate>(
+                  sendPlayer("camera " + idText(cameraNode->instanceId))));
               CHECK(cameraNode->cameraDevice->lookTarget.owner == carRoot);
               CHECK(cameraNode->cameraDevice->moveTarget.owner == carRoot);
-              CHECK(state.moveDistance == 3);
+              CHECK(state.moveDistance == 2);
               CHECK(world.destroy(*carRoot));
-              CHECK(!cameraNode->cameraDevice->lookTarget.owner && !cameraNode->cameraDevice->moveTarget.owner);
+              CHECK(!cameraNode->cameraDevice->lookTarget.owner &&
+                    !cameraNode->cameraDevice->moveTarget.owner);
               setLinkOwner(playerNode->player->controllable, nullptr);
               CHECK(world.destroy(*carNode));
             }
-            CHECK(std::holds_alternative<std::monostate>(sendPlayer("osd " + idText(viewportA->instanceId))));
+            CHECK(std::holds_alternative<std::monostate>(
+                sendPlayer("osd " + idText(viewportA->instanceId))));
             CHECK(playerNode->player->osd.owner == viewportA);
             auto *osdNode = world.addChild(*root, "player osd", 0x21);
             auto *osdCar = world.addChild(*root, "player osd car", 0x21);
@@ -581,22 +768,30 @@ int main() {
               osdCar->eventMask = 0x10;
               osdCar->eventSubscriptionsKnownEmpty = true;
               world.markLoaded(*osdCar);
-              CHECK(std::holds_alternative<std::monostate>(invokeNative(
-                  "java.util.resource.ResourceRef", "newNative", "()V", {}, osdCarRef, &arena, &loaded)));
+              CHECK(std::holds_alternative<std::monostate>(
+                  invokeNative("java.util.resource.ResourceRef", "newNative",
+                               "()V", {}, osdCarRef, &arena, &loaded)));
               const auto *carState = nativeResourceState(osdCarRef, &arena);
               CHECK(carState);
               if (carState) {
-                const auto carHandle = static_cast<int32_t>(carState - arena.resourceStates.data()) + 1;
+                const auto carHandle =
+                    static_cast<int32_t>(carState -
+                                         arena.resourceStates.data()) +
+                    1;
                 auto &carBinding = game.bindings[carHandle];
-                if (!carBinding) carBinding = std::make_unique<ReceiverBinding>();
+                if (!carBinding)
+                  carBinding = std::make_unique<ReceiverBinding>();
                 setLinkOwner(carBinding->link, osdCar);
                 osdCar->scriptReceiver = osdCarRef;
                 setLinkOwner(playerNode->player->controllable, osdCar);
-                const auto osdError = errorOf(sendPlayer("osd " + idText(osdNode->instanceId)));
+                const auto osdError =
+                    errorOf(sendPlayer("osd " + idText(osdNode->instanceId)));
                 CHECK(playerOsd() == static_cast<int32_t>(osdNode->instanceId));
                 CHECK(playerNode->player->osd.owner == osdNode);
-                CHECK(osdError.find("car activate seat unavailable") != std::string::npos);
-                CHECK(std::holds_alternative<std::monostate>(sendPlayer("osd " + idText(osdNode->instanceId))));
+                CHECK(osdError.find("car activate seat unavailable") !=
+                      std::string::npos);
+                CHECK(std::holds_alternative<std::monostate>(
+                    sendPlayer("osd " + idText(osdNode->instanceId))));
                 CHECK(playerNode->player->osd.owner == osdNode);
                 setLinkOwner(playerNode->player->controllable, nullptr);
               }
@@ -604,9 +799,12 @@ int main() {
               CHECK(world.destroy(*osdNode));
             }
             setLinkOwner(playerNode->player->osd, viewportB);
-            CHECK(world.destroy(*viewportB) && !playerNode->player->viewport.owner && !playerNode->player->renderInstance.owner);
+            CHECK(world.destroy(*viewportB) &&
+                  !playerNode->player->viewport.owner &&
+                  !playerNode->player->renderInstance.owner);
             CHECK(playerOsd() == 0);
-            CHECK(world.destroy(*playerNode) && !cameraNode->cameraDevice->controller.owner);
+            CHECK(world.destroy(*playerNode) &&
+                  !cameraNode->cameraDevice->controller.owner);
             CHECK(!playerBinding->link.owner);
           }
           CHECK(world.destroy(*viewportA));
@@ -614,7 +812,8 @@ int main() {
         CHECK(world.destroy(*cameraNode));
         CHECK(!binding->link.owner);
         CHECK(world.dynamicBodyCount() == 0);
-      } else if (cameraNode) world.destroy(*cameraNode);
+      } else if (cameraNode)
+        world.destroy(*cameraNode);
     }
   }
   CHECK(errorOf(
@@ -1011,8 +1210,10 @@ int main() {
         auto &node = *city.node.packNode;
         CHECK(node.parent && !node.parent->loaded());
         if (node.parent) {
-          const bool parentLoaded = resources.loadEmptyGameParent(*node.parent, error);
-          if (!parentLoaded) std::printf("city parent load error: %s\n", error.c_str());
+          const bool parentLoaded =
+              resources.loadEmptyGameParent(*node.parent, error);
+          if (!parentLoaded)
+            std::printf("city parent load error: %s\n", error.c_str());
           CHECK(parentLoaded && node.parent->loaded());
         }
         setLinkOwner(game.bindings[h]->link, &node);
@@ -1022,7 +1223,8 @@ int main() {
             {handler, int32_t{0x20000}, int32_t{0}, nullHotkey}, plain, &arena,
             &loaded);
         CHECK(std::holds_alternative<std::string>(failure));
-        CHECK(std::get<std::string>(failure).find("type-1 instance construction unsupported") ==
+        CHECK(std::get<std::string>(failure).find(
+                  "type-1 instance construction unsupported") ==
               std::string::npos);
         CHECK(node.children.size() == childrenBefore && !node.loaded());
         node.flags &= ~uint32_t{0x80000};
@@ -1030,7 +1232,8 @@ int main() {
             {handler, int32_t{0x20000}, int32_t{0}, nullHotkey}, plain, &arena,
             &loaded);
         CHECK(std::holds_alternative<std::string>(result));
-        CHECK(std::get<std::string>(result).find("type-1 instance construction unsupported: ground") !=
+        CHECK(std::get<std::string>(result).find(
+                  "type-1 instance construction unsupported: ground") !=
               std::string::npos);
         GameResourcePayload cityPayload;
         CHECK(resources.inspectGamePayload(node, cityPayload, error));
@@ -1048,16 +1251,21 @@ int main() {
         CHECK(eventNode->eventSubscriptions.size() == 1);
         const size_t preparedCount = resources.nodeCount();
         const auto directFailure = loadGroundGameResource(arena, node);
-        CHECK(directFailure && directFailure->find("ground Config unavailable") != std::string::npos);
-        CHECK(!node.loaded() && !node.groundFactory && node.eventSubscriptions.empty() &&
+        CHECK(directFailure &&
+              directFailure->find("ground Config unavailable") !=
+                  std::string::npos);
+        CHECK(!node.loaded() && !node.groundFactory &&
+              node.eventSubscriptions.empty() &&
               resources.nodeCount() == preparedCount);
         node.groundPreparation = std::make_shared<GroundPreparation>();
         const auto retry = gameTypeAddNotification(
             {handler, int32_t{0x20000}, int32_t{0}, nullHotkey}, plain, &arena,
             &loaded);
         CHECK(std::holds_alternative<std::string>(retry) &&
-              std::get<std::string>(retry).find("ground reset required before retry") != std::string::npos);
-        CHECK(node.groundPreparation && resources.nodeCount() == preparedCount && !node.loaded());
+              std::get<std::string>(retry).find(
+                  "ground reset required before retry") != std::string::npos);
+        CHECK(node.groundPreparation &&
+              resources.nodeCount() == preparedCount && !node.loaded());
         CHECK(node.eventSubscriptions.empty() && !node.groundFactory);
         node.groundPreparation.reset();
         WorldNode *configNode = world.addChild(*root, "config", 0x21);
@@ -1079,10 +1287,9 @@ int main() {
           probeClasses.push_back(&configClass);
           auto probeStates = states;
           probeStates.push_back({&probeClass.c, {}});
-          probeStates.push_back(
-              {&configClass,
-               {VmField{"gravity", 9.81f, "F"},
-                VmField{"ground_friction", 1.0f, "F"}}});
+          probeStates.push_back({&configClass,
+                                 {VmField{"gravity", 9.81f, "F"},
+                                  VmField{"ground_friction", 1.0f, "F"}}});
           auto *mutablePlain = const_cast<VmObject *>(plain);
           const TufaClass *savedClass = mutablePlain->runtimeClass;
           mutablePlain->runtimeClass = &probeClass.c;
@@ -1091,10 +1298,14 @@ int main() {
               {"test.CityProbe", "city2", "()V", "test", probeCity2Ground},
               {"test.CityProbe", "send", "()V", "test", probeGroundEvent}};
           cityLoadArgs = {handler, int32_t{0x20000}, int32_t{0}, nullHotkey};
-          const auto loadRef = probeWorld.main.ref("test.CityProbe", "load", "()V");
+          const auto loadRef =
+              probeWorld.main.ref("test.CityProbe", "load", "()V");
           const std::vector<TufaNode> loadTree{
-              vm_test::literal(0), vm_test::node(0x24), vm_test::node(0x11, true, 2),
-              vm_test::node(0x01, true, 0), vm_test::node(0x1a, true, loadRef),
+              vm_test::literal(0),
+              vm_test::node(0x24),
+              vm_test::node(0x11, true, 2),
+              vm_test::node(0x01, true, 0),
+              vm_test::node(0x1a, true, loadRef),
               vm_test::retVoid};
           const auto loadedCity =
               vmExecute(probeWorld.main.c, loadTree, {plain}, &probeRegistry,
@@ -1104,7 +1315,8 @@ int main() {
           const auto &factory = node.groundFactory;
           CHECK(loadedCity.ok && node.loaded() && factory &&
                 factory->preparation && factory->roadWorld == &world &&
-                factory->city.owner == &node && factory->preparation->roadInitial &&
+                factory->city.owner == &node &&
+                factory->preparation->roadInitial &&
                 !factory->preparation->roadInitial->pathMask.empty() &&
                 factory->preparation->roadInitial->pathMask.front() == 0);
           if (loadedCity.ok && node.loaded()) {
@@ -1114,45 +1326,161 @@ int main() {
             CHECK(city2.node.packNode && city2.node.packNode->parent == &node);
             if (city2.node.packNode) {
               city2LoadTarget = city2.node.packNode;
-              const auto city2Ref = probeWorld.main.ref("test.CityProbe", "city2", "()V");
+              // Inspect the actual fa06a object payload without preparing
+              // city2's own children or mutating its factory link.
+              PackView city2View;
+              CHECK(packs.view(city2Slot, city2View, error) ==
+                    PackViewStatus::Ok);
+              if (city2View.bytes) {
+                const std::string marker =
+                    "gametype 0x00020186\r\nparams "
+                    "-172.736,10.208,755.170,-2.414,0.000,0.000\r\n";
+                const auto found = std::search(city2View.bytes->begin(),
+                                               city2View.bytes->end(),
+                                               marker.begin(), marker.end());
+                CHECK(found != city2View.bytes->end() &&
+                      found - city2View.bytes->begin() >= 16);
+                if (found != city2View.bytes->end() &&
+                    found - city2View.bytes->begin() >= 16) {
+                  const auto savedOffset = city2LoadTarget->payloadOffset;
+                  const auto savedSize = city2LoadTarget->payloadSize;
+                  city2LoadTarget->payloadOffset = static_cast<uint32_t>(
+                      found - city2View.bytes->begin() - 16);
+                  city2LoadTarget->payloadSize =
+                      static_cast<uint32_t>(16 + marker.size());
+                  const auto childrenBefore =
+                      city2LoadTarget->registeredPayloadChildren;
+                  const auto actionsBefore =
+                      city2LoadTarget->preparedPayloadActions;
+                  const auto nodeCountBefore = resources.nodeCount();
+                  const auto stateBefore = city2LoadTarget->stateWord;
+                  const auto objectError = loadGroundGameResource(
+                      arena, *city2LoadTarget, &probeStates);
+                  CHECK(objectError.has_value());
+                  CHECK(!city2LoadTarget->loaded() &&
+                        city2LoadTarget->stateWord == stateBefore &&
+                        !city2LoadTarget->objectRuntime &&
+                        resources.nodeCount() == nodeCountBefore &&
+                        !city2LoadTarget->gameTypeLink.owner &&
+                        city2LoadTarget->registeredPayloadChildren ==
+                            childrenBefore &&
+                        city2LoadTarget->preparedPayloadActions ==
+                            actionsBefore);
+                  city2LoadTarget->payloadOffset = savedOffset;
+                  city2LoadTarget->payloadSize = savedSize;
+                }
+              }
+              CameraTraversalParams traversal{{0, 0, 0}, 1, 0,     1,  1,
+                                              0,         0, false, {}, {}};
+              ResourceBounds cameraBound{};
+              cameraBound.mode = 0;
+              cameraBound.values = {0, 0, 0, 1.0e9f, 0, 0};
+              traversal.cameraBound = cameraBound;
+              CameraType1Records cameraRecords;
+              SceneCameraCandidates cameraCandidates;
+              CHECK(!traverseCameraCandidates(
+                  world, *city2LoadTarget, cameraCandidates, traversal, error,
+                  &cameraRecords, &resources));
+              CHECK(error.find("factory requires VM context") !=
+                        std::string::npos &&
+                    !city2LoadTarget->loaded() &&
+                    !city2LoadTarget->groundFactory);
+              auto invalidStates = probeStates;
+              for (auto &state : invalidStates)
+                if (state.owner == &configClass)
+                  state.fields[0].value =
+                      std::numeric_limits<float>::quiet_NaN();
+              const auto invalidConfig = loadGroundGameResource(
+                  arena, *city2LoadTarget, &invalidStates);
+              CHECK(invalidConfig &&
+                    invalidConfig->find("ground Config unavailable") !=
+                        std::string::npos &&
+                    !city2LoadTarget->loaded() &&
+                    !city2LoadTarget->groundFactory);
+              // Preserve an unchanged inside root record so the test isolates
+              // the factory path without loading its unrelated descendants.
+              CHECK(!cameraRecords.beginVisit(*city2LoadTarget, true, false,
+                                              true));
+              cameraRecords.finishVisit(*city2LoadTarget, true);
+              city2LoadTarget->flags &= ~uint32_t{0x40000};
+              CHECK(traverseCameraCandidates(
+                  world, *city2LoadTarget, cameraCandidates, traversal, error,
+                  &cameraRecords, &resources, &arena, &probeStates));
+              CHECK(city2LoadTarget->loaded() &&
+                    city2LoadTarget->groundFactory);
+              const auto city2Ref =
+                  probeWorld.main.ref("test.CityProbe", "city2", "()V");
               const std::vector<TufaNode> city2Tree{
-                  vm_test::literal(0), vm_test::node(0x24), vm_test::node(0x11, true, 2),
-                  vm_test::node(0x01, true, 0), vm_test::node(0x1a, true, city2Ref),
+                  vm_test::literal(0),
+                  vm_test::node(0x24),
+                  vm_test::node(0x11, true, 2),
+                  vm_test::node(0x01, true, 0),
+                  vm_test::node(0x1a, true, city2Ref),
                   vm_test::retVoid};
-              const auto result = vmExecute(probeWorld.main.c, city2Tree, {plain},
-                                            &probeRegistry, &probeClasses, &probeStates, &arena);
-              if (!result.ok) std::printf("city2 factory error: %s\n", result.error.c_str());
-              CHECK(result.ok && city2LoadTarget->loaded() && city2LoadTarget->groundFactory);
+              const auto result = vmExecute(
+                  probeWorld.main.c, city2Tree, {plain}, &probeRegistry,
+                  &probeClasses, &probeStates, &arena);
+              if (!result.ok)
+                std::printf("city2 factory error: %s\n", result.error.c_str());
+              CHECK(result.ok && city2LoadTarget->loaded() &&
+                    city2LoadTarget->groundFactory);
               if (result.ok) {
                 ResourceNode *parent = city2LoadTarget;
-                for (const uint32_t id : {0xcba0u,0xcba1u,0xd692u,0xdc2fu,0xdc60u,0xe249u,
-                                          0xe43du,0xe43eu,0xe530u,0xe549u,0xe55cu,0xe55du,
-                                          0x98cdu,0x98cfu,0x98d8u}) {
-                  const auto child = resources.lookup((uint32_t(city2Slot) << 16) | id, 1);
-                  CHECK(child.node.packNode && child.node.packNode->parent == parent);
-                  if (!child.node.packNode || child.node.packNode->parent != parent) break;
+                for (const uint32_t id :
+                     {0xcba0u, 0xcba1u, 0xd692u, 0xdc2fu, 0xdc60u, 0xe249u,
+                      0xe43du, 0xe43eu, 0xe530u, 0xe549u, 0xe55cu, 0xe55du,
+                      0x98cdu, 0x98cfu, 0x98d8u}) {
+                  const auto child =
+                      resources.lookup((uint32_t(city2Slot) << 16) | id, 1);
+                  CHECK(child.node.packNode &&
+                        child.node.packNode->parent == parent);
+                  if (!child.node.packNode ||
+                      child.node.packNode->parent != parent)
+                    break;
                   parent = child.node.packNode;
                   if (id == 0xcba0u) {
                     parent->flags |= 0x80000;
                     CHECK(!resources.loadPassiveSpatialGame(*parent, error));
                     CHECK(!parent->loaded() && !parent->spatialPayload);
                     parent->flags &= ~uint32_t{0x80000};
-                    CHECK(resources.registerGamePayloadChildren(*parent, error));
-                    const auto next = resources.lookup((uint32_t(city2Slot) << 16) | 0xcba1u, 1);
+                    CHECK(
+                        resources.registerGamePayloadChildren(*parent, error));
+                    const auto next = resources.lookup(
+                        (uint32_t(city2Slot) << 16) | 0xcba1u, 1);
                     CHECK(next.node.packNode);
                     if (next.node.packNode) {
-                      CHECK(!resources.loadPassiveSpatialGame(*next.node.packNode, error));
-                      CHECK(!next.node.packNode->loaded() && !next.node.packNode->spatialPayload);
+                      CHECK(!resources.loadPassiveSpatialGame(
+                          *next.node.packNode, error));
+                      CHECK(!next.node.packNode->loaded() &&
+                            !next.node.packNode->spatialPayload);
                     }
                   }
                   CHECK(resources.loadPassiveSpatialGame(*parent, error));
-                  if (!parent->loaded()) break;
-                  if (id == 0x98cdu)
-                    CHECK(parent->spatialPayload && parent->spatialPayload->polygons &&
+                  if (!parent->loaded())
+                    break;
+                  if (id == 0x98cdu) {
+                    CHECK(parent->spatialPayload &&
+                          parent->spatialPayload->polygons &&
                           parent->polygonCount && *parent->polygonCount > 0);
+                    SceneCameraCandidates groundCandidates;
+                    CameraType1Records groundRecords;
+                    const auto before = resources.nodeCount();
+                    CHECK(traverseCameraCandidates(
+                        world, *parent, groundCandidates, traversal, error,
+                        &groundRecords, &resources, &arena, &probeStates));
+                    unsigned queued = 0;
+                    groundCandidates.drain(0, true, [&](LinkOwner &owner) {
+                      if (&owner == parent)
+                        ++queued;
+                      return 1u;
+                    });
+                    CHECK(queued == 1 && resources.nodeCount() == before);
+                  }
                   if (id == 0x98d8u) {
-                    CHECK(parent->spatialPayload && parent->spatialPayload->physics &&
-                          parent->spatialPayload->physics->triangles.size() == 7);
+                    CHECK(parent->spatialPayload &&
+                          parent->spatialPayload->physics &&
+                          parent->spatialPayload->physics->triangles.size() ==
+                              7);
                     CHECK(resources.unloadPassiveSpatialGame(*parent, error));
                     CHECK(!parent->loaded() && !parent->spatialPayload);
                   }
@@ -1161,169 +1489,361 @@ int main() {
                     resources, *city2LoadTarget, {-278.518f, 9.8f, 1033.002f},
                     {-278.518f, 10.8f, 1033.002f});
                 CHECK(!candidates.complete && !candidates.detail.empty());
-                const auto leaf = std::find_if(candidates.candidates.begin(), candidates.candidates.end(),
+                const auto leaf = std::find_if(
+                    candidates.candidates.begin(), candidates.candidates.end(),
                     [city2Slot](const SpatialPhysicsCandidate &candidate) {
-                      return candidate.resourceId == ((uint32_t(city2Slot) << 16) | 0x98d8u);
+                      return candidate.resourceId ==
+                             ((uint32_t(city2Slot) << 16) | 0x98d8u);
                     });
                 CHECK(leaf != candidates.candidates.end());
                 if (leaf != candidates.candidates.end()) {
+                  if (leaf->node) {
+                    const auto savedFlags = leaf->node->flags;
+                    leaf->node->flags |= 0x200000u;
+                    const auto excluded = queryPassiveSpatialCandidates(
+                        resources, *city2LoadTarget,
+                        {-278.518f, 9.8f, 1033.002f},
+                        {-278.518f, 10.8f, 1033.002f});
+                    CHECK(std::none_of(
+                        excluded.candidates.begin(), excluded.candidates.end(),
+                        [&](const SpatialPhysicsCandidate &candidate) {
+                          return candidate.resourceId == leaf->resourceId;
+                        }));
+                    leaf->node->flags = savedFlags;
+                  }
                   CHECK(leaf->payload && leaf->payload->physics &&
                         leaf->payload->physics->triangles.size() == 7);
                   if (leaf->payload && leaf->payload->physics)
                     CHECK(queryGamePhysicsFace(*leaf->payload->physics, 4,
-                        {-278.518f, 9.8f, 1033.002f}, {-278.518f, 10.8f, 1033.002f}).status ==
-                        GamePhysicsHitStatus::Hit);
+                                               {-278.518f, 9.8f, 1033.002f},
+                                               {-278.518f, 10.8f, 1033.002f})
+                              .status == GamePhysicsHitStatus::Hit);
                   auto leafNode = resources.lookup(leaf->resourceId, 1);
                   std::unique_ptr<WheelGroundContact> wheelContact;
                   physics::SuspensionUpdate tireContact{};
                   TireStepState tireState{};
                   TireStepInput tireInput{};
-                  CHECK(leafNode.node.packNode && leafNode.node.packNode->sectorLink.owner == &node &&
+                  CHECK(leafNode.node.packNode &&
+                        leafNode.node.packNode->sectorLink.owner == &node &&
                         city2LoadTarget->sectorLink.owner == &node);
-                  if (leaf->payload && leaf->payload->physics && factory && factory->preparation) {
-                    // The leaf inherits the city sector. Stock carries that sector's
-                    // ground body through city2, whose own factory has a different table.
+                  if (leaf->payload && leaf->payload->physics && factory &&
+                      factory->preparation) {
+                    // The leaf inherits the city sector. Stock carries that
+                    // sector's ground body through city2, whose own factory has
+                    // a different table.
                     const auto &ground = *factory->preparation;
                     const auto &face = leaf->payload->physics->triangles[4];
                     CHECK(face.materialWord == 6);
                     auto *groundBody = world.nodeFor(ground.bodyResource.owner);
-                    CHECK(groundBody && groundBody->groundBody == ground.physics && ground.physics &&
-                          ground.physics->body.proto == &ground.physics->prototype);
+                    CHECK(groundBody &&
+                          groundBody->groundBody == ground.physics &&
+                          ground.physics &&
+                          ground.physics->body.proto ==
+                              &ground.physics->prototype);
                     if (leafNode.node.packNode && groundBody) {
-                      auto resolved = resolveSpatialGroundFace(resources, *leafNode.node.packNode, 4, error);
-                      CHECK(resolved && resolved->valid() && resolved->body() == ground.physics.get() &&
-                            resolved->material() && resolved->material()->name == "GBegin1" &&
-                            resolved->face() && resolved->face()->materialWord == 6);
+                      auto resolved = resolveSpatialGroundFace(
+                          resources, *leafNode.node.packNode, 4, error);
+                      CHECK(resolved && resolved->valid() &&
+                            resolved->body() == ground.physics.get() &&
+                            resolved->material() &&
+                            resolved->material()->name == "GBegin1" &&
+                            resolved->face() &&
+                            resolved->face()->materialWord == 6);
                       const auto savedBody = groundBody->groundBody;
                       groundBody->groundBody.reset();
-                      CHECK(!resolveSpatialGroundFace(resources, *leafNode.node.packNode, 4, error));
+                      CHECK(!resolveSpatialGroundFace(
+                          resources, *leafNode.node.packNode, 4, error));
                       CHECK(resolved && !resolved->valid());
                       groundBody->groundBody = savedBody;
                       CHECK(resolved && resolved->valid());
-                      CHECK(!resolveSpatialGroundFace(resources, *leafNode.node.packNode, 999, error));
+                      CHECK(!resolveSpatialGroundFace(
+                          resources, *leafNode.node.packNode, 999, error));
                       retainedGroundFace = std::move(resolved);
                       retainedGroundBody = groundBody;
-                      auto rootValue = physics::createBodyProto(100, 5, 1, 1, 1, nullptr, error);
-                      auto wheelValue = physics::createBodyProto(0.01f, 3, 0.6f, 0.05f, 0, nullptr, error);
+                      auto rootValue = physics::createBodyProto(100, 5, 1, 1, 1,
+                                                                nullptr, error);
+                      auto wheelValue = physics::createBodyProto(
+                          0.01f, 3, 0.6f, 0.05f, 0, nullptr, error);
                       CHECK(rootValue && wheelValue);
                       if (rootValue && wheelValue) {
-                        auto rootProto = std::make_shared<physics::BodyProto>(std::move(*rootValue));
-                        auto wheelProto = std::make_shared<physics::BodyProto>(std::move(*wheelValue));
-                        auto root = std::make_shared<physics::Body>(physics::createBody(*rootProto,
-                            {-278.518f, 10.3f, 1033.002f}, nullptr, 0));
-                        auto wheel = std::make_shared<physics::Body>(physics::createBody(*wheelProto,
-                            {-278.518f, 10.3f, 1033.002f}, nullptr, 0));
+                        auto testCar = std::make_shared<CarPhysics>();
+                        testCar->rootPrototype = std::move(*rootValue);
+                        auto rootProto = std::shared_ptr<physics::BodyProto>(
+                            testCar, &testCar->rootPrototype);
+                        testCar->root =
+                            std::make_unique<physics::Body>(physics::createBody(
+                                *rootProto, {-278.518f, 10.3f, 1033.002f},
+                                nullptr, 0));
+                        auto root = std::shared_ptr<physics::Body>(
+                            testCar, testCar->root.get());
+                        testCar->wheels.push_back(
+                            std::make_unique<CarWheelRuntime>());
+                        auto *runtimeWheel = testCar->wheels.back().get();
+                        runtimeWheel->config.wheelBody = std::move(*wheelValue);
+                        auto wheelProto = std::shared_ptr<physics::BodyProto>(
+                            testCar, &runtimeWheel->config.wheelBody);
+                        runtimeWheel->suspensionBody =
+                            std::make_unique<physics::Body>(physics::createBody(
+                                *wheelProto, {-278.518f, 10.3f, 1033.002f},
+                                nullptr, 0));
+                        auto wheel = std::shared_ptr<physics::Body>(
+                            testCar, runtimeWheel->suspensionBody.get());
                         CHECK(physics::attachBody(*wheel, *root));
                         wheel->flags |= 0x40;
+                        testCar->bodyChildren[root.get()] = {wheel.get()};
+                        testCar->bodyChildren[wheel.get()] = {};
+                        for (auto *body : {root.get(), wheel.get()}) {
+                          auto observation =
+                              std::make_shared<CarBodyObservation>();
+                          observation->body = body;
+                          testCar->bodyObservations[body] =
+                              std::move(observation);
+                        }
                         CHECK(leafNode.node.packNode->bounds);
-                        const auto parentMask = queryStationaryParentFace(
-                            *leaf->payload->physics, 4, *root, *leafNode.node.packNode->bounds, false);
+                        const auto parentMask = queryParentFace(
+                            *leaf->payload->physics, 4, *root,
+                            *leafNode.node.packNode->bounds, false);
                         CHECK(parentMask == ParentFaceMask::Accepted);
-                        CHECK(queryStationaryParentFace(*leaf->payload->physics, 4, *root,
-                            *leafNode.node.packNode->bounds, true) == ParentFaceMask::Rejected);
+                        CHECK(queryParentFace(*leaf->payload->physics, 4, *root,
+                                              *leafNode.node.packNode->bounds,
+                                              true) ==
+                              ParentFaceMask::Rejected);
                         root->state[root->current ^ 1].pos[1] += 1;
-                        CHECK(queryStationaryParentFace(*leaf->payload->physics, 4, *root,
-                            *leafNode.node.packNode->bounds, false) == ParentFaceMask::Unsupported);
+                        CHECK(queryParentFace(*leaf->payload->physics, 4, *root,
+                                              *leafNode.node.packNode->bounds,
+                                              false) !=
+                              ParentFaceMask::Unsupported);
                         root->state[root->current ^ 1].pos[1] -= 1;
                         root->state[0].pos[1] += 100;
                         root->state[1].pos[1] += 100;
-                        CHECK(queryStationaryParentFace(*leaf->payload->physics, 4, *root,
-                            *leafNode.node.packNode->bounds, false) == ParentFaceMask::Rejected);
+                        CHECK(queryParentFace(*leaf->payload->physics, 4, *root,
+                                              *leafNode.node.packNode->bounds,
+                                              false) ==
+                              ParentFaceMask::Rejected);
                         root->state[0].pos[1] -= 100;
                         root->state[1].pos[1] -= 100;
                         const auto makeFace = [&] {
-                          return resolveSpatialGroundFace(resources, *leafNode.node.packNode, 4, error);
+                          return resolveSpatialGroundFace(
+                              resources, *leafNode.node.packNode, 4, error);
                         };
-                        auto unavailable = makeWheelGroundContact(makeFace(), root, rootProto, wheel,
-                                                                  wheelProto, false);
-                        CHECK(unavailable.status == WheelGroundContactStatus::Unsupported);
-                        auto wrongRoot = std::make_shared<physics::Body>(physics::createBody(*rootProto,
-                            {-278.518f, 10.3f, 1033.002f}, nullptr, 0));
-                        CHECK(makeWheelGroundContact(makeFace(), wrongRoot, rootProto, wheel, wheelProto, true).status ==
+                        auto unavailable =
+                            makeWheelGroundContact(makeFace(), root, rootProto,
+                                                   wheel, wheelProto, false);
+                        CHECK(unavailable.status ==
+                              WheelGroundContactStatus::Unsupported);
+                        auto wrongRoot =
+                            std::make_shared<physics::Body>(physics::createBody(
+                                *rootProto, {-278.518f, 10.3f, 1033.002f},
+                                nullptr, 0));
+                        CHECK(makeWheelGroundContact(makeFace(), wrongRoot,
+                                                     rootProto, wheel,
+                                                     wheelProto, true)
+                                  .status ==
                               WheelGroundContactStatus::Unsupported);
                         wheel->flags |= 0x20;
-                        CHECK(makeWheelGroundContact(makeFace(), root, rootProto, wheel, wheelProto, true).status ==
+                        CHECK(makeWheelGroundContact(makeFace(), root,
+                                                     rootProto, wheel,
+                                                     wheelProto, true)
+                                  .status ==
                               WheelGroundContactStatus::Unsupported);
                         wheel->flags &= ~uint32_t{0x20};
-                        auto foundContact = makeWheelGroundContact(makeFace(), root, rootProto, wheel,
-                            wheelProto, parentMask == ParentFaceMask::Accepted);
-                        CHECK(foundContact.status == WheelGroundContactStatus::Hit && foundContact.contact);
+                        auto collected = collectWheelGroundContacts(
+                            resources, *city2LoadTarget, root, rootProto, wheel,
+                            wheelProto);
+                        CHECK(!collected.detail.empty());
+                        CHECK(std::any_of(
+                            collected.contacts.begin(),
+                            collected.contacts.end(), [&](const auto &contact) {
+                              const auto *candidate = contact->candidate();
+                              return candidate && candidate->a == wheel.get() &&
+                                     candidate->surface &&
+                                     candidate->surface->materialWord == 6 &&
+                                     std::fabs(candidate->pointB[1] -
+                                               9.81177f) < 0.001f;
+                            }));
+                        auto compoundContacts = collectCarGroundContacts(
+                            resources, *city2LoadTarget, testCar);
+                        CHECK(!compoundContacts.complete &&
+                              !compoundContacts.detail.empty());
+                        CHECK(std::any_of(
+                            compoundContacts.wheels.begin(),
+                            compoundContacts.wheels.end(),
+                            [&](const auto &hit) {
+                              return hit.wheel == wheel.get() && hit.contact &&
+                                     hit.contact->candidate() &&
+                                     hit.contact->candidate()->surface &&
+                                     hit.contact->candidate()
+                                             ->surface->materialWord == 6;
+                            }));
+                        wheel->flags |= 0x20;
+                        auto rejectedCollection = collectWheelGroundContacts(
+                            resources, *city2LoadTarget, root, rootProto, wheel,
+                            wheelProto);
+                        CHECK(!rejectedCollection.passiveTraversalComplete &&
+                              rejectedCollection.contacts.empty());
+                        wheel->flags &= ~uint32_t{0x20};
+                        wheel->state[wheel->current ^ 1].time =
+                            wheel->state[wheel->current].time + 0.01f;
+                        auto foundContact = makeWheelGroundContact(
+                            makeFace(), root, rootProto, wheel, wheelProto,
+                            parentMask == ParentFaceMask::Accepted);
+                        CHECK(foundContact.status ==
+                                  WheelGroundContactStatus::Hit &&
+                              foundContact.contact);
                         if (foundContact.contact) {
-                          const auto *candidate = foundContact.contact->candidate();
-                          CHECK(candidate && candidate->a == wheel.get() && candidate->b == &ground.physics->body &&
-                                candidate->surface && candidate->surface->materialWord == 6 &&
-                                std::fabs(candidate->pointB[1] - 9.81177f) < 0.001f &&
-                                std::fabs(candidate->pointA[1] + 0.48823f) < 0.001f);
+                          const auto *candidate =
+                              foundContact.contact->candidate();
+                          CHECK(candidate && candidate->a == wheel.get() &&
+                                candidate->b == &ground.physics->body &&
+                                candidate->surface &&
+                                candidate->surface->materialWord == 6 &&
+                                std::fabs(candidate->pointB[1] - 9.81177f) <
+                                    0.001f &&
+                                std::fabs(candidate->pointA[1] + 0.48823f) <
+                                    0.001f);
                           if (candidate && candidate->surface) {
-                            tireContact.wheelBody = wheel.get(); tireContact.contactBody = candidate->b;
+                            tireContact.wheelBody = wheel.get();
+                            tireContact.contactBody = candidate->b;
                             tireContact.contactOwner = candidate->otherOwner;
-                            tireContact.contactPrototype = candidate->otherPrototype;
+                            tireContact.contactPrototype =
+                                candidate->otherPrototype;
                             tireContact.contactSurface = candidate->surface;
-                            tireContact.contactFeature = candidate->surface->featureIndex;
+                            tireContact.contactFeature =
+                                candidate->surface->featureIndex;
                             tireContact.contactPoint = candidate->pointB;
                             tireContact.normal = candidate->normal;
                             tireContact.wheelPoint = candidate->pointA;
                             tireContact.force = 2;
-                            const auto resolvedMaterial = groundContactMaterial(ground, face.materialWord, error);
+                            const auto resolvedMaterial = groundContactMaterial(
+                                ground, face.materialWord, error);
                             CHECK(resolvedMaterial);
-                            if (resolvedMaterial) tireInput.surface = {candidate->surface,
-                                resolvedMaterial->friction, resolvedMaterial->rollingResistance};
+                            if (resolvedMaterial)
+                              tireInput.surface = {
+                                  candidate->surface,
+                                  resolvedMaterial->friction,
+                                  resolvedMaterial->rollingResistance};
                             tireInput.maxLoad = 2;
-                            tireInput.geometryCorrections = TireGeometryCorrections::None;
-                            tireInput.tire.curve = {1,0,1,0,1,0,0,0,0,0,0};
-                            tireInput.tire.slip = {0,1,0,0.01f,0,0};
-                            tireInput.tire.slipParameters = {1,1,0.3f,0.5f,1,0,0,0};
+                            tireInput.geometryCorrections =
+                                TireGeometryCorrections::None;
+                            tireInput.tire.curve = {1, 0, 1, 0, 1, 0,
+                                                    0, 0, 0, 0, 0};
+                            tireInput.tire.slip = {0, 1, 0, 0.01f, 0, 0};
+                            tireInput.tire.slipParameters = {1, 1, 0.3f, 0.5f,
+                                                             1, 0, 0,    0};
                             tireInput.tire.wheelFriction = 1;
-                            tireInput.tire.longitudinalScale = 1; tireInput.tire.radius = wheelProto->shape.dim[0];
-                            tireInput.tire.inverseWheelInertia = 1; tireInput.tire.angularGain = 2.8f;
+                            tireInput.tire.longitudinalScale = 1;
+                            tireInput.tire.radius = wheelProto->shape.dim[0];
+                            tireInput.tire.inverseWheelInertia = 1;
+                            tireInput.tire.angularGain = 2.8f;
                             tireState.angularSpeed = -2 / tireInput.tire.radius;
-                            CHECK(stepTireContact(*foundContact.contact,tireContact,tireState,tireInput));
-                            CHECK(tireState.angularSpeed > -2 / tireInput.tire.radius && root->state[root->current].force[2] < 0);
+                            CHECK(stepTireContact(*foundContact.contact,
+                                                  tireContact, tireState,
+                                                  tireInput));
+                            CHECK(tireState.angularSpeed >
+                                      -2 / tireInput.tire.radius &&
+                                  root->state[root->current].force[2] < 0);
                             const auto stateBefore = tireState;
-                            const auto forceBefore = root->state[root->current].force;
-                            const auto surfaceBefore = tireInput.surface.identity;
-                            tireInput.surface.identity = std::make_shared<physics::SuspensionContactSurface>();
-                            CHECK(!stepTireContact(*foundContact.contact,tireContact,tireState,tireInput));
-                            CHECK(tireState.angularSpeed == stateBefore.angularSpeed &&
-                                  root->state[root->current].force == forceBefore);
+                            const auto forceBefore =
+                                root->state[root->current].force;
+                            const auto surfaceBefore =
+                                tireInput.surface.identity;
+                            tireInput.surface.identity = std::make_shared<
+                                physics::SuspensionContactSurface>();
+                            CHECK(!stepTireContact(*foundContact.contact,
+                                                   tireContact, tireState,
+                                                   tireInput));
+                            CHECK(tireState.angularSpeed ==
+                                      stateBefore.angularSpeed &&
+                                  root->state[root->current].force ==
+                                      forceBefore);
                             tireInput.surface.identity = surfaceBefore;
+                            CHECK(physics::commit(*wheel) ==
+                                  physics::CommitResult::Flipped);
+                            CHECK(!foundContact.contact->candidate() &&
+                                  foundContact.contact->tireCandidate());
+                            CHECK(stepTireContact(*foundContact.contact,
+                                                  tireContact, tireState,
+                                                  tireInput));
+                            runtimeWheel->suspension = tireContact;
+                            runtimeWheel->suspension.settings.maxLength = 1;
+                            runtimeWheel->radius = wheelProto->shape.dim[0];
+                            runtimeWheel->effectiveInverseInertia = 1;
+                            runtimeWheel->angularSpeed =
+                                -2 / runtimeWheel->radius;
+                            Wheel liveCoefficients;
+                            liveCoefficients.pacejka[0] = 1;
+                            liveCoefficients.pacejka[2] = 1;
+                            liveCoefficients.pacejka[4] = 1;
+                            liveCoefficients.pacejka[11] = 2;
+                            liveCoefficients.pacejka[12] = 1;
+                            liveCoefficients.friction6c = 1;
+                            CHECK(stepLiveGroundTire(
+                                *foundContact.contact, *runtimeWheel,
+                                liveCoefficients, tireInput.tire.slipParameters,
+                                2.8f, 0, 0.01f));
+                            CHECK(runtimeWheel->angularSpeed >
+                                  -2 / runtimeWheel->radius);
+                            wheel->state[wheel->current ^ 1].time =
+                                wheel->state[wheel->current].time + 0.01f;
+                            CHECK(!foundContact.contact->tireCandidate());
+                            const auto afterCommit = tireState;
+                            CHECK(!stepTireContact(*foundContact.contact,
+                                                   tireContact, tireState,
+                                                   tireInput));
+                            CHECK(tireState.angularSpeed ==
+                                  afterCommit.angularSpeed);
                           }
                           wheelContact = std::move(foundContact.contact);
                         }
                       }
                     }
-                    const auto material = groundContactMaterial(ground, face.materialWord, error);
-                    CHECK(material && material->name == "GBegin1" && material->friction == 1.0f &&
-                          material->rollingResistance == 0.001f && material->collisionCoefficient == 0.2f);
-                    CHECK(!groundContactMaterial(ground, 108, error) && !error.empty());
-                    CHECK(!groundContactMaterial(ground, 0xffffffffu, error) && !error.empty());
-                    if (city2LoadTarget->groundFactory && city2LoadTarget->groundFactory->preparation) {
+                    const auto material =
+                        groundContactMaterial(ground, face.materialWord, error);
+                    CHECK(material && material->name == "GBegin1" &&
+                          material->friction == 1.0f &&
+                          material->rollingResistance == 0.001f &&
+                          material->collisionCoefficient == 0.2f);
+                    CHECK(!groundContactMaterial(ground, 108, error) &&
+                          !error.empty());
+                    CHECK(!groundContactMaterial(ground, 0xffffffffu, error) &&
+                          !error.empty());
+                    if (city2LoadTarget->groundFactory &&
+                        city2LoadTarget->groundFactory->preparation) {
                       const auto city2Material = groundContactMaterial(
-                          *city2LoadTarget->groundFactory->preparation, face.materialWord, error);
+                          *city2LoadTarget->groundFactory->preparation,
+                          face.materialWord, error);
                       CHECK(city2Material && city2Material->name == "Cross");
                     }
                   }
                   CHECK(leafNode.node.packNode &&
-                        resources.unloadPassiveSpatialGame(*leafNode.node.packNode, error));
+                        resources.unloadPassiveSpatialGame(
+                            *leafNode.node.packNode, error));
                   CHECK(!retainedGroundFace || !retainedGroundFace->valid());
                   CHECK(!wheelContact || !wheelContact->candidate());
                   if (wheelContact) {
                     const auto stateBefore = tireState;
-                    CHECK(!stepTireContact(*wheelContact,tireContact,tireState,tireInput));
+                    CHECK(!stepTireContact(*wheelContact, tireContact,
+                                           tireState, tireInput));
                     CHECK(tireState.angularSpeed == stateBefore.angularSpeed &&
-                          tireState.longitudinalSlip == stateBefore.longitudinalSlip);
+                          tireState.longitudinalSlip ==
+                              stateBefore.longitudinalSlip);
                   }
                   CHECK(leaf->payload && leaf->payload->physics &&
                         leaf->payload->physics->triangles.size() == 7);
-                  if (leafNode.node.packNode && resources.loadPassiveSpatialGame(*leafNode.node.packNode, error)) {
-                    retainedGroundFace = resolveSpatialGroundFace(resources, *leafNode.node.packNode, 4, error);
+                  if (leafNode.node.packNode &&
+                      resources.loadPassiveSpatialGame(*leafNode.node.packNode,
+                                                       error)) {
+                    retainedGroundFace = resolveSpatialGroundFace(
+                        resources, *leafNode.node.packNode, 4, error);
                     CHECK(retainedGroundFace && retainedGroundFace->valid());
-                  } else CHECK(false);
+                  } else
+                    CHECK(false);
                 }
                 const auto outside = queryPassiveSpatialCandidates(
-                    resources, *city2LoadTarget, {100000,100000,100000},
-                    {100001,100001,100001});
-                CHECK(outside.candidates.empty() && !outside.complete && !outside.detail.empty());
+                    resources, *city2LoadTarget, {100000, 100000, 100000},
+                    {100001, 100001, 100001});
+                CHECK(outside.candidates.empty() && !outside.complete &&
+                      !outside.detail.empty());
               }
               city2LoadTarget = nullptr;
             }
@@ -1331,7 +1851,8 @@ int main() {
           WorldNode *liveReceiver = nullptr;
           if (const auto *plainState = nativeResourceState(plain, &arena)) {
             const int32_t plainHandle =
-                static_cast<int32_t>(plainState - arena.resourceStates.data()) + 1;
+                static_cast<int32_t>(plainState - arena.resourceStates.data()) +
+                1;
             const auto bound = game.bindings.find(plainHandle);
             if (bound != game.bindings.end() && bound->second)
               liveReceiver = world.nodeFor(bound->second->link.owner);
@@ -1339,7 +1860,8 @@ int main() {
           CHECK(node.eventSubscriptions.size() == 1 && liveReceiver &&
                 node.eventSubscriptions[0]->target.owner == liveReceiver &&
                 node.eventSubscriptions[0]->mask == 0x20000);
-          CHECK(!loadGroundGameResource(arena, node) && node.groundFactory == factory &&
+          CHECK(!loadGroundGameResource(arena, node) &&
+                node.groundFactory == factory &&
                 node.eventSubscriptions.size() == 1);
           const auto again =
               vmExecute(probeWorld.main.c, loadTree, {plain}, &probeRegistry,
@@ -1363,44 +1885,62 @@ int main() {
                 setLinkOwner(subscription->target, liveReceiver);
                 node.eventSubscriptions.push_back(std::move(subscription));
               }
-              const std::string payload = "obs_add " +
+              const std::string payload =
+                  "obs_add " +
                   std::to_string(static_cast<int32_t>(observed->instanceId));
               groundEventArgs = {nullHotkey, int32_t{0x10}, string(payload)};
               groundEventReceiver = handler;
-              for (auto &subscription : node.eventSubscriptions) subscription->mask = 0x20;
-              CHECK(std::holds_alternative<std::monostate>(
-                  gameRefQueueEvent(groundEventArgs, handler, &arena, &probeClasses)) &&
+              for (auto &subscription : node.eventSubscriptions)
+                subscription->mask = 0x20;
+              CHECK(std::holds_alternative<std::monostate>(gameRefQueueEvent(
+                        groundEventArgs, handler, &arena, &probeClasses)) &&
                     factory->observers.size() == 1);
-              groundEventArgs[2] = string("obs_rem " +
+              groundEventArgs[2] = string(
+                  "obs_rem " +
                   std::to_string(static_cast<int32_t>(observed->instanceId)));
-              CHECK(std::holds_alternative<std::monostate>(
-                  gameRefQueueEvent(groundEventArgs, handler, &arena, &probeClasses)) &&
+              CHECK(std::holds_alternative<std::monostate>(gameRefQueueEvent(
+                        groundEventArgs, handler, &arena, &probeClasses)) &&
                     factory->observers.empty());
-              for (auto &subscription : node.eventSubscriptions) subscription->mask = 0x10;
+              for (auto &subscription : node.eventSubscriptions)
+                subscription->mask = 0x10;
               groundEventArgs[2] = string(payload);
               int calls = 0;
-              groundEventCallback = [&](const VmObject *recipient, const std::string &method,
-                                         std::vector<VmValue> values) -> VmResult {
-                CHECK(recipient == plain && (method == "handleEvent" || method == "handleEventAsync"));
-                CHECK(factory->observers.size() == 1 && factory->observers[0]->owner == observed);
-                CHECK(values.size() == 3 && std::get<int32_t>(values[1]) == 0x10);
-                const auto *source = nativeResourceState(std::get<const VmObject *>(values[0]), &arena);
+              groundEventCallback =
+                  [&](const VmObject *recipient, const std::string &method,
+                      std::vector<VmValue> values) -> VmResult {
+                CHECK(recipient == plain && (method == "handleEvent" ||
+                                             method == "handleEventAsync"));
+                CHECK(factory->observers.size() == 1 &&
+                      factory->observers[0]->owner == observed);
+                CHECK(values.size() == 3 &&
+                      std::get<int32_t>(values[1]) == 0x10);
+                const auto *source = nativeResourceState(
+                    std::get<const VmObject *>(values[0]), &arena);
                 CHECK(source && source->words[2] == node.value);
                 const auto *textObject = std::get<const VmObject *>(values[2]);
                 bool correct = false;
                 for (const auto &entry : arena.strings)
-                  if (entry.second == textObject && entry.first == (calls ? "replacement" : payload)) correct = true;
+                  if (entry.second == textObject &&
+                      entry.first == (calls ? "replacement" : payload))
+                    correct = true;
                 CHECK(correct);
-                if (!calls) node.eventSubscriptions.clear();
+                if (!calls)
+                  node.eventSubscriptions.clear();
                 ++calls;
                 return {true, std::monostate{}, {}};
               };
-              const auto sendRef = probeWorld.main.ref("test.CityProbe", "send", "()V");
+              const auto sendRef =
+                  probeWorld.main.ref("test.CityProbe", "send", "()V");
               const std::vector<TufaNode> sendTree{
-                  vm_test::literal(0), vm_test::node(0x24), vm_test::node(0x11, true, 2),
-                  vm_test::node(0x01, true, 0), vm_test::node(0x1a, true, sendRef), vm_test::retVoid};
-              const auto sent = vmExecute(probeWorld.main.c, sendTree, {plain}, &probeRegistry,
-                                           &probeClasses, &probeStates, &arena);
+                  vm_test::literal(0),
+                  vm_test::node(0x24),
+                  vm_test::node(0x11, true, 2),
+                  vm_test::node(0x01, true, 0),
+                  vm_test::node(0x1a, true, sendRef),
+                  vm_test::retVoid};
+              const auto sent = vmExecute(probeWorld.main.c, sendTree, {plain},
+                                          &probeRegistry, &probeClasses,
+                                          &probeStates, &arena);
               CHECK(sent.ok && calls == 2 && node.eventSubscriptions.empty());
               groundEventCallback = {};
               CHECK(world.destroy(*observed));
@@ -1486,7 +2026,10 @@ int main() {
       gameTypeRemoveAllTimers({}, plain, &arena, &loaded)));
   std::string timerError;
   CHECK(timers.advance(
-            0, [](LinkOwner &, int32_t, std::string &) { return true; },
+            0,
+            [](LinkOwner &, int32_t, uint32_t, int32_t, std::string &) {
+              return true;
+            },
             timerError) &&
         timers.size() == 0);
   arena.timers = nullptr;
@@ -1495,7 +2038,8 @@ int main() {
   CHECK(timers.add(&timerOwner, 2.0f, 17, timerError));
   CHECK(timers.add(&timerOwner, 1.0f, 18, timerError));
   std::vector<int32_t> fired;
-  auto deliver = [&](LinkOwner &target, int32_t id, std::string &) {
+  auto deliver = [&](LinkOwner &target, int32_t id, uint32_t, int32_t,
+                     std::string &) {
     CHECK(&target == &timerOwner);
     fired.push_back(id);
     return true;
@@ -1517,19 +2061,32 @@ int main() {
     vm_test::World vm;
     vm.cls("java.util.resource.ResourceRef").instanceField("ptr", "I");
     vm.cls("java.util.resource.GameRef", "java.util.resource.ResourceRef");
+    auto &threadClass = vm.cls("java.lang.Thread");
+    threadClass.c.methods[0].push_back(
+        {{0x48, threadClass.t("sleep"), threadClass.t("(F)V"), UINT32_MAX, 0}});
     auto &handlerClass = vm.cls("test.TimerHandler");
     handlerClass.instanceField("asyncMode", "I")
         .instanceField("received", "I")
         .constructor();
     const auto received = handlerClass.t("received");
+    const auto sleep = handlerClass.ref("java.lang.Thread", "sleep", "(F)V");
+    const auto threadOwner = handlerClass.cref("java.lang.Thread");
+    const float delay = 5.0f;
+    uint32_t delayBits;
+    std::memcpy(&delayBits, &delay, sizeof(delayBits));
     handlerClass.method("handleEvent", "(Ljava.util.resource.GameRef;II)V", 1,
                         {vm_test::literal(77), vm_test::node(0x01, true, 0),
                          vm_test::node(0x1c, true, received),
                          vm_test::node(0x08, true, 35), vm_test::retVoid});
-    handlerClass.method("animate", "()V", 1,
-                        {vm_test::literal(66), vm_test::node(0x01, true, 0),
-                         vm_test::node(0x1c, true, received),
-                         vm_test::node(0x08, true, 35), vm_test::retVoid});
+    handlerClass.method(
+        "animate", "()V", 1,
+        {vm_test::node(0x07, true, 28), vm_test::node(0x0a, true, delayBits),
+         vm_test::literal(1), vm_test::node(0x24), vm_test::node(0x11, true, 2),
+         vm_test::node(0x19, true, threadOwner),
+         vm_test::node(0x1a, true, sleep), vm_test::node(0x08, true, 27),
+         vm_test::literal(66), vm_test::node(0x01, true, 0),
+         vm_test::node(0x1c, true, received), vm_test::node(0x08, true, 35),
+         vm_test::retVoid});
     vm.start();
     auto madeHandler = vm.alloc("test.TimerHandler");
     const auto *timerHandler =
@@ -1547,20 +2104,50 @@ int main() {
       timerNode->eventMask = 0x80;
       timerNode->eventSubscriptionsKnownEmpty = true;
       timerNode->scriptReceiver = timerHandler;
-      CHECK(dispatchTimerEvent(vm.arena, *timerNode, 123, vm.runtime->classes(),
+      CHECK(dispatchTimerEvent(vm.arena, *timerNode, 123, 0, 0,
+                               vm.runtime->classes(),
                                vm.runtime->staticFields(), timerError));
       CHECK(std::get<int32_t>(
                 vm_test::fieldOf(timerHandler, "received")->value) == 77);
       CHECK(!vm.arena.resourceStates.empty() &&
             vm.arena.resourceStates.back().words[2] == timerNode->instanceId);
       CHECK(timerWorld.registerHook(GameHook::Kind1c, *timerNode));
-      CHECK(dispatchAnimationCallbacks(vm.arena, 0.016f, vm.runtime->classes(),
-                                       vm.runtime->staticFields(), timerError));
+      {
+        double now = 0;
+        VmScheduler scheduler(vm.arena, &nativeRegistry(),
+                              &vm.runtime->classes(),
+                              &vm.runtime->staticFields(), [&] {
+                                now += 0.01;
+                                return now;
+                              });
+        AnimationDispatch dispatch(vm.arena, scheduler, 0.016f,
+                                   vm.runtime->classes(),
+                                   vm.runtime->staticFields());
+        CHECK(dispatch.resume(timerError) && !dispatch.finished());
+        CHECK(std::get<int32_t>(
+                  vm_test::fieldOf(timerHandler, "received")->value) == 77);
+        CHECK(dispatch.resume(timerError) && !dispatch.finished());
+        const auto sleepTick = scheduler.tick(10000);
+        if (!sleepTick.ok)
+          std::fprintf(stderr, "animation sleep tick: %s\n",
+                       sleepTick.error.c_str());
+        CHECK(sleepTick.ok);
+        CHECK(dispatch.resume(timerError) && !dispatch.finished());
+        CHECK(std::get<int32_t>(
+                  vm_test::fieldOf(timerHandler, "received")->value) == 77);
+        now = 6.0;
+        const auto wakeTick = scheduler.tick(10000);
+        if (!wakeTick.ok)
+          std::fprintf(stderr, "animation wake tick: %s\n",
+                       wakeTick.error.c_str());
+        CHECK(wakeTick.ok);
+        CHECK(finishDispatch(dispatch, scheduler, timerError));
+      }
       CHECK(std::get<int32_t>(
                 vm_test::fieldOf(timerHandler, "received")->value) == 66);
       CHECK(timerWorld.destroy(*timerNode));
-      CHECK(dispatchAnimationCallbacks(vm.arena, 0.016f, vm.runtime->classes(),
-                                       vm.runtime->staticFields(), timerError));
+      CHECK(runAnimationTest(vm.arena, 0.016f, vm.runtime->classes(),
+                             vm.runtime->staticFields(), timerError));
       CHECK(timerWorld.hooks(GameHook::Kind1c).empty());
     }
   }
@@ -1613,12 +2200,26 @@ int main() {
       setLinkOwner(entry->target, target);
       source->eventSubscriptions.push_back(std::move(entry));
       std::string error;
-      const bool delivered = dispatchCursorSubscribers(
-          vm.arena, *source, "1 2 3 4 0.000 0.000 0.000", vm.runtime->classes(),
-          vm.runtime->staticFields(), error);
-      if (!delivered)
-        std::printf("cursor delivery: %s\n", error.c_str());
-      CHECK(delivered);
+      auto second = std::make_unique<EventSubscription>();
+      second->mask = 0x10000;
+      setLinkOwner(second->target, target);
+      source->eventSubscriptions.push_back(std::move(second));
+      {
+        VmScheduler scheduler(vm.arena, &nativeRegistry(),
+                              &vm.runtime->classes(),
+                              &vm.runtime->staticFields(), [] { return 0.0; });
+        CursorDispatch dispatch(
+            vm.arena, scheduler, *source, "1 2 3 4 0.000 0.000 0.000",
+            vm.runtime->classes(), vm.runtime->staticFields());
+        const auto before = vm.arena.resourceStates.size();
+        // Fire-and-forget: the coroutine completes without waiting for the
+        // subscriber, which the scheduler drains (stock does not join its
+        // per-dispatch thread).
+        CHECK(dispatch.resume(error) && dispatch.finished());
+        CHECK(finishDispatch(dispatch, scheduler, error));
+        CHECK(vm.arena.resourceStates.size() >= before + 1);
+      }
+      source->eventSubscriptions.pop_back();
       CHECK(std::get<int32_t>(vm_test::fieldOf(handler, "received")->value) ==
             91);
       bool foundPayload = false;
@@ -1634,7 +2235,7 @@ int main() {
       CHECK(std::get<const VmObject *>(
                 vm_test::fieldOf(handler, "source")->value) ==
             vm.arena.resourceStates.back().owner);
-      CHECK(dispatchCursorSubscribers(
+      CHECK(runCursorTest(
           vm.arena, *source, "5 -65420 -65500 -0.049 -0.020 0.001",
           vm.runtime->classes(), vm.runtime->staticFields(), error));
       bool foundClick = false;
@@ -1660,17 +2261,28 @@ int main() {
           }
           return savedEnsure(name);
         };
-        CHECK(!dispatchCursorSubscribers(vm.arena, *doomed, "1 2 3 4 0 0 0",
-                                         vm.runtime->classes(),
-                                         vm.runtime->staticFields(), error));
+        CHECK(!runCursorTest(vm.arena, *doomed, "1 2 3 4 0 0 0",
+                             vm.runtime->classes(), vm.runtime->staticFields(),
+                             error));
         CHECK(doomed == nullptr && error == "cursor event target destroyed");
         vm.arena.ensureClass = savedEnsure;
       }
-      CHECK(eventWorld.destroy(*target));
+      {
+        VmScheduler scheduler(vm.arena, &nativeRegistry(),
+                              &vm.runtime->classes(),
+                              &vm.runtime->staticFields(), [] { return 0.0; });
+        CursorDispatch dispatch(vm.arena, scheduler, *source, "2 2 3 4",
+                                vm.runtime->classes(),
+                                vm.runtime->staticFields());
+        CHECK(dispatch.resume(error) && dispatch.finished());
+        CHECK(eventWorld.destroy(*target));
+        // The queued task's liveness now guards the destroyed target, so a
+        // tick after destruction drops it instead of running into it.
+        CHECK(scheduler.tick(10000).ok);
+      }
       CHECK(!source->eventSubscriptions[0]->target.owner);
-      CHECK(dispatchCursorSubscribers(vm.arena, *source, "2 2 3 4",
-                                      vm.runtime->classes(),
-                                      vm.runtime->staticFields(), error));
+      CHECK(runCursorTest(vm.arena, *source, "2 2 3 4", vm.runtime->classes(),
+                          vm.runtime->staticFields(), error));
     }
   }
   {
@@ -1688,17 +2300,89 @@ int main() {
       playerNode->nativeDevice = "player";
       playerNode->player = std::make_unique<PlayerInstance>();
       CHECK(playerWorld.registerHook(GameHook::Kind1c, *playerNode));
-      CHECK(dispatchAnimationCallbacks(playerArena, 0.025f, loaded, states,
-                                       timerError));
+      CHECK(runAnimationTest(playerArena, 0.025f, loaded, states, timerError));
       CHECK(playerGame.playerAnimationDelta == 0.025f);
       LinkOwner overlay;
       overlay.value = 42;
       setLinkOwner(playerNode->player->animationOverlay, &overlay);
-      CHECK(!dispatchAnimationCallbacks(playerArena, 0.03f, loaded, states,
-                                        timerError));
+      CHECK(!runAnimationTest(playerArena, 0.03f, loaded, states, timerError));
       CHECK(playerGame.playerAnimationDelta == 0.03f);
       setLinkOwner(playerNode->player->animationOverlay, nullptr);
       CHECK(playerWorld.destroy(*playerNode));
+    }
+  }
+  {
+    // Regression: a script-backed animate subscriber that SUSPENDS inside
+    // HostDispatch, so the dispatch only completes if finishDispatch resumes
+    // the coroutine after the scheduler finishes the task. With a single
+    // resume (the earlier bug) this times out instead of delivering.
+    vm_test::World vm;
+    vm.cls("java.util.resource.ResourceRef").instanceField("ptr", "I");
+    vm.cls("java.util.resource.GameRef", "java.util.resource.ResourceRef");
+    auto &threadClass = vm.cls("java.lang.Thread");
+    threadClass.c.methods[0].push_back(
+        {{0x48, threadClass.t("sleep"), threadClass.t("(F)V"), UINT32_MAX, 0}});
+    auto &handlerClass = vm.cls("test.AnimateSuspender");
+    handlerClass.instanceField("asyncMode", "I")
+        .instanceField("received", "I")
+        .constructor();
+    const auto received = handlerClass.t("received");
+    const auto sleep = handlerClass.ref("java.lang.Thread", "sleep", "(F)V");
+    const auto threadOwner = handlerClass.cref("java.lang.Thread");
+    const float delay = 0.01f;
+    uint32_t delayBits;
+    std::memcpy(&delayBits, &delay, sizeof(delayBits));
+    // animate(): sleep(delay); received = 99; return
+    handlerClass.method(
+        "animate", "()V", 1,
+        {vm_test::node(0x07, true, 28), vm_test::node(0x0a, true, delayBits),
+         vm_test::literal(1), vm_test::node(0x24), vm_test::node(0x11, true, 2),
+         vm_test::node(0x19, true, threadOwner),
+         vm_test::node(0x1a, true, sleep), vm_test::node(0x08, true, 27),
+         vm_test::literal(99), vm_test::node(0x01, true, 0),
+         vm_test::node(0x1c, true, received), vm_test::node(0x08, true, 35),
+         vm_test::retVoid});
+    vm.start();
+    auto madeSuspender = vm.alloc("test.AnimateSuspender");
+    const auto *suspender =
+        madeSuspender.ok ? vm_test::asObject(madeSuspender.value) : nullptr;
+    CHECK(suspender != nullptr);
+    if (suspender) {
+      GameWorld suspendWorld;
+      auto *suspendRoot = suspendWorld.addRoot();
+      auto *suspendNode =
+          suspendWorld.addChild(*suspendRoot, "suspending animate", 0x21);
+      CHECK(suspendNode != nullptr);
+      if (suspendNode) {
+        VmGameState suspendGame;
+        suspendGame.world = &suspendWorld;
+        vm.arena.gameState = &suspendGame;
+        suspendWorld.markLoaded(*suspendNode);
+        suspendNode->scriptReceiver = suspender;
+        CHECK(suspendWorld.registerHook(GameHook::Kind1c, *suspendNode));
+        // The clock advances so the sleep can expire; the dispatch must be
+        // resumed by the helper after each tick.
+        double now = 0;
+        VmScheduler scheduler(vm.arena, &nativeRegistry(),
+                              &vm.runtime->classes(),
+                              &vm.runtime->staticFields(), [&] {
+                                now += 0.01;
+                                return now;
+                              });
+        AnimationDispatch dispatch(vm.arena, scheduler, 0.016f,
+                                   vm.runtime->classes(),
+                                   vm.runtime->staticFields());
+        std::string suspendError;
+        // Advance the clock inside the drive loop by ticking the scheduler
+        // with a moving clock.
+        // Drive through the helper exactly once. The clock advances on every
+        // scheduler read, so the 0.01 s sleep expires inside the loop; only a
+        // helper that resumes the coroutine after each tick can finish it.
+        CHECK(finishDispatch(dispatch, scheduler, suspendError));
+        CHECK(std::get<int32_t>(
+                  vm_test::fieldOf(suspender, "received")->value) == 99);
+        CHECK(suspendWorld.destroy(*suspendNode));
+      }
     }
   }
   {
@@ -1716,17 +2400,14 @@ int main() {
       node->nativeDevice = "cursor";
       node->cursor = std::make_unique<CursorInstance>();
       CHECK(cursorWorld.registerHook(GameHook::Kind1c, *node));
-      CHECK(dispatchAnimationCallbacks(cursorArena, 0.02f, loaded, states,
-                                       timerError));
+      CHECK(runAnimationTest(cursorArena, 0.02f, loaded, states, timerError));
       LinkOwner controller;
       controller.value = 42;
       setLinkOwner(node->cursor->controller, &controller);
-      CHECK(!dispatchAnimationCallbacks(cursorArena, 0.02f, loaded, states,
-                                        timerError));
+      CHECK(!runAnimationTest(cursorArena, 0.02f, loaded, states, timerError));
       setLinkOwner(node->cursor->controller, nullptr);
       game.mouseHelp = 1;
-      CHECK(!dispatchAnimationCallbacks(cursorArena, 0.02f, loaded, states,
-                                        timerError));
+      CHECK(!runAnimationTest(cursorArena, 0.02f, loaded, states, timerError));
       CHECK(cursorWorld.destroy(*node));
     }
   }
@@ -1744,7 +2425,7 @@ int main() {
     stepOrder += "p";
     return true;
   };
-  auto event = [&](LinkOwner &, int32_t id, std::string &) {
+  auto event = [&](LinkOwner &, int32_t id, uint32_t, int32_t, std::string &) {
     CHECK(id == 99);
     ++events;
     stepOrder += "e";
@@ -1771,7 +2452,9 @@ int main() {
     auto emptyPhysics = [&](float seconds, std::string &error) {
       return emptyWorld.stepEmptyPhysics(seconds, error);
     };
-    auto noEvent = [](LinkOwner &, int32_t, std::string &) { return true; };
+    auto noEvent = [](LinkOwner &, int32_t, uint32_t, int32_t, std::string &) {
+      return true;
+    };
     CHECK(clock.advanceFrame(0.05f, 1.0f, 1.0f, 0.1f, emptyPhysics, noEvent,
                              drain, timerError));
     CHECK(std::abs(clock.now() - 0.05f) < 0.00001f);
@@ -1789,8 +2472,9 @@ int main() {
     const VmObject *secondRef = allocateDummy();
     const VmObject *thirdRef = allocateDummy();
     const VmObject *carRef = allocateDummy();
-    CHECK(playerRef && secondRef && thirdRef && carRef && construct(playerRef, 0).ok &&
-          construct(secondRef, 0).ok && construct(thirdRef, 0).ok && construct(carRef, 0).ok);
+    CHECK(playerRef && secondRef && thirdRef && carRef &&
+          construct(playerRef, 0).ok && construct(secondRef, 0).ok &&
+          construct(thirdRef, 0).ok && construct(carRef, 0).ok);
     const auto linkedNode = [&](const VmObject *object) {
       const auto *state = nativeResourceState(object, &arena);
       return state ? world.findInstance(state->words[2]) : nullptr;
@@ -1815,37 +2499,47 @@ int main() {
       car->carInstance->isCar = true;
       car->carInstance->seats.push_back(std::make_unique<CarSeat>());
       car->carInstance->seats.push_back(std::make_unique<CarSeat>());
-      const std::string text = "controllable " +
+      const std::string text =
+          "controllable " +
           std::to_string(static_cast<int32_t>(car->instanceId));
       const auto command = [&](const VmObject *player) {
-        return gameRefQueueEvent({VmValue{null}, VmValue{int32_t{0x10}},
-                                  VmValue{string(text)}}, player, &arena, &loaded);
+        return gameRefQueueEvent(
+            {VmValue{null}, VmValue{int32_t{0x10}}, VmValue{string(text)}},
+            player, &arena, &loaded);
       };
       const auto owner = [&]() {
         const auto result = gameRefGetInfoIntInt({int32_t{0x18}, int32_t{0}},
-                                                  carRef, &arena, &loaded);
+                                                 carRef, &arena, &loaded);
         const auto *value = std::get_if<VmValue>(&result);
         const auto *id = value ? std::get_if<int32_t>(value) : nullptr;
         return id ? *id : int32_t{-1};
       };
       CHECK(owner() == 0);
       setLinkOwner(third->player->osd, second);
-      CHECK(errorOf(command(thirdRef)).find("camera or osd unsupported") != std::string::npos);
-      CHECK(owner() == 0 && !third->player->controllable.owner && car->eventSubscriptions.empty());
+      CHECK(errorOf(command(thirdRef)).find("camera or osd unsupported") !=
+            std::string::npos);
+      CHECK(owner() == 0 && !third->player->controllable.owner &&
+            car->eventSubscriptions.empty());
       setLinkOwner(third->player->osd, nullptr);
       first->player->config.damageMultiplier = 0.4567f;
       setLinkOwner(first->player->renderInstance, third);
       CHECK(std::holds_alternative<std::monostate>(command(playerRef)));
       CHECK(owner() == static_cast<int32_t>(first->instanceId));
-      CHECK(first->player->controllable.owner == car && first->player->driverPoseParityReported);
+      CHECK(first->player->controllable.owner == car &&
+            first->player->driverPoseParityReported);
       CHECK(car->carInstance->seats[0]->renderInstance.owner == third);
-      CHECK(!car->carInstance->seats[0]->camera.owner && !car->carInstance->seats[0]->osd.owner);
+      CHECK(!car->carInstance->seats[0]->camera.owner &&
+            !car->carInstance->seats[0]->osd.owner);
       CHECK(std::fabs(car->carInstance->damageMultiplier - 0.457f) < 1e-6f);
       CHECK((first->eventMask & 1) && car->eventSubscriptions.size() == 1 &&
-            car->eventSubscriptions[0]->target.owner == first && car->eventSubscriptions[0]->mask == 1);
-      CHECK(std::holds_alternative<std::monostate>(command(playerRef)) && car->eventSubscriptions.size() == 1);
-      CHECK(errorOf(command(secondRef)).find("subscriptions unsupported") != std::string::npos);
-      CHECK(!second->player->controllable.owner && !car->carInstance->seats[1]->player.owner);
+            car->eventSubscriptions[0]->target.owner == first &&
+            car->eventSubscriptions[0]->mask == 1);
+      CHECK(std::holds_alternative<std::monostate>(command(playerRef)) &&
+            car->eventSubscriptions.size() == 1);
+      CHECK(errorOf(command(secondRef)).find("subscriptions unsupported") !=
+            std::string::npos);
+      CHECK(!second->player->controllable.owner &&
+            !car->carInstance->seats[1]->player.owner);
       setLinkOwner(car->carInstance->seats[0]->camera, first);
       setLinkOwner(car->carInstance->seats[0]->osd, first);
       CHECK(world.destroy(*first));
@@ -1876,18 +2570,73 @@ int main() {
       car->carInstance->isCar = true;
       car->eventMask |= 0x10;
       const auto send = [&](const char *text) {
-        return gameRefQueueEvent({VmValue{null}, VmValue{int32_t{0x10}},
-                                  VmValue{string(text)}}, carRef, &arena, &loaded);
+        return gameRefQueueEvent(
+            {VmValue{null}, VmValue{int32_t{0x10}}, VmValue{string(text)}},
+            carRef, &arena, &loaded);
       };
       CHECK(car->carInstance->damageMultiplier == 1.0f);
-      CHECK(std::holds_alternative<std::monostate>(send("damage_multiplier 0.375")) &&
+      CHECK(std::holds_alternative<std::monostate>(
+                send("damage_multiplier 0.375")) &&
             car->carInstance->damageMultiplier == 0.375f);
-      CHECK(std::holds_alternative<std::monostate>(send("damage_multiplier -2")) &&
+      CHECK(std::holds_alternative<std::monostate>(
+                send("damage_multiplier -2")) &&
             car->carInstance->damageMultiplier == -2.0f);
-      CHECK(std::holds_alternative<std::monostate>(send("damage_multiplier invalid")) &&
+      CHECK(std::holds_alternative<std::monostate>(
+                send("damage_multiplier invalid")) &&
             car->carInstance->damageMultiplier == 1.0f);
       CHECK(std::holds_alternative<std::string>(send("activate 1 2 3")) &&
             car->carInstance->damageMultiplier == 1.0f);
+      // FUN_00448d70 tail: the first occupied seat stores the player device's
+      // message 0x15 reply (stock player +0x242c) on the car as +0x1edc; an
+      // unlinked seat stores 0. Car getInfo(0x15) reads the stored word back
+      // (stock car getInfo case 0x15, all.c:68209).
+      const auto idText = [](uint32_t id) {
+        int32_t signedId;
+        std::memcpy(&signedId, &id, sizeof id);
+        return std::to_string(signedId);
+      };
+      auto occupiedSeat = std::make_unique<CarSeat>();
+      auto *occupiedSeatPtr = occupiedSeat.get();
+      car->carInstance->seats.push_back(std::move(occupiedSeat));
+      CHECK(std::holds_alternative<std::monostate>(send("activate 1 2 3")));
+      CHECK(car->carInstance->activateInfo == 0);
+      if (const auto *state = nativeResourceState(carRef, &arena)) {
+        const auto handle =
+            static_cast<int32_t>(state - arena.resourceStates.data()) + 1;
+        auto &binding = game.bindings[handle];
+        if (!binding)
+          binding = std::make_unique<ReceiverBinding>();
+        setLinkOwner(binding->link, car);
+        const auto getInfo = [&](int32_t kind) {
+          return invokeNative("java.util.resource.GameRef", "getInfo", "(II)I",
+                              {VmValue{kind}, VmValue{int32_t{0}}}, carRef,
+                              &arena, &loaded);
+        };
+        const auto emptyResult = getInfo(0x15);
+        const auto *emptyValue = std::get_if<VmValue>(&emptyResult);
+        CHECK(emptyValue && std::holds_alternative<int32_t>(*emptyValue) &&
+              std::get<int32_t>(*emptyValue) == 0);
+        auto *playerNode = world.addChild(*root, "activate seat player", 0);
+        CHECK(playerNode);
+        if (playerNode) {
+          playerNode->nativeDevice = "player";
+          playerNode->player = std::make_unique<PlayerInstance>();
+          playerNode->player->debugAiValue = 0x1234;
+          setLinkOwner(occupiedSeatPtr->player, playerNode);
+          const auto activate = std::string{"activate "} +
+                                idText(playerNode->instanceId) + " 0 0";
+          CHECK(std::holds_alternative<std::monostate>(send(activate.c_str())));
+          CHECK(car->carInstance->activateInfo == 0x1234);
+          const auto storedResult = getInfo(0x15);
+          const auto *stored = std::get_if<VmValue>(&storedResult);
+          CHECK(stored && std::holds_alternative<int32_t>(*stored) &&
+                std::get<int32_t>(*stored) == 0x1234);
+          setLinkOwner(occupiedSeatPtr->player, nullptr);
+          CHECK(std::holds_alternative<std::monostate>(send("activate 0 0 0")));
+          CHECK(car->carInstance->activateInfo == 0);
+          CHECK(world.destroy(*playerNode));
+        }
+      }
       CHECK(world.destroy(*car));
     }
     game.resources = nullptr;

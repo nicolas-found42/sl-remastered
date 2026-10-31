@@ -390,6 +390,50 @@ static void testV3() {
 	CHECK(r.ok && r.model.nonFinitePositions == 1);
 }
 
+static void testV3MaterialFields() {
+	for (uint32_t size : {56u, 104u, 136u}) {
+		Bytes data = header(3);
+		V3Mat fixture;
+		fixture.size = size;
+		fixture.stride = size == 56 ? 44 : 64;
+		putV3Material(data, fixture);
+		const float values[] = {0.125f, 0.25f, 0.5f, 0.75f, 32.0f};
+		for (size_t i = 0; i < 5; ++i) {
+			uint32_t bits;
+			std::memcpy(&bits, &values[i], sizeof bits);
+			set32(data, 8 + 20 + 4 * i, bits);
+		}
+		for (size_t i = 0; i < (size == 56 ? 6u : 7u); ++i) {
+			set16(data, 8 + 44 + 2 * i, static_cast<uint16_t>(i + 10));
+		}
+		set16(data, 8 + 48, 0xfffe);
+		if (size > 56) {
+			set16(data, 8 + 70, 0xffff);
+			set16(data, 8 + 72, 0xfffe);
+		}
+		const ScxResult result = parseAll(data);
+		CHECK(result.ok && result.model.materials.size() == 1);
+		if (!result.ok || result.model.materials.size() != 1) continue;
+		const ScxMaterial& material = result.model.materials[0];
+		CHECK(material.scyV3.has_value());
+		if (!material.scyV3) continue;
+		const ScyV3Material& legacy = *material.scyV3;
+		CHECK(legacy.recordSize == size);
+		CHECK((legacy.specular == std::array<float, 3>{0.125f, 0.25f, 0.5f}));
+		CHECK(legacy.specularStrength == 0.75f && legacy.shininess == 32.0f);
+		for (size_t i = 0; i < (size == 56 ? 6u : 7u); ++i) {
+			CHECK(legacy.textureIndices[i] == (i == 2 ? -2 : static_cast<int32_t>(i + 10)));
+		}
+		if (size == 56) {
+			CHECK(legacy.textureIndices[6] == -1);
+			CHECK(!legacy.diffuseChannel && !legacy.layer2Channel);
+		} else {
+			CHECK(legacy.diffuseChannel && *legacy.diffuseChannel == -1);
+			CHECK(legacy.layer2Channel && *legacy.layer2Channel == -2);
+		}
+	}
+}
+
 static void testV4Good() {
 	const Bytes good = v4File(goodChunks());
 	ScxResult r = parseAll(good);
@@ -400,6 +444,7 @@ static void testV4Good() {
 		return;
 	}
 	const ScxMaterial& mat = r.model.materials[0];
+	CHECK(!mat.scyV3);
 	CHECK(mat.name == "paint" && mat.flags == 0xA1 && mat.functionWord == 0xB2);
 	CHECK(mat.diffuse[0] == 1.0f && mat.diffuse[1] == 0.0f && mat.diffuse[2] == 51.0f / 255.0f && mat.diffuse[3] == 1.0f);
 	CHECK(mat.maps.size() == 1);
@@ -571,6 +616,7 @@ static void testCounters() {
 
 int main() {
 	testV3();
+	testV3MaterialFields();
 	testV4Good();
 	testV4Failures();
 	testCounters();

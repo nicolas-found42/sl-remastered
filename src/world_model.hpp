@@ -1,14 +1,16 @@
 #pragma once
 
-#include "part_config.hpp"
 #include "car_runtime.hpp"
+#include "object_physics.hpp"
+#include "part_config.hpp"
+#include "physics_multi_root_step.hpp"
 
 #include "instance_ids.hpp"
 #include "owner_links.hpp"
 #include "resource_tree.hpp"
 
-#include <cstdint>
 #include <array>
+#include <cstdint>
 #include <functional>
 #include <map>
 #include <memory>
@@ -19,6 +21,29 @@
 
 struct VmObject;
 struct GroundRuntime;
+// Per-frame work a car needs inside the world step, in stock order: callbacks
+// (controls, drivetrain, tires) before prediction, then collision traversal
+// that selects wheel contacts into the suspensions and returns the body
+// contacts. Suspension records must stay valid for the whole call.
+struct LiveCarStepHooks {
+  std::function<bool(std::string &)> beforePrediction;
+  std::function<bool(std::vector<physics::DirectContact> &, std::string &)>
+      gatherContacts;
+  std::function<void(const std::vector<physics::DirectContact> &)>
+      finishContacts;
+  std::vector<physics::SuspensionUpdate *> suspensions;
+  // Wake every registered car tree before the step (stock 0044e690 wakes the
+  // car through FUN_004a7990 when a player axis changes).
+  bool wakeCars = false;
+  // Stock 0049b830: one pending contact per root body per pass.
+  bool onePendingContactPerRoot = false;
+};
+
+class ResourceWorld;
+
+namespace object {
+class InstanceHandle;
+}
 class CameraFrame;
 
 // Host model of the part of the stock resource world that
@@ -50,12 +75,23 @@ struct PartPrototype {
 class CameraDeviceResources;
 struct CameraDeviceConfig;
 class CameraDeviceResources;
+// Stock button device prototype (factory FUN_00436f30, cfg table 0060dc28):
+// `body` (FUN_00437070) and `render` (FUN_00437250) are its only directives.
+struct ButtonPrototype {
+  std::string configPath;
+  uint32_t renderId = 0; // remapped through the script's pack; 0 = none
+  bool hasBody = false;
+  uint32_t bodyId = 0; // remapped numeric body resource; 0 for a named body
+  std::string bodyName;
+};
+
 struct ScriptNode : LinkOwner {
   uint32_t resourceId = 0;
   std::string className;
   bool loaded = false;
   std::unique_ptr<PartPrototype> part;
   std::unique_ptr<CarPrototype> car;
+  std::unique_ptr<ButtonPrototype> button;
   std::shared_ptr<const physics::BodyProto> cameraPrototype;
   std::shared_ptr<const CameraDeviceConfig> cameraConfig;
 };
@@ -71,6 +107,7 @@ public:
   bool activate(LinkOwner &instance, int32_t priority);
   void remove(LinkOwner &instance);
   std::vector<LinkOwner *> active() const;
+
 private:
   struct Entry {
     OwnerLink instance;
@@ -111,17 +148,18 @@ public:
   // FUN_0054d650: returns a one-based slot, 0 when full, -1 for a negative
   // physical device or axis. A null result means the virtual axis is outside
   // the host's safe range (stock indexes it without checking).
-  std::optional<int32_t> add(int32_t axis, int32_t device,
-                             int32_t physicalAxis, float sample,
-                             const std::array<float, 4> &range,
+  std::optional<int32_t> add(int32_t axis, int32_t device, int32_t physicalAxis,
+                             float sample, const std::array<float, 4> &range,
                              int32_t deviceType);
   void remove(int32_t axis, int32_t device, int32_t physicalAxis);
   bool setSmooth(int32_t axis, const std::array<float, 5> &values);
   void reset();
-  // Stock input frame counter and keyboard/button sampling; unsupported analog or
-  // advanced smoothing paths return nullopt.
+  // Stock input frame counter and keyboard/button sampling; unsupported analog
+  // or advanced smoothing paths return nullopt.
   void beginFrame(float deltaSeconds);
   std::optional<float> sampleAxis(int32_t axis);
+  // Why the latest sampleAxis returned nullopt (diagnostics only).
+  const char *lastBlock() const { return lastBlock_; }
 
   const std::array<PlayerAxis, 76> &axes() const { return axes_; }
   const std::array<PlayerMapping, 152> &mappings() const { return mappings_; }
@@ -133,6 +171,7 @@ private:
   int32_t mappingCount_ = 0;
   uint32_t inputFrame_ = 0;
   float deltaMilliseconds_ = 0.0f;
+  const char *lastBlock_ = "";
 };
 
 struct PlayerConfig {
@@ -156,6 +195,10 @@ struct PlayerInstance {
   OwnerLink renderTarget;
   bool driverPoseParityReported = false;
   bool scriptedControlOverride = false;
+  // Stock player device +0x242c. Only console "AI" command handlers write it
+  // (all.c:39537, all.c:90422); car activate stores the message 0x15 reply
+  // (FUN_0047b220 case 0x15) on the car runtime as +0x1edc.
+  int32_t debugAiValue = 0;
   std::array<OwnerLink, 8> debugText;
   ~PlayerInstance() {
     setLinkOwner(renderInstance, nullptr);
@@ -249,10 +292,11 @@ struct CameraRendererFields {
 };
 CameraRendererFields makeCameraRendererFields(const CameraResource &camera);
 CameraRendererFields updateCameraRendererFields(const CameraResource &camera,
-                                               float fallbackAspect);
+                                                float fallbackAspect);
 // Perspective matrix from 004ba4b0 -> 0058eadb. Host trigonometry may round
 // differently from the x87 instructions used by the original.
-std::array<float, 16> cameraProjectionMatrix(const CameraRendererFields &fields);
+std::array<float, 16>
+cameraProjectionMatrix(const CameraRendererFields &fields);
 // Inverts the root bone's world matrix. Singular or nonfinite inputs return
 // null instead of propagating the original's undefined divide-by-zero result.
 std::optional<std::array<float, 16>>
@@ -329,7 +373,10 @@ struct WorldNode : LinkOwner {
   std::optional<ViewportInstance> viewport;
   std::optional<CameraResource> camera;
   std::optional<PhysicsBox> physicsBox;
-  // Shared with the incomplete ground preparation so the body outlives this node.
+  // Render-bone references represented by the physics instance's +0x70 list.
+  size_t physicsBoneAttachments = 0;
+  // Shared with the incomplete ground preparation so the body outlives this
+  // node.
   std::shared_ptr<GroundRuntime> groundBody;
   // The host frame and its viewport link exist only for a created camera
   // render instance. Host renderer and ResourceWorld must outlive this node.
@@ -387,6 +434,16 @@ public:
   GameWorld(const GameWorld &) = delete;
   GameWorld &operator=(const GameWorld &) = delete;
   ~GameWorld();
+  // Multiple ResourceWorlds can share a tree; the most recently attached is
+  // the current resolver and destruction restores the previous one.
+  void attachResourceWorld(ResourceWorld &resources);
+  const std::vector<ResourceWorld *> &resourceWorlds() const {
+    return resourceWorlds_;
+  }
+  void detachResourceWorld(ResourceWorld &resources);
+  ResourceWorld *resourceWorld() const {
+    return resourceWorlds_.empty() ? nullptr : resourceWorlds_.back();
+  }
 
   // DAT_006200a4 starts at 1 in the stock executable and is advanced by
   // the main loop. The host loop must update it as frames advance.
@@ -428,29 +485,37 @@ public:
   // ResourceWorld and GameWorld share this tree, so pack-mounted nodes can
   // be parents of instances without transferring ownership of either node.
   std::optional<ResourceTreeHandle> attachExternal(ResourceTreeHandle parent,
-                                                    LinkOwner &owner);
+                                                   LinkOwner &owner);
   bool detachExternal(ResourceTreeHandle handle);
+  bool containsResource(ResourceTreeHandle handle) const {
+    return tree_.contains(handle);
+  }
   WorldNode *addChildUnderExternal(ResourceTreeHandle parent, LinkOwner &owner,
                                    uint32_t parentType, LinkOwner *parentSector,
                                    const std::string &name, uint32_t flags);
-  WorldNode *addTypedChildUnderExternal(ResourceTreeHandle parent, LinkOwner &owner,
-                                        uint32_t parentType, LinkOwner *parentSector,
-                                        uint32_t type, const std::string &name,
+  WorldNode *addTypedChildUnderExternal(ResourceTreeHandle parent,
+                                        LinkOwner &owner, uint32_t parentType,
+                                        LinkOwner *parentSector, uint32_t type,
+                                        const std::string &name,
                                         uint32_t flags);
-  std::optional<std::vector<LinkOwner *>> childOwners(ResourceTreeHandle parent) const;
+  std::optional<std::vector<LinkOwner *>>
+  childOwners(ResourceTreeHandle parent) const;
   LinkOwner *parentOwner(ResourceTreeHandle child) const;
   // FUN_00537d80 / FUN_00537de0 keep per-type loaded and unloaded lists.
   void trackLoadState(LinkOwner &owner, uint32_t type, bool loaded);
   void forgetLoadState(LinkOwner &owner);
   std::vector<LinkOwner *> loadList(uint32_t type, bool loaded) const;
   void markLoaded(WorldNode &node);
-  void noteRecentUse(LinkOwner &owner, uint32_t type, uint32_t &stamp, bool &queued);
+  void noteRecentUse(LinkOwner &owner, uint32_t type, uint32_t &stamp,
+                     bool &queued);
   std::vector<LinkOwner *> recentlyUsed(uint32_t type) const;
   void finishRecentUse(LinkOwner &owner, uint32_t type);
   void registerViewport(WorldNode &node, int32_t initialPriority);
   bool activateViewport(WorldNode &node);
   void deactivateViewport(WorldNode &node);
   std::vector<WorldNode *> activeViewports();
+  // One-shot HUD diagnostic: log each active viewport's render attachments.
+  void logViewportAttachments();
   bool attachConfig(WorldNode &node);
   WorldNode *configNode();
   bool attachGameParent(LinkOwner &node);
@@ -461,22 +526,29 @@ public:
   }
   float cursorSensitivity() const { return cursorSensitivity_; }
   int32_t systemCursor() const { return systemCursor_; }
-  using CursorInput = std::function<std::optional<std::array<float, 3>>() >;
+  using CursorInput = std::function<std::optional<std::array<float, 3>>()>;
   void setCursorInput(CursorInput input) { cursorInput_ = std::move(input); }
   const CursorInput &cursorInput() const { return cursorInput_; }
   const std::vector<WorldNode *> &staticBoxes() const { return boxBodies_; }
   using CursorSelector = std::function<bool(int32_t, bool, std::string &)>;
-  void setCursorSelector(CursorSelector selector) { cursorSelector_ = std::move(selector); }
+  void setCursorSelector(CursorSelector selector) {
+    cursorSelector_ = std::move(selector);
+  }
   const CursorSelector &cursorSelector() const { return cursorSelector_; }
   bool changeCursorVisibility(bool show, std::string &error);
   int32_t cursorDisplayCount() const { return cursorDisplayCount_; }
   void initPlayerFactory(LinkOwner &soundResource);
   bool attachPlayerInput(WorldNode &node);
   const std::vector<WorldNode *> &playerInputs() const { return playerInputs_; }
-  void setInputDevices(std::vector<std::string> names) { inputDevices_ = std::move(names); }
-  const std::optional<std::vector<std::string>> &inputDevices() const { return inputDevices_; }
-  void setInputReaders(std::function<std::optional<float>(int32_t, int32_t)> sample,
-                       std::function<std::optional<int32_t>(int32_t, int32_t)> type) {
+  void setInputDevices(std::vector<std::string> names) {
+    inputDevices_ = std::move(names);
+  }
+  const std::optional<std::vector<std::string>> &inputDevices() const {
+    return inputDevices_;
+  }
+  void setInputReaders(
+      std::function<std::optional<float>(int32_t, int32_t)> sample,
+      std::function<std::optional<int32_t>(int32_t, int32_t)> type) {
     inputSample_ = std::move(sample);
     inputType_ = std::move(type);
   }
@@ -496,6 +568,9 @@ public:
   bool queueDestroy(WorldNode &node);
   bool drainDeferredDestroy(std::string &error);
   size_t deferredDestroyCount() const { return deferredDestroy_.size(); }
+  // 00498810 appends a deduplicated owner link to the collision work list.
+  bool queueCollisionUpdate(WorldNode &node);
+  size_t collisionUpdateCount() const { return collisionUpdates_.size(); }
 
   // The world node that a link owner is, or null (a script node, or a node of
   // another world).
@@ -516,34 +591,65 @@ public:
   // Cars are nodes whose runtime is marked isCar. count 1 carries that node's
   // instance id and host position. More than one does not pick a winner.
   PlayerCarNote playerCarNote() const;
+  // Instance ids of every node whose runtime is a car, in node order.
+  std::vector<uint32_t> carInstanceIds() const;
   bool hasNodeFlag(uint32_t flag) const;
   bool hasNodeType(uint32_t type) const;
   size_t countNodeType(uint32_t type) const;
   bool hasLoadedNodeType(uint32_t type) const;
   std::optional<std::vector<WorldNode *>> children(const WorldNode &node) const;
   const WorldNode *parent(const WorldNode &node) const;
-  // Supported subset of stock DAT_00765f60: created and loaded type-1 instances.
-  // Bounded 004a5190 step. Empty physics and static boxes use the free-body
-  // step. An armed direct camera follow is integrated with cameraFollowForce
-  // after world forces. Other dynamic bodies still fail the call after that
-  // camera step.
+  // Supported subset of stock DAT_00765f60: created and loaded type-1
+  // instances. Bounded 004a5190 step. Empty physics and static boxes use the
+  // free-body step. An armed direct camera follow is integrated with
+  // cameraFollowForce after world forces. Unsupported dynamic bodies reject
+  // the call before the camera or world clock changes.
   bool stepEmptyPhysics(float seconds, std::string &error);
   // Applies cameraFollowForce while other dynamic bodies stay registered.
   // Does not solve collision, joints, or wheel contacts.
   bool stepArmedCameraFollow(float seconds, std::string &error);
+  // Bounded 004a5190 for the registered car trees plus armed camera follows.
+  // The hooks supply the per-frame car work that stock runs through its world
+  // callbacks and collision traversal (see LiveCarStepHooks). Fails, leaving
+  // every body unchanged, when other dynamic work is registered.
+  bool stepRegisteredCars(float seconds, const LiveCarStepHooks &hooks,
+                          std::string &error);
+  // Instance nodes of registered cars (a car body is registered with physics).
+  std::vector<WorldNode *> carNodes();
   // True when stepEmptyPhysics will apply cameraFollowForce to this camera.
   // On false, *block is a 4-character code for the first failed predicate.
   bool directCameraFollowReady(const CameraDeviceResources &camera,
                                const char **block = nullptr);
   float physicsTime() const { return physicsWorld_.time; }
   // Stock player getInfo(0x43): normalized sampled value for axes 1..75.
-  // nullopt means the target, axis-zero scratch value, or input mode is unsupported.
+  // nullopt means the target, axis-zero scratch value, or input mode is
+  // unsupported.
   std::optional<float> playerControlValue(LinkOwner *player, int32_t axis);
-  bool registerStaticBox(WorldNode &node, const std::array<float, 3> &halfExtents);
+  bool registerStaticBox(WorldNode &node,
+                         const std::array<float, 3> &halfExtents);
+  // GameWorld owns the complete body tree until unregister or owner detach.
+  // External owners must already be attached; callers must clear any borrowed
+  // body pointers before unregistering. Object stepping remains unsupported.
+  bool registerObjectPhysics(LinkOwner &owner, object::InstanceHandle physics);
+  bool unregisterObjectPhysics(LinkOwner &owner);
+  bool unregisterDynamicBody(WorldNode &node);
   bool registerDynamicBody(WorldNode &node, std::shared_ptr<physics::Body> body,
                            std::shared_ptr<const physics::BodyProto> prototype);
-  bool unregisterDynamicBody(WorldNode &node);
+  // Creates the stock-named type-2 body nodes under the car instance in
+  // construction order, and registers only car_root as a physics root.
+  // Returns car_root; failure removes every node created by this call.
+  WorldNode *registerCarPhysics(WorldNode &node,
+                                std::shared_ptr<CarPhysics> car,
+                                std::string &error);
   std::weak_ptr<physics::Body> dynamicBody(WorldNode &node) const;
+  // 00424fe0/004250b0: two ordered audio camera slots. Duplicate
+  // registration is ignored and removal fills the gap with the last slot.
+  void registerAudioListener(WorldNode &physicsNode);
+  void unregisterAudioListener(WorldNode &physicsNode);
+  // 004285f4/00428xxx: slot zero supplies the listener; absent slots use the
+  // stock origin and default forward/up directions.
+  bool audioListener(physics::Vec3 &position, physics::Vec3 &forward,
+                     physics::Vec3 &up);
   size_t dynamicBodyCount() const { return dynamicBodies_.size(); }
   size_t staticBoxGeometryCount() const { return boxGeometries_.size(); }
   size_t staticBoxBodyCount() const { return boxBodies_.size(); }
@@ -559,7 +665,10 @@ private:
   bool destroySubtree(ResourceTreeHandle handle);
   void release(WorldNode &node);
   bool armedCameraFollowCount(int &ready, std::string &error);
-  bool integrateArmedCameraFollows(float seconds, bool &otherDynamic, std::string &error);
+  bool integrateArmedCameraFollows(float seconds, bool &otherDynamic,
+                                   std::string &error);
+
+private:
   ResourceTree tree_;
   InstanceIds ids_;
   std::unordered_map<uint64_t, std::unique_ptr<WorldNode>> nodes_;
@@ -570,6 +679,9 @@ private:
   ClassExists classExists_;
   std::array<std::vector<std::unique_ptr<OwnerLink>>, 3> hooks_;
   std::vector<std::unique_ptr<OwnerLink>> deferredDestroy_;
+  std::vector<std::unique_ptr<OwnerLink>> audioListeners_;
+  std::vector<std::unique_ptr<OwnerLink>> collisionUpdates_;
+  std::vector<ResourceWorld *> resourceWorlds_;
   bool drainingDestroy_ = false;
   std::vector<WorldNode *> boxGeometries_;
   std::vector<WorldNode *> boxBodies_;
@@ -578,6 +690,9 @@ private:
     std::shared_ptr<physics::Body> body;
   };
   std::map<WorldNode *, std::shared_ptr<DynamicBodyOwnership>> dynamicBodies_;
+  std::map<WorldNode *, std::shared_ptr<CarPhysics>> carBodies_;
+  std::map<WorldNode *, std::shared_ptr<physics::Body>> carChildBodies_;
+  std::map<LinkOwner *, object::InstanceHandle> objectPhysics_;
   physics::World physicsWorld_;
   std::map<uint32_t, std::vector<LinkOwner *>> recentlyUsed_;
   std::map<uint32_t, std::vector<LinkOwner *>> loadedNodes_;

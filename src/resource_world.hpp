@@ -126,11 +126,14 @@ private:
 struct SoundSample;
 struct ResourceTextureCache;
 struct PreparedSpatialGamePayload;
+namespace object {
+class ObjectRuntime;
+}
 struct ResourceNode : LinkOwner {
   ResourceTreeHandle handle;
   uint32_t type = 0;          // +0x4c
   uint32_t flags = 0;         // +0x54: entry flags | NodeTypeInfo::baseFlags
-  uint16_t payloadSlot = 0; // pack containing this descriptor's payload
+  uint16_t payloadSlot = 0;   // pack containing this descriptor's payload
   uint32_t payloadOffset = 0; // +0x58, file offset in the pack
   uint32_t payloadSize = 0;   // +0x5c
   // +0x60, only for type 8 (FUN_00544010 passes the entry alias only for
@@ -157,6 +160,9 @@ struct ResourceNode : LinkOwner {
   std::shared_ptr<GroundFactoryResult> groundFactory;
   // Decoded passive type-1 payload, retained for the node's loaded lifetime.
   std::shared_ptr<PreparedSpatialGamePayload> spatialPayload;
+  // Loaded inline ICFG object instance (bounds/body/render/LOD/sound state);
+  // released with the node, exactly as stock releases the object instance.
+  std::shared_ptr<object::ObjectRuntime> objectRuntime;
   uint32_t eventMask = 0;
   std::vector<std::unique_ptr<EventSubscription>> eventSubscriptions;
   float loadPriority = 0.0f; // +0x68
@@ -225,6 +231,8 @@ class SceneMaterialResources;
 class SceneRenderInstance;
 struct ScxModel;
 std::optional<uint64_t> stockMeshVertexBytes(const ScxModel &model);
+// Exact bytes when the format is modelled, else a sound upper bound for v4.
+std::optional<uint64_t> stockMeshVertexBytesUpperBound(const ScxModel &model);
 
 // What the VM or a native gets back from a lookup. `owner` is the object that
 // links attach to. A type-8 node found through a mount has both packNode and
@@ -341,6 +349,10 @@ public:
   // rendering and collision consumers still reject unsupported effects.
   bool loadPassiveSpatialGame(ResourceNode &node, std::string &error);
   bool unloadPassiveSpatialGame(ResourceNode &node, std::string &error);
+  // Listener devices ("walk" FUN_0042ced0, "road" FUN_0042c1c0): stock
+  // constructs a small object and defers behavior to script commands. Marks
+  // the node loaded with no geometry or instances.
+  bool loadListenerGame(ResourceNode &node, std::string &error);
   // Discard only unloaded preparation with uniquely indexed type-1 children.
   // Other child types, duplicate IDs and failed registration cannot be reset.
   // Mounted dependencies stay mounted.
@@ -384,6 +396,10 @@ public:
   bool queueFontLoad(const ResolvedNode &node, std::string &error);
   bool completePendingPackLoads(uint32_t loadRate, std::string &error);
   size_t pendingPackLoads() const { return pendingPackLoads_.size(); }
+  // 005378b0 / 005378d0: the loading flag is based on a 32-frame
+  // history of visited queued requests, not the current queue length.
+  void resetLoadingHistory(uint32_t loadRate);
+  bool isLoading() const { return loading_; }
   // Associates a loaded host material with a type-14 node. The identity link
   // detaches if the node is destroyed, preventing reuse of a stale ID.
   bool bindSceneMaterial(const ResolvedNode &node,
@@ -400,6 +416,8 @@ public:
   bool bindSceneTexture(const ResolvedNode &node,
                         std::shared_ptr<ResourceTextureCache> texture);
   std::shared_ptr<ResourceTextureCache> sceneTexture(const ResolvedNode &node);
+  // Loads the stock type-13 light payload and links its attenuation textures.
+  bool loadSceneLight(ResourceNode &node, std::string &error);
   bool bindSceneLight(const ResolvedNode &node, SceneRenderLight light);
   const SceneRenderLight *sceneLight(const ResolvedNode &node);
   bool bindSceneRenderInstance(const ResolvedNode &node,
@@ -419,6 +437,11 @@ public:
   // Cities that own a factory result. density is the last city that stored
   // one, in node creation order. One Free Ride city makes that the live value.
   GroundRunSnapshot groundSnapshot() const;
+  // Every loaded city sector (a type-1 node that owns a ground factory)
+  // whose bounds come within `margin` of the point (a body's extent, not only
+  // its centre). Static city geometry is the union of them.
+  std::vector<ResourceNode *>
+  groundSectorsAt(const std::array<float, 3> &point, float margin = 0) const;
   GroundWaterNote groundWaterNote() const;
 
   // FUN_005447d0 is what loads a node. It is not modelled; this names why.
@@ -426,13 +449,13 @@ public:
 
 private:
   TextureAllocationInventory textureAllocations_;
-  bool stockBatchHistoryUnknown_ = false;
   struct PackState {
     MountState state = MountState::Unmounted;
   };
   ResourceNode *createNode(uint16_t slot, const PackView &view,
                            const RpkEntry &entry, MountResult &result,
-                           bool &crashed, ResourceNode *explicitParent = nullptr);
+                           bool &crashed,
+                           ResourceNode *explicitParent = nullptr);
   bool parseGamePayload(ResourceNode &node, GameResourcePayload &payload,
                         std::string &error, bool parseTail);
   ResolvedNode wrap(ResourceNode &node);
@@ -463,10 +486,17 @@ private:
     OwnerLink owner;
     std::shared_ptr<ResourceTextureCache> texture;
   };
-  std::unordered_map<uint32_t, std::unique_ptr<SceneTextureSlot>> sceneTextures_;
+  std::unordered_map<uint32_t, std::unique_ptr<SceneTextureSlot>>
+      sceneTextures_;
   struct SceneLightSlot {
-    ~SceneLightSlot() { setLinkOwner(owner, nullptr); }
+    ~SceneLightSlot() {
+      setLinkOwner(owner, nullptr);
+      setLinkOwner(attH, nullptr);
+      setLinkOwner(attV, nullptr);
+    }
     OwnerLink owner;
+    OwnerLink attH;
+    OwnerLink attV;
     SceneRenderLight light;
   };
   std::unordered_map<uint32_t, std::unique_ptr<SceneLightSlot>> sceneLights_;
@@ -481,6 +511,10 @@ private:
     OwnerLink owner;
   };
   std::vector<std::unique_ptr<PendingPackLoad>> pendingPackLoads_;
+  std::array<uint32_t, 32> loadingHistory_{};
+  uint32_t loadingHistorySum_ = 0;
+  size_t loadingHistoryIndex_ = 0;
+  bool loading_ = false;
   std::vector<PackState> states_;
   std::vector<std::unique_ptr<ResourceNode>> nodes_;
   std::unordered_map<uint32_t, ResourceNode *> byId_;

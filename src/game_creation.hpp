@@ -19,6 +19,8 @@ bool loadCarScriptPrototype(ResourceWorld& resources, ScriptNode& source,
                             const CarCameraSettings* cameraSettings = nullptr);
 bool loadPartScriptPrototype(ResourceWorld& resources, ScriptNode& source,
                              const std::string& configPath, std::string& error);
+bool loadButtonScriptPrototype(ResourceWorld& resources, ScriptNode& source,
+                               const std::string& configPath, std::string& error);
 
 // A validated request only: it does not create, allocate, attach or start an
 // object.

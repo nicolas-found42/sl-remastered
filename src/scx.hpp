@@ -24,12 +24,26 @@ struct ScxProperty {
 	uint32_t raw = 0;
 };
 
+// Original version-3 material fields used by the stock material converter.
+// Indices and channels are signed 16-bit values; -1 denotes no texture.
+struct ScyV3Material {
+	uint32_t recordSize = 0;
+	std::array<float, 3> specular{};
+	float specularStrength = 0.0f;
+	float shininess = 0.0f;
+	std::array<int32_t, 7> textureIndices{{-1, -1, -1, -1, -1, -1, -1}};
+	std::optional<int32_t> diffuseChannel;
+	std::optional<int32_t> layer2Channel;
+};
+
 struct ScxMaterial {
 	std::string name;
+	uint32_t recordSize = 0;
 	std::array<float, 4> diffuse{};
 	uint32_t flags = 0;
 	uint32_t functionWord = 0;
 	std::vector<ScxTextureMap> maps;
+	std::optional<ScyV3Material> scyV3;
 	std::vector<ScxProperty> properties;
 };
 

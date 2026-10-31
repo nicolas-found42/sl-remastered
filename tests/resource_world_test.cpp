@@ -195,6 +195,10 @@ static void typeTable() {
   CHECK(stockMeshVertexBytes(quad) == 160);
   quad.materials[0].maps[0].slot = 1;
   CHECK(!stockMeshVertexBytes(quad));
+  CHECK(stockMeshVertexBytesUpperBound(quad) == 4u * 304u);
+  CHECK(stockMeshVertexBytesUpperBound(mesh) == 1031u * 304u);
+  mesh.version = 5;
+  CHECK(!stockMeshVertexBytesUpperBound(mesh));
   for (uint32_t type :
        {1u, 2u, 3u, 5u, 6u, 7u, 8u, 9u, 10u, 12u, 13u, 14u, 18u, 19u, 20u, 21u})
     CHECK(nodeTypeInfo(type));
@@ -279,7 +283,7 @@ static void meshInventory() {
   CHECK(!resources.forceRenderPreflight(error, 100000, 100000, 100000, 5600));
   CHECK(resources.forceRenderPreflight(error, 100000, 100000, 100000, 5601));
   model->version = 4;
-  CHECK(!resources.stockSceneMeshUpperBound());
+  CHECK(resources.stockSceneMeshUpperBound().has_value());
   model->version = 3;
   world.destroy(*mesh);
   CHECK(resources.stockSceneMeshUpperBound() == 0);
@@ -920,9 +924,9 @@ static void createsOnMountedScript() {
       ReceiverBinding other;
       other.getInfo = [](int) { return std::optional<int32_t>(0); };
       const auto pending = createNativeInstance(world, underPack, &other, &rw);
-      CHECK(pending.status == CreationStatus::Unsupported &&
-            pending.issue == CreationIssue::ParentNotLoaded &&
-            !other.link.owner);
+      // FUN_00536a10 links under the pack node without testing its load state.
+      CHECK(pending.status == CreationStatus::Created && pending.node &&
+            world.parentOwner(pending.node->handle) == parent.node.owner);
       std::string loadError;
       const auto unloaded = world.loadList(1, false);
       CHECK(std::find(unloaded.begin(), unloaded.end(), parent.node.owner) !=
@@ -1101,9 +1105,57 @@ static void malformedGamePreparation() {
       CHECK(!resources.prepareGamePayload(node, result, error));
       CHECK(error == "type-1 external pack index is out of range");
       CHECK(resources.nodeCount() == count && !node.loaded());
+      CHECK(!resources.loadPassiveSpatialGame(node, error));
+      CHECK(error == "type-1 external pack index is out of range" &&
+            resources.nodeCount() == count && !node.loaded() && !node.spatialPayload);
       node.payloadSize = 19;
       CHECK(!resources.prepareGamePayload(node, result, error));
       CHECK(resources.nodeCount() == count && !node.loaded());
+    }
+  }
+  fs::remove_all(dir);
+}
+
+static void passiveExternalLoad() {
+  namespace fs = std::filesystem;
+  char pattern[] = "/tmp/slrr-passive-extp-XXXXXX";
+  const char *made = mkdtemp(pattern);
+  CHECK(made);
+  if (!made) return;
+  const fs::path dir = made;
+  auto bytes = makePack({"other.rpk"}, {{0, 1, 1}});
+  const uint32_t offset = static_cast<uint32_t>(bytes.size());
+  put32(bytes, 0); put32(bytes, 0);
+  put32(bytes, 0x50545845); put32(bytes, 4); put32(bytes, 1);
+  writeFile(dir / "parent.rpk", bytes);
+  writeFile(dir / "other.rpk", makePack({}, {}));
+  {
+    PackRegistry registry(dir);
+    GameWorld world;
+    CHECK(world.addRoot());
+    ResourceWorld resources(world, registry);
+    const uint16_t slot = slotOf(registry, "parent.rpk");
+    const auto found = resources.lookup((uint32_t(slot) << 16) | 1, 1);
+    CHECK(found.node.packNode);
+    if (found.node.packNode) {
+      auto &node = *found.node.packNode;
+      node.payloadOffset = offset;
+      node.payloadSize = 20;
+      ResourceBounds bounds{};
+      bounds.mode = 1;
+      bounds.values = {0, 0, 0, 1, 1, 1};
+      node.bounds = bounds;
+      PackView view;
+      std::string error;
+      CHECK(registry.view(slot, view, error) == PackViewStatus::Ok && view.dependencies.size() == 1);
+      CHECK(resources.loadPassiveSpatialGame(node, error));
+      CHECK(node.loaded() && node.spatialPayload && node.polygonCount == 0);
+      if (view.dependencies.size() == 1)
+        CHECK(resources.mountState(view.dependencies[0]) == MountState::Mounted);
+      CHECK(node.preparedPayloadActions == 2);
+      const auto count = resources.nodeCount();
+      CHECK(resources.loadPassiveSpatialGame(node, error));
+      CHECK(resources.nodeCount() == count && node.preparedPayloadActions == 2);
     }
   }
   fs::remove_all(dir);
@@ -1421,13 +1473,73 @@ static void cityGamePayload() {
                 std::fabs(hit.point[1]-9.81177f)<0.001f && hit.fraction>0 && hit.fraction<0.02f);
           CHECK(queryGamePhysicsFace(geometry, 4, {x,10.8f,z}, {x,9.8f,z}).status == GamePhysicsHitStatus::Miss);
           CHECK(queryGamePhysicsFace(geometry, 4, {x+100,9.8f,z}, {x+100,10.8f,z}).status == GamePhysicsHitStatus::Miss);
-          CHECK(queryGamePhysicsFace(geometry, 4, {x,9.81f,z}, {x,9.82f,z}).status == GamePhysicsHitStatus::Unsupported);
+          // 0049fa60's coplanar-graze branch clips the segment against the
+          // triangle with the interior on the non-positive side of each edge
+          // plane. A vertical graze projects both ends to the same point:
+          // f0 == f1, so the clip never crosses an edge and stock misses it.
+          CHECK(queryGamePhysicsFace(geometry, 4, {x, 9.81f, z},
+                                     {x, 9.82f, z})
+                    .status == GamePhysicsHitStatus::Miss);
+          // The literal 0049fa60 clip misses both a shallow graze whose
+          // projection crosses the face and one that starts inside and
+          // leaves: the interior side follows the winding, so the overlap
+          // test (exit <= enter breaks) never confirms those overlaps. Stock
+          // observable behavior is no contact from grazing faces, which is
+          // what the car step relies on (no abort). A graze far outside also
+          // misses.
+          CHECK(queryGamePhysicsFace(geometry, 4, {x - 2, 9.80f, z},
+                                     {x + 2, 9.82f, z})
+                    .status == GamePhysicsHitStatus::Miss);
+          CHECK(queryGamePhysicsFace(geometry, 4, {x - 2, 9.80f, z + 50},
+                                     {x + 2, 9.82f, z + 50})
+                    .status == GamePhysicsHitStatus::Miss);
+          // A graze that starts inside and leaves, like the other grazing
+          // configurations, misses: the literal clip's overlap confirmation
+          // never survives all three edges on normally-wound faces.
+          // A graze starting on the interior side of every edge and leaving
+          // through one survives the literal clip and reports the leaving
+          // fraction (max of the f0 >= 0 branch updates), with the mirrored
+          // point formula start + (start - end) * fraction.
+          const auto leaving = queryGamePhysicsFace(
+              geometry, 4, {x, 9.80f, z}, {x + 3, 9.82f, z});
+          CHECK(leaving.status == GamePhysicsHitStatus::Hit &&
+                leaving.fraction > 0 && leaving.fraction < 1 &&
+                leaving.point[0] < x &&
+                std::fabs(leaving.point[1] - 9.80f) < 0.02f);
           CHECK(queryGamePhysicsFace(geometry, 99, {x,9.8f,z}, {x,10.8f,z}).status == GamePhysicsHitStatus::Unsupported);
         }
       }
       node.payloadOffset = savedOffset;
       node.payloadSize = savedSize;
     }
+  }
+  // Synthetic 0049fa60 coplanar-graze cases on a controlled triangle: the
+  // literal clip misses every grazing configuration here (vertical-inside
+  // projects both ends to one point, the crossing graze fails the
+  // exit <= enter break on this winding), which is what the car step relies
+  // on when a probe runs parallel to a face.
+  {
+    GamePhysicsGeometry g;
+    g.vertices = {{{-2, 0, -2}, {0, 0, 2}, {2, 0, -2}}};
+    GamePhysicsTriangle t;
+    t.materialWord = 6;
+    t.vertices = {0, 1, 2};
+    t.normal = {0, 1, 0};
+    g.triangles = {t};
+    CHECK(queryGamePhysicsFace(g, 0, {0, 0.001f, 0}, {0, -0.001f, 0})
+              .status == GamePhysicsHitStatus::Miss);
+    CHECK(queryGamePhysicsFace(g, 0, {0, -0.001f, 0}, {0, 0.001f, 0})
+              .status == GamePhysicsHitStatus::Miss);
+    CHECK(queryGamePhysicsFace(g, 0, {-2, -0.001f, 0}, {2, 0.001f, 0})
+              .status == GamePhysicsHitStatus::Miss);
+    CHECK(queryGamePhysicsFace(g, 0, {0, -0.001f, 0}, {3, 0.001f, 0})
+              .status == GamePhysicsHitStatus::Miss);
+    CHECK(queryGamePhysicsFace(g, 0, {-2, -0.001f, 50}, {2, 0.001f, 50})
+              .status == GamePhysicsHitStatus::Miss);
+    // A perpendicular crossing uses the regular branch and hits.
+    const auto hit = queryGamePhysicsFace(g, 0, {0, -1, 0}, {0, 1, 0});
+    CHECK(hit.status == GamePhysicsHitStatus::Hit && hit.fraction == 0.5f &&
+          hit.materialWord == 6 && hit.point[1] == 0);
   }
   CHECK(!view.dependencies.empty());
   if (!view.dependencies.empty())
@@ -1588,6 +1700,7 @@ int main() {
   sharedParentage();
   mountedInstanceCount();
   malformedGamePreparation();
+  passiveExternalLoad();
   missingGameTypeCanBeRetried();
   zeroGameTypeClearsLink();
   geometryChunkBounds();
