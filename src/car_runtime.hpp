@@ -1,13 +1,15 @@
 #pragma once
 
 #include "car_config.hpp"
+#include "car_engine.hpp"
 #include "car_geometry.hpp"
-#include "car_wheel_geometry.hpp"
 #include "car_physics.hpp"
-#include <optional>
 #include "car_sfx_table.hpp"
+#include "car_wheel_geometry.hpp"
 #include "owner_links.hpp"
 #include "resource_id.hpp"
+#include <map>
+#include <optional>
 
 #include <array>
 #include <memory>
@@ -51,8 +53,8 @@ struct CarPrototype {
 
 struct RuntimeSlotState {
   RuntimeSlotState() = default;
-  RuntimeSlotState(const RuntimeSlotState&) = delete;
-  RuntimeSlotState& operator=(const RuntimeSlotState&) = delete;
+  RuntimeSlotState(const RuntimeSlotState &) = delete;
+  RuntimeSlotState &operator=(const RuntimeSlotState &) = delete;
   int32_t id = 0;
   PartSlotState transform{};
   CarVec3 orientation{};
@@ -87,6 +89,8 @@ struct CarWheelExtraState {
   float maxLength = 0.5f;
   float brake = 0.0f;
   float handBrake = 0.0f;
+  // 004493c0 initializes brake temperature, cooling and wear.
+  WheelBrakeThermalState brakeThermal{20.0f, 20.0f, 0.001f, 50000.0f};
   float width = 0.2f;
   std::array<float, 3> contactPatch{};
   std::array<float, 7> arm{};
@@ -94,6 +98,13 @@ struct CarWheelExtraState {
   int32_t oppositeWheel = -1;
   std::array<float, 6> instantCenter{};
   std::string damage;
+};
+struct CarFailureSoundEvent {
+  enum class Kind { Engine, Brake };
+  Kind kind;
+  int wheel; // -1 for engine
+  std::array<float, 3> position;
+  bool soundEnabled; // stock sound object availability; resolve before playback
 };
 
 struct CarSeat {
@@ -121,9 +132,38 @@ struct SeatCameraPose {
 struct CarControlSnapshot {
   // 0044e690 reads these floating axes before the integer axes.
   std::array<float, 4> continuous{}; // axes 1, 0x1c, 0x1d, 0x30
-  std::array<int32_t, 7> digital{};  // axes 0x31, 0x1f, 0x32, 0x36, 7, 0x27, 0x28
+  std::array<int32_t, 7>
+      digital{}; // axes 0x31, 0x1f, 0x32, 0x36, 7, 0x27, 0x28
 };
-std::optional<CarControlSnapshot> sampleCarControls(GameWorld& world, const CarSeat& seat);
+// Inputs not produced by the player device, read from the live physics step.
+struct CarControlStepContext {
+  float time = 0, step = 0;
+  float drivenWheelSpeed = 0;      // stock car +0x1e14, radians/second
+  float displayedEngineSpeed = 0;  // +0x1e1c, radians/second
+  bool automatic = false;          // stock flag 0x10
+  bool engineRunning = false;      // stock flag 0x4000
+  bool automaticInhibited = false; // stock flags 0x40004
+  bool positiveMass = true;
+};
+
+// Persistent shift state used by 0044e690, 0044d040 and 0044d330.
+struct CarShiftState {
+  bool buttonHeld = false;
+  bool reversing = false;
+  float clutchUntil = -1, upUntil = -1, downUntil = -1;
+};
+
+// Values supplied by the live stock car-physics state.
+struct CarDrivetrainStepContext {
+  float step = 0, rpmLimit = 0, maximumRpm = 0, powerScale = 0;
+  float engineInertiaFactor = 0, brakeFactor = 0;
+  float starterForce = 50; // stock prototype +0xcc; script may override it
+  bool engineRunning = false, sleeping = false, damageEnabled = true;
+  bool intermittentCut = false, nitrous = false;
+};
+
+std::optional<CarControlSnapshot> sampleCarControls(GameWorld &world,
+                                                    const CarSeat &seat);
 
 struct CarRuntimeInstance {
   bool isCar = false;
@@ -142,16 +182,22 @@ struct CarRuntimeInstance {
   std::optional<SeatCameraPose> seatCameraPose;
   // FUN_00449680 writes 0 here, at car +0x1edc, after the osd branch.
   int32_t activateInfo = 0;
-  // Stock car +0x13cc. FUN_0048ce30 writes this id into the look and move commands.
+  // Stock car +0x13cc. FUN_0048ce30 writes this id into the look and move
+  // commands.
   uint32_t cameraPoseTarget = 0;
-  CarSeat* findSeat(uint32_t playerId) const;
-  CarSeat* selectSeat(uint32_t playerId) const;
-  const VmObject* chassisObject = nullptr;
+  CarSeat *findSeat(uint32_t playerId) const;
+  CarSeat *selectSeat(uint32_t playerId) const;
+  const VmObject *chassisObject = nullptr;
   int32_t stateMode = 3;
   int32_t wheelId = -1;
   uint32_t partFlags = 0;
   uint32_t usedSlots = 0;
   int32_t colorIndex = 0;
+  // Stock FUN_00475ec0 colorscheme iterates EVERY body record: when a record
+  // has colours, FUN_0048c8c0 stores colours[scheme % count] on that record's
+  // render resource (+0xcc). Keyed here by render resource id, so each drawn
+  // part uses its own body's tint.
+  std::map<uint32_t, uint32_t> bodyTints;
   uint32_t renderType = 0;
   uint32_t textureId = 0;
   uint32_t meshId = 0;
@@ -176,7 +222,8 @@ struct CarRuntimeInstance {
   bool cruiseControl = false;
   std::array<float, 3> position{0.0f, 0.0f, 0.0f};
   std::array<float, 3> ypr{0.0f, 0.0f, 0.0f};
-  std::array<float, 9> rotation{1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 1.0f};
+  std::array<float, 9> rotation{1.0f, 0.0f, 0.0f, 0.0f, 1.0f,
+                                0.0f, 0.0f, 0.0f, 1.0f};
   std::array<float, 3> linearVelocity{0.0f, 0.0f, 0.0f};
   std::array<float, 3> angularVelocity{0.0f, 0.0f, 0.0f};
   std::vector<std::unique_ptr<RuntimeSlotState>> slots;
@@ -198,13 +245,56 @@ struct CarRuntimeInstance {
   float throttleState = 0.0f;
   float clutchState = 0.0f;
   int32_t currentGear = 0;
+  float currentGearRatio = 0; // car +0x1dd8, updated by 00454500
+  CarShiftState shiftState;
+  float engineAngularSpeed = 0;   // stock +0x1e18
+  float displayedEngineSpeed = 0; // stock +0x1e1c
+  float drivenWheelSpeed = 0;     // stock +0x1e14
+  float previousEngineRpm = 0;    // stock +0x1f4c
+  float couplingForce = 0;        // stock +0x1e24
+  // 00446180 prototype defaults at +0x14/+0x18. Script engine updates
+  // can replace these independently of the torque curve.
+  float maximumRpm = 7000.0f, rpmLimit = 10000.0f;
+  // 00454500 reads these globals; both initial image values are 4.0 and
+  // stock config options may override them.
+  float engineInertiaFactor = 4.0f, wheelBrakeFactor = 4.0f;
+  float starterForce = 50.0f;
+  float engineWear = 0, engineWearRate = 5e-8f;
+  float clutchWear = 0, clutchWearRate = 5e-8f;
+  float engineCoolingWear = 0, engineCoolingWearRate = 5e-6f;
+  float transmissionWear = 0, transmissionWearRate = 5e-8f;
+  float engineHeatCapacity = 320000, engineTemperature = 20;
+  float ambientEngineTemperature = 20, engineCooling = 9.375e-5f;
+  std::array<float, 3> engineCoolingParameters{10, 50, 0.01f};
+  float internalDamageFactor = 1.0f;
+  float engineFrictionMultiplier = 1.0f;
+  bool engineFailureSoundEnabled = false, brakeFailureSoundEnabled = false;
+  std::vector<CarFailureSoundEvent> failureSounds;
+  bool engineRunning = false;      // car +0x70 bit 0x4000
+  bool damageEnabled = true;       // inverse of car +0x70 bit 0x400
+  bool drivetrainSleeping = false; // car +0x70 bit 1
+  bool forcedBrake = false;        // car +0x70 bit 0x40000
+  CarDrivetrainStepContext drivetrainContext(const CarConfig &config,
+                                             float step) const;
+  // Advances player controls and transmission transactionally. Returns false
+  // without modifying this car when an unimplemented stock branch is needed.
+  bool advanceControls(const CarControlSnapshot &input, const CarConfig &config,
+                       const CarControlStepContext &context,
+                       std::string &error);
+  // Applies the supported 00454500 engine, clutch and brake branches to the
+  // actual persistent wheel objects. Failure leaves the car unchanged.
+  bool advanceDrivetrain(const CarConfig &config,
+                         const CarDrivetrainStepContext &context,
+                         std::string &error);
+  // 004493c0 copies wheel prototype controls into the live car instance.
+  void initializeWheelDrivetrain();
   float engineRpm = 0.0f;
   float nitrous = 0.0f;
   int32_t coolingFan = 0;
   int32_t headlightsOn = 0;
   int32_t flareState = 0;
   CarSfxTable sfxEngineUp, sfxEngineDown, sfxExhaust;
-  std::array<const VmObject*, 16> wheelRefs{};
+  std::array<const VmObject *, 16> wheelRefs{};
   std::array<CarWheel, 16> wheelStates{};
   std::array<CarWheelExtraState, 16> wheelExtras{};
   std::array<float, 16> wheelSteeringAngles{};
@@ -215,11 +305,13 @@ struct CarRuntimeInstance {
 // stock suspension object, independent of whether a tire is fitted. Missing
 // suspension objects preserve the previous angle. No bodies are rotated or
 // woken by this isolated calculation.
-std::optional<std::array<float, 16>> calculateCarSteeringAngles(
-    const CarRuntimeInstance& car, const CarConfig& chassis);
+std::optional<std::array<float, 16>>
+calculateCarSteeringAngles(const CarRuntimeInstance &car,
+                           const CarConfig &chassis);
 
 // Keeps successfully linked requests in result even when a later request is
 // unsupported. A false return never represents a usable complete car.
-bool loadCarPrototype(ResourceWorld& world, ScriptNode& source, const ResourceIdMapping& mapping,
-                      std::string_view text, std::unique_ptr<CarPrototype>& result,
-                      std::string& error, bool isCar = true);
+bool loadCarPrototype(ResourceWorld &world, ScriptNode &source,
+                      const ResourceIdMapping &mapping, std::string_view text,
+                      std::unique_ptr<CarPrototype> &result, std::string &error,
+                      bool isCar = true);

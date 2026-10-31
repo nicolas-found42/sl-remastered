@@ -1,8 +1,10 @@
 #include "car_physics.hpp"
 #include "physics_compound_finalize.hpp"
+#include "physics_compound_step.hpp"
 #include "car_runtime.hpp"
-#include <functional>
 #include <algorithm>
+#include <cmath>
+#include <functional>
 
 CarPhysics::~CarPhysics() {
   if (part) while (!part->installedChildren.empty()) detachPartPhysics(*part->installedChildren.back());
@@ -157,4 +159,63 @@ std::unique_ptr<CarPhysics> buildDetachedCarPhysics(CarPrototype& prototype,
       car->mass, gravity, error);
   if (!error.empty() || !finalizeCarPhysics(*car, error) || !indexCarBodies(*car, error)) return {};
   return car;
+}
+
+namespace {
+void sleepCarTree(const CarPhysics& car, physics::Body* body) {
+  if (body->flags & physics::kBodyAsleep) return;
+  physics::sleepBodyState(*body);
+  if (auto it = car.bodyChildren.find(body); it != car.bodyChildren.end())
+    for (auto* child : it->second) sleepCarTree(car, child);
+}
+}  // namespace
+
+namespace {
+void collectCarTree(const CarPhysics& car, physics::Body* body,
+                    std::vector<physics::Body*>& tree) {
+  tree.push_back(body);
+  if (auto it = car.bodyChildren.find(body); it != car.bodyChildren.end())
+    for (auto* child : it->second) collectCarTree(car, child, tree);
+}
+}  // namespace
+
+void resetCarToRest(CarPhysics& car) {
+  if (!car.root) return;
+  auto& state = car.root->state[car.root->current];
+  state.vel = {};
+  state.omega = {};
+  state.angMom = {};
+  state.force = {};
+  state.torque = {};
+  // 00458c00 `reset`: each wheel's suspension returns to its static preload,
+  // length = (record +0x60 + +0x50) - (|g| / invMass / wheels) / (+0x44).
+  // +0x44 is the spring stiffness handed to 00491f80 (the port's
+  // springForce, in N/m), so the quotient is the static compression in metres
+  // (equal to spring[1] at creation). [INFERENCE] +0x60 + +0x50 is
+  // initialLength (radius + spring[0]).
+  const float weightPerWheel =
+      std::fabs(physics::k::gravityY) * car.mass /
+      static_cast<float>(std::max<size_t>(car.wheels.size(), 1));
+  for (auto& wheel : car.wheels) {
+    if (!wheel) continue;
+    wheel->suspension.length =
+        wheel->initialLength - weightPerWheel / wheel->springForce;
+    wheel->suspension.force = 0;
+    wheel->angularSpeed = 0;
+    wheel->longitudinalVelocity = 0;
+    wheel->longitudinalSlip = 0;
+    wheel->slipAngle = 0;
+  }
+  sleepCarTree(car, car.root.get());
+}
+
+void suspendCar(CarPhysics& car) {
+  if (car.root) sleepCarTree(car, car.root.get());
+}
+
+void wakeCar(CarPhysics& car) {
+  if (!car.root) return;
+  std::vector<physics::Body*> tree;
+  collectCarTree(car, car.root.get(), tree);
+  physics::wakeDetachedCompound(tree);
 }

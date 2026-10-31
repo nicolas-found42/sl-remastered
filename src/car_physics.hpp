@@ -18,8 +18,8 @@ struct CarBodyObservation {
   ~CarBodyObservation() { setLinkOwner(resource, nullptr); }
 };
 
-// Detached car root and its existing part compound. World registration and
-// joints are absent.
+// Car root and part compound. GameWorld can register the root and selected
+// body resources; wheel joints and the complete world step remain absent.
 struct CarPhysics {
   CarPhysics() = default;
   ~CarPhysics();
@@ -30,7 +30,6 @@ struct CarPhysics {
   std::unique_ptr<PartPhysics> part;
   std::vector<std::unique_ptr<CarWheelRuntime>> wheels;
   // Non-owning index into the bodies held by this car, part, and wheels.
-  // It describes detached construction only; it is not a world or teardown API.
   std::unordered_map<const physics::Body*, std::vector<physics::Body*>> bodyChildren;
   std::unordered_map<const physics::Body*, std::shared_ptr<CarBodyObservation>> bodyObservations;
   std::vector<physics::Body*> teardownOrder;
@@ -42,6 +41,14 @@ struct CarPhysics {
 std::unique_ptr<CarPhysics> buildCarPhysics(std::unique_ptr<PartPhysics> part,
     float configuredMass, std::string& error);
 bool indexCarBodies(CarPhysics& car, std::string& error);
+// 'reset' car command (stock branch of the 00457xxx command parser): zero the
+// root's linear and angular velocity, then put the whole body tree to sleep
+// (004a7a80). Remaining reset fields (wheel slip/state, steering geometry,
+// controller state) are not ported; the caller logs that gap.
+void resetCarToRest(CarPhysics& car);
+// 00458c00 `suspend` / `wakeup`: sleep or wake the car's whole body tree.
+void suspendCar(CarPhysics& car);
+void wakeCar(CarPhysics& car);
 bool finalizeCarPhysics(CarPhysics& car, std::string& error);
 std::unique_ptr<CarPhysics> buildDetachedCarPhysics(CarPrototype& prototype,
     std::string_view arguments, float creationTime, const physics::Vec3& gravity,

@@ -1,4 +1,6 @@
 #include "car_physics.hpp"
+#include "game_physics_geometry.hpp"
+#include "physics_polyhedron.hpp"
 #include "world_model.hpp"
 #include <cassert>
 #include <cmath>
@@ -149,6 +151,150 @@ int main() {
   assert(specified && near(specified->mass, 1200));
   assert(!buildCarPhysics(nullptr, 1, error) && !error.empty());
   {
+    // 004a0aa0 uses the swept root sphere and a swept oriented mesh
+    // bounding box before passing surviving faces to the children.
+    GamePhysicsGeometry track;
+    track.vertices = {{-10, 0, -10}, {0, 0, 10}, {10, 0, -10}};
+    track.triangles.push_back({0, {0, 1, 2}, {0, 1, 0}});
+    ResourceBounds bounds;
+    bounds.mode = 1;
+    bounds.values = {0, 0, 0, 20, 20, 20};
+    ResourceBounds neighbor = bounds;
+    neighbor.values[0] = 40;
+    assert(updateSectorNeighbor(false, true, bounds, neighbor) ==
+           SectorNeighborTransition::Add); // touching X/Z bounds overlap
+    assert(updateSectorNeighbor(false, false, bounds, neighbor) ==
+           SectorNeighborTransition::Keep);
+    assert(updateSectorNeighbor(true, false, bounds, neighbor) ==
+           SectorNeighborTransition::Keep);
+    neighbor.values[2] = 41;
+    assert(updateSectorNeighbor(true, true, bounds, neighbor) ==
+           SectorNeighborTransition::Remove);
+    assert(updateSectorNeighbor(false, true, bounds, neighbor) ==
+           SectorNeighborTransition::Keep);
+    neighbor.mode = 0;
+    assert(updateSectorNeighbor(false, true, bounds, neighbor) ==
+           SectorNeighborTransition::Unsupported);
+    physics::BodyProto bodyProto;
+    bodyProto.shape.type = physics::ShapeType::Mesh;
+    bodyProto.shape.boundRadius = 2;
+    bodyProto.shape.core = std::make_shared<physics::CollisionCore>(
+        physics::boundsVertices({-1, -1, -1}, {1, 1, 1}));
+    physics::Body body;
+    body.proto = &bodyProto;
+    body.flags = physics::kBodyActive | physics::kBodyHasChildren;
+    body.state[0].pos = {0, 2, 0};
+    body.state[1].pos = {0, 0.5f, 0};
+    assert(queryParentFace(track, 0, body, bounds, false) ==
+           ParentFaceMask::Accepted);
+    assert(queryParentFace(track, 0, body, bounds, true) ==
+           ParentFaceMask::Rejected);
+    body.state[1].rot = {0, 0, 1, 0, 0, 1, 0, 0, -1, 0, 0, 0};
+    assert(queryParentFace(track, 0, body, bounds, false) ==
+           ParentFaceMask::Accepted);
+    physics::Body ancestor;
+    body.attachment =
+        physics::BodyAttachment{&ancestor, physics::RelativeBodyPose{}};
+    body.flags |= physics::kBodyChild;
+    assert(queryParentFace(track, 0, body, bounds, false) ==
+           ParentFaceMask::Accepted);
+    body.flags |= 0x20000;
+    assert(queryParentFace(track, 0, body, bounds, false) ==
+           ParentFaceMask::Unsupported);
+    body.flags &= ~uint32_t{0x20000};
+    body.state[0].pos = body.state[1].pos = {0, 10, 0};
+    assert(queryParentFace(track, 0, body, bounds, false) ==
+           ParentFaceMask::Rejected);
+    body.state[0].pos = body.state[1].pos = {0, 0.5f, 0};
+    bodyProto.shape.core.reset();
+    assert(queryParentFace(track, 0, body, bounds, false) ==
+           ParentFaceMask::Unsupported);
+  }
+  {
+    GameWorld world;
+    auto *root = world.addRoot();
+    auto *leaf = world.addChild(*root, "collision leaf", 0);
+    assert(leaf && world.queueCollisionUpdate(*leaf));
+    assert(world.queueCollisionUpdate(*leaf) &&
+           world.collisionUpdateCount() == 1);
+    assert(world.stepEmptyPhysics(0.00005f, error));
+    assert(world.collisionUpdateCount() == 1 && (leaf->flags & 0x10000000u));
+    assert(world.stepEmptyPhysics(0.001f, error));
+    assert(world.collisionUpdateCount() == 0 && !(leaf->flags & 0x10000000u));
+    auto *child = world.addChild(*leaf, "nested", 0);
+    assert(child && world.queueCollisionUpdate(*leaf));
+    const float time = world.physicsTime();
+    assert(!world.stepEmptyPhysics(0.01f, error));
+    assert(world.physicsTime() == time && world.collisionUpdateCount() == 1 &&
+           (leaf->flags & 0x10000000u));
+    assert(world.destroy(*child));
+    assert(world.stepEmptyPhysics(0.01f, error));
+    assert(world.collisionUpdateCount() == 0 && !(leaf->flags & 0x10000000u));
+    auto *box = world.addTypedChild(*leaf, 2, "static box", 0);
+    assert(box && world.registerStaticBox(*box, {1, 1, 1}));
+    world.markLoaded(*box);
+    const float smallRadius = box->physicsBox->radius;
+    box->bounds.mode = 0;
+    box->bounds.values = {4, 0, 0, smallRadius, smallRadius, smallRadius};
+    assert(world.queueCollisionUpdate(*leaf));
+    const float beforeProxy = world.physicsTime();
+    assert(!world.stepEmptyPhysics(0.01f, error));
+    assert(error.find("proxy discovery") != std::string::npos &&
+           world.physicsTime() == beforeProxy &&
+           world.collisionUpdateCount() == 1 && leaf->bounds.mode == 2);
+    box->flags |= 0x200000u;
+    assert(world.stepEmptyPhysics(0.01f, error));
+    assert(world.collisionUpdateCount() == 0 && leaf->bounds.mode == 1);
+    assert(world.destroy(*box));
+    box = world.addTypedChild(*leaf, 2, "large static box", 0);
+    assert(box && world.registerStaticBox(*box, {101, 0, 0}));
+    world.markLoaded(*box);
+    const float radius = box->physicsBox->radius;
+    box->bounds.mode = 0;
+    box->bounds.values = {4, 0, 0, radius, radius, radius};
+    assert(world.queueCollisionUpdate(*leaf));
+    assert(world.stepEmptyPhysics(0.01f, error));
+    assert(world.collisionUpdateCount() == 0 && leaf->bounds.mode == 1 &&
+           std::fabs(leaf->bounds.values[0] - 4) < 0.0001f &&
+           std::fabs(leaf->bounds.values[3] - radius) < 0.0001f);
+    assert(world.destroy(*box));
+    assert(world.queueCollisionUpdate(*leaf) && world.destroy(*leaf));
+    assert(world.stepEmptyPhysics(0.01f, error) &&
+           world.collisionUpdateCount() == 0);
+  }
+  {
+    GameWorld world;
+    auto *worldRoot = world.addRoot();
+    auto *node = world.addChild(*worldRoot, "car", 0);
+    auto detached = buildCarPhysics(
+        buildPartPhysics(config, geometry, "0,0,0,0,0,0,0", error), 0, error);
+    assert(detached && finalizeCarPhysics(*detached, error));
+    std::shared_ptr<CarPhysics> registered(std::move(detached));
+    auto observation = registered->bodyObservations.at(registered->root.get());
+    auto *rootNode = world.registerCarPhysics(*node, registered, error);
+    assert(rootNode && !world.registerCarPhysics(*node, registered, error));
+    const auto nodes = world.children(*node);
+    assert(nodes && nodes->size() == 3);
+    assert((*nodes)[0]->name == "part_comp" && (*nodes)[1]->name == "bbone" &&
+           (*nodes)[2] == rootNode && rootNode->name == "car_root");
+    assert(world.dynamicBody(*(*nodes)[0]).lock().get() ==
+           registered->part->root.get());
+    assert(world.dynamicBody(*(*nodes)[1]).lock().get() ==
+           registered->part->rootGeometryBody());
+    assert(world.dynamicBody(*rootNode).lock().get() == registered->root.get());
+    assert(observation->resource.owner == rootNode);
+    assert(!world.stepArmedCameraFollow(0.01f, error));
+    assert(world.physicsTime() == 0);
+    assert(!world.stepEmptyPhysics(0.01f, error));
+    assert(world.physicsTime() == 0);
+    std::weak_ptr<CarPhysics> weak = registered;
+    registered.reset();
+    assert(!weak.expired());
+    assert(world.destroy(*node));
+    assert(weak.expired() && !observation->body);
+    assert(world.dynamicBodyCount() == 0);
+  }
+  {
     // getInfo(0x2f) wheel override (all.c:68278-68310): a slot whose slottype
     // is in (100, 0x191) is posed from the wheel record, not from the target's
     // root geometry body. The runtime slot supplies the slottype to the attach.
@@ -223,6 +369,30 @@ int main() {
     assert(near(wheelSlotPos[0], 5) && near(wheelSlotPos[1], 1) &&
            near(wheelSlotPos[2], -1));
     detachPartPhysics(*wheelMounted);
+    GameWorld world;
+    auto *worldRoot = world.addRoot();
+    auto *carNode = world.addChild(*worldRoot, "car", 0);
+    std::shared_ptr<CarPhysics> registered(std::move(wheelCar));
+    registered->wheels[0]->hubBody->current = 2;
+    assert(!world.registerCarPhysics(*carNode, registered, error));
+    assert(world.children(*carNode)->empty() && world.dynamicBodyCount() == 0);
+    for (const auto &entry : registered->bodyObservations)
+      assert(!entry.second->resource.owner);
+    registered->wheels[0]->hubBody->current = 0;
+    auto *rootNode = world.registerCarPhysics(*carNode, registered, error);
+    assert(rootNode);
+    auto nodes = world.children(*carNode);
+    assert(nodes && nodes->size() == 5);
+    assert((*nodes)[0]->name == "part_comp" && (*nodes)[1]->name == "bbone" &&
+           (*nodes)[2] == rootNode && (*nodes)[3]->name == "hub" &&
+           (*nodes)[4]->name == "a_arm");
+    assert(world.dynamicBody(*(*nodes)[3]).lock().get() ==
+           registered->wheels[0]->hubBody.get());
+    assert(world.dynamicBody(*(*nodes)[4]).lock().get() ==
+           registered->wheels[0]->armBody.get());
+    assert(!registered->bodyObservations
+                .at(registered->wheels[0]->suspensionBody.get())
+                ->resource.owner);
   }
   std::cout << "car physics: ok\n";
 }

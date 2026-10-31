@@ -7,6 +7,7 @@
 #include <cassert>
 #include <cmath>
 #include <cstdio>
+#include <limits>
 #include <string>
 
 namespace {
@@ -111,8 +112,12 @@ int main() {
     player->player = std::make_unique<PlayerInstance>();
     player->playerInput = std::make_unique<PlayerInputState>();
     float key = 1;
-    player->playerInput->sampleInput = [&](int32_t, int32_t) { return std::optional<float>{key}; };
-    player->playerInput->inputType = [](int32_t, int32_t) { return std::optional<int32_t>{0}; };
+    player->playerInput->sampleInput = [&](int32_t, int32_t) {
+      return std::optional<float>{key};
+    };
+    player->playerInput->inputType = [](int32_t, int32_t) {
+      return std::optional<int32_t>{0};
+    };
     assert(player->playerInput->add(1, 0, 0xcb, 0, {0, 1, 0, -1}, 0) == 1);
     assert(player->playerInput->add(0x1c, 0, 0x11, 0, {0, 1, 0, 1}, 0) == 2);
     assert(player->playerInput->add(0x31, 0, 0x39, 0, {0, 1, 0, 1}, 0) == 3);
@@ -125,21 +130,26 @@ int main() {
            result->continuous[2] == 0 && result->digital[0] == 31);
     key = 0;
     result = sampleCarControls(world, seat);
-    assert(result && result->digital[0] == 31 && std::fabs(result->continuous[0] + 0.25f) < 1e-6f);
+    assert(result && result->digital[0] == 31 &&
+           std::fabs(result->continuous[0] + 0.25f) < 1e-6f);
     player->playerInput->beginFrame(0.00025f);
     result = sampleCarControls(world, seat);
     assert(result && result->continuous[0] == 0 && result->digital[0] == 0);
     player->player->scriptedControlOverride = true;
     assert(!sampleCarControls(world, seat));
     player->player->scriptedControlOverride = false;
-    player->playerInput->inputType = [](int32_t, int32_t) { return std::optional<int32_t>{1}; };
+    player->playerInput->inputType = [](int32_t, int32_t) {
+      return std::optional<int32_t>{1};
+    };
     player->playerInput->beginFrame(0.001f);
     assert(!sampleCarControls(world, seat));
-    assert(world.destroy(*player) && !seat.player.owner && !sampleCarControls(world, seat));
+    assert(world.destroy(*player) && !seat.player.owner &&
+           !sampleCarControls(world, seat));
   }
   {
     LinkOwner player, camera, render, osd, other;
-    player.value = 1; other.value = 2;
+    player.value = 1;
+    other.value = 2;
     CarRuntimeInstance car;
     car.seats.push_back(std::make_unique<CarSeat>());
     car.seats.push_back(std::make_unique<CarSeat>());
@@ -154,7 +164,8 @@ int main() {
     setLinkOwner(second->player, &other);
     assert(car.selectSeat(3) == nullptr);
     car.seats.clear();
-    assert(!player.head && !camera.head && !render.head && !osd.head && !other.head);
+    assert(!player.head && !camera.head && !render.head && !osd.head &&
+           !other.head);
   }
   PackRegistry packs(
       ".scratch/2005-extract/Program Files/Street Legal Racing - Redline");
@@ -193,14 +204,16 @@ int main() {
                         : !resource->owner.owner);
   prototype.reset();
   const CarCameraSettings initialCamera{0.4f, 1.25f};
-  assert(loadCarScriptPrototype(resources, source, path, error, &initialCamera));
+  assert(
+      loadCarScriptPrototype(resources, source, path, error, &initialCamera));
   assert(!source.loaded && source.car && world.nodeCount() == nodesBefore);
   assert(source.car->stage == CarPrototypeStage::PhysicsGeometryReady);
   auto *cached = source.car.get();
   const CarCameraSettings laterCamera{0.9f, 2.0f};
   assert(loadCarScriptPrototype(resources, source, path, error, &laterCamera));
   assert(source.car.get() == cached);
-  assert(source.car->cameraSettings && source.car->cameraSettings->distanceScale == 0.4f &&
+  assert(source.car->cameraSettings &&
+         source.car->cameraSettings->distanceScale == 0.4f &&
          source.car->cameraSettings->fieldOfViewScale == 1.25f);
   world.setClassResolver([](const std::string &) { return true; });
   ReceiverBinding binding;
@@ -236,29 +249,41 @@ int main() {
     assert(base > 0);
     const float radius = base / std::tan(angle);
     angles = calculateCarSteeringAngles(car, source.car->config);
-    assert(angles && std::fabs((*angles)[0] - std::atan2(base, radius + wheels[0]->anchor[0])) < 1e-6f &&
-           std::fabs((*angles)[1] - std::atan2(base, radius + wheels[1]->anchor[0])) < 1e-6f);
+    assert(angles &&
+           std::fabs((*angles)[0] -
+                     std::atan2(base, radius + wheels[0]->anchor[0])) < 1e-6f &&
+           std::fabs((*angles)[1] -
+                     std::atan2(base, radius + wheels[1]->anchor[0])) < 1e-6f);
     car.steeringState = -0.5f;
     angles = calculateCarSteeringAngles(car, source.car->config);
-    assert(angles && std::fabs((*angles)[0] + std::atan2(base, radius - wheels[0]->anchor[0])) < 1e-6f &&
-           std::fabs((*angles)[1] + std::atan2(base, radius - wheels[1]->anchor[0])) < 1e-6f);
+    assert(angles &&
+           std::fabs((*angles)[0] +
+                     std::atan2(base, radius - wheels[0]->anchor[0])) < 1e-6f &&
+           std::fabs((*angles)[1] +
+                     std::atan2(base, radius - wheels[1]->anchor[0])) < 1e-6f);
     auto noAckermann = source.car->config;
     noAckermann.maxSteer[1] = 0;
     auto missing = std::move(car.carPhysics->wheels[1]);
     car.wheelSteeringAngles[1] = 0.33f;
     angles = calculateCarSteeringAngles(car, noAckermann);
-    assert(angles && std::fabs((*angles)[0] + angle) < 1e-6f && (*angles)[1] == 0.33f);
+    assert(angles && std::fabs((*angles)[0] + angle) < 1e-6f &&
+           (*angles)[1] == 0.33f);
     car.carPhysics->wheels[1] = std::move(missing);
   }
   assert(created.node->carInstance->position[0] == 1.0f &&
          created.node->carInstance->position[1] == 2.0f);
-  auto *physicsRoot = world.nodeFor(created.node->carInstance->physicsRoot.owner);
-  assert(physicsRoot && physicsRoot->type == 2 && physicsRoot->name == "car_root");
-  assert(world.parent(*physicsRoot) == created.node && world.dynamicBodyCount() == 1);
+  auto *physicsRoot =
+      world.nodeFor(created.node->carInstance->physicsRoot.owner);
+  assert(physicsRoot && physicsRoot->type == 2 &&
+         physicsRoot->name == "car_root");
+  assert(world.parent(*physicsRoot) == created.node &&
+         world.dynamicBodyCount() == 1);
   auto body = world.dynamicBody(*physicsRoot);
-  assert(body.lock().get() == created.node->carInstance->carPhysics->root.get());
+  assert(body.lock().get() ==
+         created.node->carInstance->carPhysics->root.get());
   VmGameState game;
-  game.world = &world; game.resources = &resources;
+  game.world = &world;
+  game.resources = &resources;
   VmArena arena;
   arena.gameState = &game;
   auto object = std::make_unique<VmObject>();
@@ -268,24 +293,31 @@ int main() {
   arena.resourceStates.push_back({carRef, {}});
   game.bindings[1] = std::make_unique<ReceiverBinding>();
   setLinkOwner(game.bindings[1]->link, created.node);
-  const auto info = gameRefGetInfoIntInt({int32_t{1}, int32_t{0}}, carRef, &arena, nullptr);
+  const auto info =
+      gameRefGetInfoIntInt({int32_t{1}, int32_t{0}}, carRef, &arena, nullptr);
   const auto *value = std::get_if<VmValue>(&info);
-  assert(value && std::get<int32_t>(*value) == static_cast<int32_t>(physicsRoot->instanceId));
+  assert(value && std::get<int32_t>(*value) ==
+                      static_cast<int32_t>(physicsRoot->instanceId));
   assert(world.destroy(*created.node));
-  assert(body.expired() && world.dynamicBodyCount() == 0 && !game.bindings[1]->link.owner);
+  assert(body.expired() && world.dynamicBodyCount() == 0 &&
+         !game.bindings[1]->link.owner);
   assert(world.nodeCount() == nodesBefore);
   binding.initializeReceiver = [](WorldNode &) -> std::optional<std::string> {
     return std::string{"constructor failure"};
   };
-  const auto failed = createNativeInstance(world, request, &binding, &resources);
+  const auto failed =
+      createNativeInstance(world, request, &binding, &resources);
   assert(failed.status == CreationStatus::Unsupported && !failed.node);
   assert(world.nodeCount() == nodesBefore && world.dynamicBodyCount() == 0);
   binding.initializeReceiver = nullptr;
-  const auto recreated = createNativeInstance(world, request, &binding, &resources);
+  const auto recreated =
+      createNativeInstance(world, request, &binding, &resources);
   assert(recreated.status == CreationStatus::Created && recreated.node);
-  auto *recreatedRoot = world.nodeFor(recreated.node->carInstance->physicsRoot.owner);
+  auto *recreatedRoot =
+      world.nodeFor(recreated.node->carInstance->physicsRoot.owner);
   assert(recreatedRoot && world.destroy(*recreatedRoot));
-  assert(!recreated.node->carInstance->physicsRoot.owner && world.dynamicBodyCount() == 0);
+  assert(!recreated.node->carInstance->physicsRoot.owner &&
+         world.dynamicBodyCount() == 0);
   assert(world.destroy(*recreated.node) && world.nodeCount() == nodesBefore);
 
   // 00470910: compatibility is attachments-vs-attachments, so the mirror's
@@ -407,6 +439,179 @@ int main() {
     assert(carPartFindCompatibleSlot(*tyre, target, targetSlotId, f.world) ==
            1);
     assert(targetSlotId == 2 && target == rim);
+  }
+  {
+    CarRuntimeInstance car;
+    CarConfig config;
+    CarControlSnapshot input;
+    CarControlStepContext step;
+    std::string error;
+    step.time = 10;
+    step.step = 0.1f;
+    input.continuous[1] = 1;
+    input.digital[2] = 127;
+    assert(car.advanceControls(input, config, step, error));
+    assert(car.currentGear == 1 && car.clutchState == 1 &&
+           car.throttleState == 0);
+    step.time = 10.1f;
+    assert(car.advanceControls(input, config, step, error));
+    assert(car.currentGear == 1);
+    input.digital[2] = 0;
+    step.time = 10.4f;
+    assert(car.advanceControls(input, config, step, error));
+    assert(car.currentGear == 1 && car.clutchState == 0 &&
+           car.throttleState == 1);
+    input.digital[2] = -127;
+    assert(car.advanceControls(input, config, step, error));
+    assert(car.currentGear == 0);
+    input.digital[2] = 0;
+    assert(car.advanceControls(input, config, step, error));
+    input.digital[2] = -127;
+    assert(car.advanceControls(input, config, step, error));
+    assert(car.currentGear == 7);
+    step.automatic = true;
+    step.engineRunning = true;
+    step.drivenWheelSpeed = 2;
+    step.time = 20;
+    const auto gear = car.currentGear;
+    const auto clutch = car.clutchState;
+    assert(!car.advanceControls(input, config, step, error));
+    assert(car.currentGear == gear && car.clutchState == clutch &&
+           !error.empty());
+    step.automatic = false;
+    input.digital[2] = 0;
+    car.throttleState = -std::numeric_limits<float>::max();
+    input.continuous[1] = std::numeric_limits<float>::max();
+    const auto unchangedGear = car.currentGear;
+    assert(!car.advanceControls(input, config, step, error));
+    assert(car.throttleState == -std::numeric_limits<float>::max() &&
+           car.currentGear == unchangedGear);
+    car.throttleState = 0;
+    input.continuous[1] = 1;
+    input.digital[2] = 127;
+    car.forcedBrake = true;
+    assert(car.advanceControls(input, config, step, error));
+    assert(car.currentGear == 0 && car.brakeState == 1 &&
+           car.handbrakeState == 1 && car.throttleState == 0);
+  }
+  {
+    CarRuntimeInstance car;
+    CarConfig config;
+    car.carPhysics = std::make_shared<CarPhysics>();
+    auto wheel = std::make_unique<CarWheelRuntime>();
+    wheel->suspensionBody = std::make_unique<physics::Body>();
+    wheel->radius = 0.3f;
+    wheel->transferCoefficient = 1;
+    car.carPhysics->wheels.push_back(std::move(wheel));
+    car.wheelExtras[0].drive = 1;
+    car.currentGear = 1;
+    car.engineAngularSpeed = 1500.0f / 9.549296379089355f;
+    car.previousEngineRpm = 1500;
+    car.throttleState = 0.5f;
+    CarDrivetrainStepContext step;
+    step.step = 0.01f;
+    step.engineRunning = true;
+    step.damageEnabled = false;
+    step.rpmLimit = 6000;
+    step.maximumRpm = 7000;
+    step.powerScale = 200;
+    step.engineInertiaFactor = 1;
+    step.brakeFactor = 1;
+    std::string error;
+    assert(car.advanceDrivetrain(config, step, error));
+    assert(car.carPhysics->wheels[0]->angularSpeed < 0 && car.driveTorque > 0);
+    car.clutchState = 1;
+    const float speed = car.carPhysics->wheels[0]->angularSpeed;
+    assert(car.advanceDrivetrain(config, step, error));
+    assert(car.carPhysics->wheels[0]->angularSpeed == speed &&
+           car.couplingForce == 0);
+    step.damageEnabled = true;
+    assert(car.advanceDrivetrain(config, step, error));
+    assert(car.engineTemperature > 20 && car.engineWear > 0);
+    const float engineSpeed = car.engineAngularSpeed;
+    assert(car.carPhysics->wheels[0]->angularSpeed == speed);
+    step.damageEnabled = false;
+    car.currentGear = 0;
+    car.clutchState = std::numeric_limits<float>::quiet_NaN();
+    assert(!car.advanceDrivetrain(config, step, error));
+    assert(car.engineAngularSpeed == engineSpeed &&
+           car.carPhysics->wheels[0]->angularSpeed == speed);
+    car.clutchState = 1;
+    car.handbrakeState = 1;
+    car.wheelExtras[0].handBrake = 1;
+    car.wheelExtras[0].brakeThermal.baseHandbrake = 1;
+    car.wheelExtras[0].brakeThermal.wearRate = 10;
+    car.brakeFailureSoundEnabled = true;
+    car.carPhysics->wheels[0]->angularSpeed = 10;
+    step.engineRunning = false;
+    step.damageEnabled = true;
+    assert(car.advanceDrivetrain(config, step, error));
+    assert(car.wheelExtras[0].brakeThermal.wear == 1 &&
+           car.wheelExtras[0].bearing == 100 && car.failureSounds.size() == 1 &&
+           car.failureSounds[0].kind == CarFailureSoundEvent::Kind::Brake);
+    assert(car.engineAngularSpeed == 0 &&
+           car.carPhysics->wheels[0]->angularSpeed < 10);
+    const auto live = car.drivetrainContext(config, 0.01f);
+    assert(live.maximumRpm == 7000 && live.rpmLimit == 10000 &&
+           live.engineInertiaFactor == 4 && live.brakeFactor == 4 &&
+           live.powerScale ==
+               config.enginePower[0] *
+                   (1.0f - car.engineWear * car.engineWear * 0.6f));
+    car.currentGear = 1;
+    car.currentGearRatio = config.gearRatios[0];
+    car.shiftState = {};
+    car.wheelExtras[0].drive = 1;
+    car.carPhysics->wheels[0]->suspension.force = 1;
+    car.carPhysics->wheels[0]->longitudinalSlip = 0;
+    CarControlSnapshot controls;
+    controls.continuous[1] = 1;
+    CarControlStepContext controlStep;
+    controlStep.time = 30;
+    controlStep.step = 0.1f;
+    controlStep.automatic = true;
+    controlStep.engineRunning = true;
+    controlStep.drivenWheelSpeed = 70;
+    controlStep.displayedEngineSpeed = 840;
+    assert(car.advanceControls(controls, config, controlStep, error));
+    assert(car.currentGear == 2 && car.clutchState == 1 &&
+           car.throttleState == 0);
+  }
+  {
+    CarRuntimeInstance car;
+    car.carPhysics = std::make_shared<CarPhysics>();
+    car.throttleState = 1;
+    CarDrivetrainStepContext step;
+    step.step = 0.01f;
+    step.engineRunning = true;
+    step.damageEnabled = false;
+    step.maximumRpm = 7000;
+    step.rpmLimit = 6000;
+    step.powerScale = 200;
+    step.engineInertiaFactor = 1;
+    step.brakeFactor = 1;
+    std::string error;
+    assert(car.advanceDrivetrain(CarConfig{}, step, error));
+    assert(car.engineAngularSpeed == 5 && car.driveTorque == 0);
+  }
+  {
+    CarRuntimeInstance car;
+    CarConfig config;
+    car.carPhysics = std::make_shared<CarPhysics>();
+    car.engineRunning = true;
+    car.engineAngularSpeed = 7000.0f / 9.549296379089355f;
+    car.previousEngineRpm = 7000;
+    car.engineWear = 0.9999f;
+    car.engineTemperature = 120;
+    car.engineFailureSoundEnabled = true;
+    const auto step = car.drivetrainContext(config, 0.01f);
+    std::string error;
+    assert(car.advanceDrivetrain(config, step, error));
+    assert(car.engineWear == 1 && car.engineFrictionMultiplier == 50);
+    assert(car.engineCoolingWear > 0 && car.engineTemperature < 120);
+    assert(car.failureSounds.size() == 1 &&
+           car.failureSounds[0].kind == CarFailureSoundEvent::Kind::Engine);
+    assert(car.drivetrainContext(config, 0.01f).powerScale ==
+           config.enginePower[0] * 0.05f);
   }
   std::printf("car runtime ok\n");
 }

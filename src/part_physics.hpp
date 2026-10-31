@@ -24,6 +24,7 @@ struct PartPhysics {
   physics::CollisionCore bounds;
   int rootBodyIndex = -1;
   int steeringBodyIndex = -1;
+  physics::Body *clickBody = nullptr; // non-owning; present only for click geometry
   int argument = 0;
   uint64_t attachmentSequence = 0;
   CarPhysics *indexedCar = nullptr;

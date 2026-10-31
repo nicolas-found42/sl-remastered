@@ -147,6 +147,7 @@ buildPartPhysics(const CarConfig &config,
     child.prototype = g.body;
     child.body = std::make_unique<physics::Body>(
         physics::createBody(*child.prototype, world, &combined, creationTime));
+    result->clickBody = child.body.get();
     child.body->flags |= physics::kBodyChild;
     if (!physics::attachBody(*child.body, *result->root)) {
       error = "invalid click attachment";

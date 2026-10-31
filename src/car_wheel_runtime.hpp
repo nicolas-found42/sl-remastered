@@ -13,10 +13,10 @@ struct CarWheelRuntime {
   // The suspension and bodies hold pointers to other members of this object.
   // Keep their addresses stable for the lifetime of the wheel.
   CarWheelRuntime() = default;
-  CarWheelRuntime(const CarWheelRuntime&) = delete;
-  CarWheelRuntime& operator=(const CarWheelRuntime&) = delete;
-  CarWheelRuntime(CarWheelRuntime&&) = delete;
-  CarWheelRuntime& operator=(CarWheelRuntime&&) = delete;
+  CarWheelRuntime(const CarWheelRuntime &) = delete;
+  CarWheelRuntime &operator=(const CarWheelRuntime &) = delete;
+  CarWheelRuntime(CarWheelRuntime &&) = delete;
+  CarWheelRuntime &operator=(CarWheelRuntime &&) = delete;
 
   CarWheelPrototype config;
   physics::BodyProto suspensionPrototype;
@@ -37,17 +37,27 @@ struct CarWheelRuntime {
   float maximumLength = 0;
   float initialLength = 0;
   float radius = 0;
+  // Live 00454500 wheel rotational state, retained across physics steps.
+  float angularSpeed = 0;            // +0xc0, radians/second
+  float transferCoefficient = 0;     // +0xc4
+  float longitudinalVelocity = 0;    // +0x148
+  float effectiveInverseInertia = 0; // +0xec
+  float longitudinalSlip = 0;        // +0x14c
+  float slipAngle = 0;               // +0x150
+  float slipMagnitude = 0;           // +0x154
+  float aligningForce = 0;           // +0x158
 };
 
 // 0044f4e0/00492030: updates only the suspension body's local attachment
 // orientation. World pose propagation and physics wake-up are separate.
-bool applyWheelSteeringOrientation(CarWheelRuntime& wheel, float angle);
+bool applyWheelSteeringOrientation(CarWheelRuntime &wheel, float angle);
 
 // partCenter and partOffset are in the car root's local coordinates. mass is
 // the stock car mass, after its fallback to inverse part prototype mass.
 // The caller must create and attach the car root before calling this function.
-std::vector<std::unique_ptr<CarWheelRuntime>> buildCarWheelRuntime(
-    const std::vector<CarWheelPrototype>& prototypes, physics::Body& carRoot,
-    const physics::Body& partBody,
-    const physics::Vec3& partCenter, const physics::Vec3& partOffset,
-    float mass, const physics::Vec3& gravity, std::string& error);
+std::vector<std::unique_ptr<CarWheelRuntime>>
+buildCarWheelRuntime(const std::vector<CarWheelPrototype> &prototypes,
+                     physics::Body &carRoot, const physics::Body &partBody,
+                     const physics::Vec3 &partCenter,
+                     const physics::Vec3 &partOffset, float mass,
+                     const physics::Vec3 &gravity, std::string &error);
