@@ -1,0 +1,11 @@
+https://github.com/CookiePLMonster/SLRR-Proofix
+https://github.com/EliasFD3S/slrr-reverse/blob/main/engine/Runtime/Cars/Cars.cpp
+https://github.com/MethanolFuel/SLRR-LE2MWM-MethanolFuel-Edition
+https://github.com/nedobylskiy/SLRR_rev
+https://github.com/nedobylskiy/SLRR-JVM
+https://silentsblog.com/2018/06/15/slrr-proof-of-fix/
+https://github.com/Connor-Moyle/blender-slrr-scx-importer
+https://github.com/rehan-remade/universal-modder
+https://github.com/nedobylskiy/SLRR_rev/tree/codex/java-init-entry
+https://github.com/WerWolv/ImHex
+https://github.com/ptitSeb/box86-compatibility-list

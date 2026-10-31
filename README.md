@@ -4,7 +4,9 @@ This project is building a native macOS arm64 port of Street Legal Racing: Redli
 
 ## Check the project
 
-In Terminal, run `tools/check.sh` from the project folder. It verifies `ref/`, builds for arm64, and runs the tests and corpus comparisons. It prints `check: ok` when they pass. The build requires CMake, Ninja, SDL3, and libjpeg; the independent PTX comparison also requires Pillow for Python 3. The stock-handler Ghidra test runs when the initialized local Ghidra project is present.
+In Terminal, run `tools/check.sh` from the project folder. It verifies `ref/`, builds for arm64, and runs the tests and corpus comparisons. It prints `check: ok` when they pass. The build requires a C++20 compiler, CMake, Ninja, SDL3, libjpeg, and libpng; the independent PTX comparison also requires Pillow for Python 3. The stock-handler Ghidra test runs when the initialized local Ghidra project is present.
+
+CMake generates `build/compile_commands.json` for clangd. To configure it without running the full check, run `cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release`, then restart your clangd client.
 
 To inspect a texture, run `build/ptx_view ref/raw/frontend/textures/GPS_FrameRaceSetup.ptx` after the check. Press Escape to close the viewer. This is a diagnostic, not the game menu.
 
