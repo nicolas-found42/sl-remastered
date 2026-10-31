@@ -25,6 +25,7 @@ class Stats:
         self.indices_out_of_range = self.incomplete_triangles = 0
         self.non_finite_positions = self.trailing_bytes = 0
         self.directory_mismatches = 0
+        self.entries = []
 
 
 def need(buf, off, n, what):
@@ -74,6 +75,8 @@ def parse_v3(buf, st):
         if size not in V3_SIZES:
             raise Bad("unsupported material size %d at offset %d" % (size, off))
         need(buf, off, size, "truncated material")
+        name = buf[off + 104:off + 136].split(b"\0", 1)[0] if size == 136 else b""
+        st.entries.append((name, size))
         stride = 44
         if size > 56:
             stride = struct.unpack_from("<I", buf, off + 60)[0]
@@ -107,6 +110,7 @@ PROP_MAP_FIRST, PROP_MAP_LAST = 0x06000000, 0x06000005
 
 def parse_material_v4(buf, off, end):
     off += 8
+    name = b""
     need(buf, off, 12, "truncated material header")
     nprops = struct.unpack_from("<I", buf, off + 8)[0]
     off += 12
@@ -123,6 +127,7 @@ def parse_material_v4(buf, off, end):
             n = 28
         elif t == 0x08000000:
             n = 32
+            name = buf[off:off + n].split(b"\0", 1)[0]
         else:
             raise Bad("unknown material property 0x%x at offset %d" % (t, off - 4))
         if off + n > end:
@@ -130,6 +135,7 @@ def parse_material_v4(buf, off, end):
         off += n
     if off != end:
         raise Bad("material chunk not consumed exactly at offset %d" % off)
+    return name
 
 
 def parse_v4(buf, st):
@@ -155,7 +161,8 @@ def parse_v4(buf, st):
             have_group = True
             pending_vertices = None
             if ctype == 0:
-                parse_material_v4(buf, off, end)
+                name = parse_material_v4(buf, off, end)
+                st.entries.append((name, size))
                 st.materials += 1
         elif ctype == 4:
             if not have_group:
@@ -228,10 +235,14 @@ def main():
         except Bad as err:
             failures.append((os.path.relpath(p, root), str(err)))
             continue
+        rel = os.path.relpath(p, root)
+        for name, size in st.entries:
+            print("ENTRY %s %s %d" % (rel, name.hex(), size))
         opened += 1
         by_version[version] = by_version.get(version, 0) + 1
         for k, v in vars(st).items():
-            setattr(total, k, getattr(total, k) + v)
+            if k != "entries":
+                setattr(total, k, getattr(total, k) + v)
         if per_file:
             print("%s v%d materials=%d meshes=%d vertices=%d indices=%d" % (
                 os.path.relpath(p, root), version, st.materials, st.meshes, st.vertices, st.indices))

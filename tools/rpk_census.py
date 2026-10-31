@@ -29,6 +29,7 @@ def parse(buf):
     if table_end > len(buf):
         raise ValueError("table runs past end of file")
     out_of_range = overlapping = 0
+    listing = []
     for i in range(count):
         if off + 23 > table_end:
             raise ValueError("record %d header past table" % i)
@@ -38,6 +39,7 @@ def parse(buf):
         end = off + 23 + alias_len + (48 if flags & 1 else 0)
         if end > table_end:
             raise ValueError("record %d past table" % i)
+        listing.append((buf[off + 23:off + 23 + alias_len].split(b"\0", 1)[0], psize))
         if poff + psize > len(buf):
             out_of_range += 1
         if psize and poff < table_end:
@@ -45,7 +47,7 @@ def parse(buf):
         off = end
     if off != table_end:
         raise ValueError("table consumed %d, expected %d" % (off, table_end))
-    return ndeps, count, out_of_range, overlapping
+    return ndeps, count, out_of_range, overlapping, listing
 
 
 def main():
@@ -62,7 +64,7 @@ def main():
         with open(p, "rb") as fh:
             buf = fh.read()
         try:
-            d, e, a, b = parse(buf)
+            d, e, a, b, listing = parse(buf)
         except ValueError as err:
             failed += 1
             failures.append((p, str(err)))
@@ -72,6 +74,9 @@ def main():
         entries += e
         oor += a
         ovl += b
+        rel = os.path.relpath(p, root)
+        for alias, size in listing:
+            print("ENTRY %s %s %d" % (rel, alias.hex(), size))
     print("files found: %d" % len(paths))
     print("files opened: %d" % opened)
     print("files failed: %d" % failed)

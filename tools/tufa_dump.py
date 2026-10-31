@@ -4,8 +4,8 @@
     python3 -I tools/tufa_dump.py ref/raw/system/Scripts/render/Frontend.class [tree-number ...]
 
 With no tree number it prints every method record (flags, name, descriptor, tree index) and the static and instance
-fields. With tree numbers it prints each node as `index op source-line [operand]` and resolves a constant-pool operand
-to text where it is one. Reuses the readers of tools/tufa_census.py, which follow the stock loader.
+fields. With tree numbers it prints each node as `index op source-line [operand]`, including branch targets.
+`--all <dir>` reports decode failures for every .class file in a directory tree.
 """
 import struct
 import sys
@@ -22,10 +22,14 @@ def trees_of(payload):
         nodes = []
         for _ in range(c.u32()):
             op = c.u8()
+            if op > t.MAX_TABLE_OP:
+                raise t.Bad(f"TREE op 0x{op:02x} is past the executable's table")
             line = c.u16()
             operand = c.u32() if op in t.WIDE_OPS else None
             nodes.append((op, line, operand))
         result.append(nodes)
+    if c.left():
+        raise t.Bad(f"TREE {c.left()} unconsumed bytes")
     return result
 
 
@@ -44,10 +48,9 @@ def describe(cons, index):
     return f"const[{index}] kind {kind}"
 
 
-def main():
-    path = Path(sys.argv[1])
-    want = sys.argv[2:]
+def load(path):
     data = path.read_bytes()
+    t.parse_file(data)
     c = t.Cur(data)
     cls = None
     classes = []
@@ -66,6 +69,29 @@ def main():
             cls["mthd"] = t.parse_lists(payload, 5, "MTHD")
         elif tag == "TREE":
             cls["trees"] = trees_of(payload)
+    return classes
+
+
+def main():
+    if len(sys.argv) == 3 and sys.argv[1] == "--all":
+        root = Path(sys.argv[2])
+        if not root.is_dir():
+            raise SystemExit(f"not a directory: {root}")
+        files = sorted(root.rglob("*.class"))
+        failures = 0
+        for path in files:
+            try:
+                load(path)
+            except (t.Bad, OSError, ValueError, IndexError, TypeError) as error:
+                print(f"{path}: {error}")
+                failures += 1
+        print(f"files={len(files)} failures={failures}")
+        return int(failures != 0)
+    if len(sys.argv) < 2:
+        raise SystemExit(__doc__)
+    path = Path(sys.argv[1])
+    want = sys.argv[2:]
+    classes = load(path)
     # A file can hold several classes (a class and its helpers). Tree numbers are per class: `3` is class 0, `1:3` is
     # tree 3 of class 1. With no argument every class is listed.
     if not want:
@@ -82,7 +108,11 @@ def main():
         number = int(tree)
         print(f"class {which} tree {number}")
         for i, (op, line, operand) in enumerate(cls["trees"][number]):
-            text = "" if operand is None else f" {operand} (0x{operand:x}) {describe(cons, operand)}"
+            if op in (0x14, 0x15, 0x16) and operand is not None:
+                relative = operand if operand < 0x80000000 else operand - 0x100000000
+                text = f" {relative:+d} -> {i + relative}"
+            else:
+                text = "" if operand is None else f" {operand} (0x{operand:x}) {describe(cons, operand)}"
             print(f"  {i:3d} op 0x{op:02x} line {line}{text}")
 
 
@@ -94,9 +124,12 @@ def show(cls):
                 for rec in records:
                     name = describe(cons, rec[1])
                     kind = describe(cons, rec[2])
-                    extra = f"tree {rec[3]}" if which == "method" else f"init tree {rec[3] if rec[3] < 0xffffffff else '-'}"
+                    extra = ("native" if which == "method" and rec[0] & 0x40 else
+                             f"tree {rec[3]}" if which == "method" else
+                             f"init tree {rec[3] if rec[3] < 0xffffffff else '-'}")
                     print(f"  {which} group {group} flags 0x{rec[0]:x} {name} {kind} {extra}")
         return
 
 
-main()
+if __name__ == "__main__":
+    sys.exit(main())

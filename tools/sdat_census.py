@@ -93,7 +93,7 @@ def parse(d):
         raw = c.take(n)
         if n == 0 or raw[-1] != 0:
             raise Bad("pack string is not NUL terminated")
-        packs.append((ordinal, raw[:-1].decode("cp1252", errors="replace")))
+        packs.append((ordinal, raw[:-1].decode("cp1252", errors="replace"), raw[:-1]))
     if c.p != c.limit:
         raise Bad("trailer not consumed exactly, %d bytes left" % (c.limit - c.p))
     return typ, flags, start - 8, unsaved, packs
@@ -126,13 +126,17 @@ def main():
         except Bad as e:
             failures.append((rel, str(e)))
             continue
+        for ordinal, kind, size in unsaved:
+            print("ENTRY %s U %d %d %d" % (rel, ordinal, kind, size))
+        for ordinal, name, raw in packs:
+            print("ENTRY %s P %d %s %d" % (rel, ordinal, raw.hex(), len(raw)))
         opened += 1
         blob = sum(s for _, k, s in unsaved if k == 7)
         tot_unsaved += len(unsaved)
         tot_packs += len(packs)
         tot_blob += blob
         seen = set()
-        for o, _ in packs:
+        for o, _, _ in packs:
             if o == 0:
                 odd_zero += 1
             if o in seen:
@@ -142,7 +146,7 @@ def main():
             seen.add(o)
         if per_file:
             kinds = ",".join(str(k) for _, k, _ in unsaved)
-            names = ",".join("%d=%s" % (o, n) for o, n in packs)
+            names = ",".join("%d=%s" % (o, n) for o, n, _ in packs)
             print("%s OK type=%d flags=%d payload=%d unsaved=%d blobBytes=%d kinds=[%s] packs=%d [%s]" % (
                 rel, typ, flags, payload, len(unsaved), blob, kinds, len(packs), names))
     print("files found: %d" % len(paths))

@@ -43,6 +43,7 @@ run_script() {
 		DecompileSqrt.java) marker='SQRT_DECOMPILE_OK' ;;
 		DecompileDebugDump.java) marker='DEBUG_DUMP_DECOMPILE_OK' ;;
 		DecompileFileHandlers.java) marker='FILE_HANDLERS_DECOMPILE_OK' ;;
+		ApplyProjectSymbols.java) marker='APPLY_PROJECT_SYMBOLS_OK' ;;
 	esac
 	if [ -n "$marker" ] && ! grep -Fq "$marker" "$log"; then
 		echo "ghidra_run: $script failed; see $log" >&2

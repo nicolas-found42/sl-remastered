@@ -66,10 +66,28 @@ check() {
 		for key in "total dependencies" "total entries"; do
 			[ "$(field "$key" "$cpp_out")" = "$(field "$key" "$py_out")" ] || diffnote="totals differ: $key"
 		done
+		local cpp_digest py_digest
+		cpp_digest=$({ grep '^ENTRY ' "$cpp_out" || true; } | LC_ALL=C sort | shasum -a 256 | cut -d ' ' -f 1)
+		py_digest=$({ grep '^ENTRY ' "$py_out" || true; } | LC_ALL=C sort | shasum -a 256 | cut -d ' ' -f 1)
+		if [ "$cpp_digest" != "$py_digest" ]; then
+			diffnote="entry digest differs"
+		elif [ "$diffnote" = same ]; then
+			diffnote="same (entries sha256=$cpp_digest)"
+		fi
 	else
 		local lines=' OK \| v[0-9] materials='
 		diff <(grep "$lines" "$cpp_out" | sort) <(grep "$lines" "$py_out" | sort) > "$scratch/$label.diff" || diffnote="DIFFERENT"
 		[ "$diffnote" = same ] && diffnote="same ($(lines_in . "$scratch/$label.diff") lines differ, $(lines_in "$lines" "$py_out") compared)"
+		if [ "$label" = sdat ] || [ "$label" = scx ]; then
+			local cpp_digest py_digest
+			cpp_digest=$({ grep '^ENTRY ' "$cpp_out" || true; } | LC_ALL=C sort | shasum -a 256 | cut -d ' ' -f 1)
+			py_digest=$({ grep '^ENTRY ' "$py_out" || true; } | LC_ALL=C sort | shasum -a 256 | cut -d ' ' -f 1)
+			if [ "$cpp_digest" != "$py_digest" ]; then
+				diffnote="entry digest differs"
+			elif [[ "$diffnote" = same* ]]; then
+				diffnote="$diffnote entries sha256=$cpp_digest"
+			fi
+		fi
 	fi
 
 	local ok=1
