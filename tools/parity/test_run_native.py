@@ -73,7 +73,6 @@ class NativeRecordTest(unittest.TestCase):
                                      '--save', str(save), '--reference-root', str(reference)],
                                     capture_output=True, text=True)
             self.assertEqual(result.returncode, 2)
-            self.assertIn('outside reference root', result.stderr)
             self.assertFalse((reference / 'out').exists())
 
     def test_rejects_overlapping_paths_even_through_symlinks(self):

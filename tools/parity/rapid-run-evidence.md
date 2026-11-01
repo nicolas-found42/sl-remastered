@@ -107,3 +107,28 @@ parent validates the original checkout. This ticket does not rewrite artifact
 checks or copy the proprietary corpus to bypass that refusal. Direct Run-log integration checks
 pass for error, SIGSEGV, abort, throw, SIGTERM, SIGKILL, and partial Runs.
 The existing screenshot safety checks and ten replay tests also pass.
+
+## Writable save boundary review correction
+
+Incremental review found that `data/save` could point outside the writable data
+root while `FileState` treated its canonical target as trusted. The public
+`FileState` regression in `tests/file_state_test.cpp` reproduced deletion and
+truncation of a disposable Installed Game sentinel before the fix. It now
+checks refusal and preserved bytes for delete, copy, move and write-open through
+both save-root and nested symlinks into disposable game/reference trees.
+
+`tests/native_run_paths_test.py` exercises the native process boundary: unsafe
+save-root and nested save-file links refuse before recorder output is created.
+Contained save links still reach normal startup. Duplicate `--data-root` flags
+also refuse before recorder output; previously preflight used the last value
+while the main parser used the first. Diagnostic wording is not an assertion.
+
+The isolated positive Run at `/tmp/sl-issue-2-review-positive` used the existing
+bundled rapid Free Ride scenario through `run_native.py`, unchanged stock data
+and the same source fixture named above. It exited 0 without timing out and
+recorded `source_save_unchanged: true`. Menu readiness was observed at loop
+3.066 seconds and driving readiness at 5.874 seconds; the driving-ready screenshot
+and normal throttle input completed. The final throttle screenshot was not emitted
+before the queued quit, so it is not claimed as evidence here. This verifies
+continued normal entry with the boundary checks, and makes no new Parity or
+Native-status claim.

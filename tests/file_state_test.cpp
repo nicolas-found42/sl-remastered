@@ -81,6 +81,42 @@ int main() {
 	CHECK(!files.readFloat(&first, f, error) && error == "truncated file payload");
 	files.close(&first); files.close(&first); files.close(&second);
 	CHECK(!files.readInt(&second, value, error) && error == "file is not open");
+	// Writable save paths cannot turn a symlink into a trusted save root.
+	const auto isolated = root / "isolated";
+	const auto game = root / "installed-game";
+	const auto reference = root / "reference";
+	std::filesystem::create_directories(isolated);
+	std::filesystem::create_directories(game);
+	std::filesystem::create_directories(reference);
+	for (const auto& protectedRoot : {game, reference}) {
+		for (const bool nested : {false, true}) {
+			std::filesystem::remove_all(isolated / "save");
+			if (nested) std::filesystem::create_directories(isolated / "save");
+			std::filesystem::create_directory_symlink(protectedRoot, isolated / (nested ? "save/link" : "save"));
+			const std::string prefix = nested ? "save/link/" : "save/";
+			std::ofstream(protectedRoot / "victim") << "preserve";
+			std::ofstream(isolated / "save/source") << "local";
+			FileState guarded(isolated, reference, game);
+			int32_t result = 0;
+			CHECK(!guarded.deletePath(prefix + "victim", result, error));
+			CHECK(!guarded.copyPath(prefix + "victim", "save/copied", result, error));
+			CHECK(!guarded.movePath(prefix + "victim", "save/moved", result, error));
+			CHECK(!guarded.copyPath("save/source", prefix + "victim", result, error));
+			CHECK(!guarded.movePath("save/source", prefix + "victim", result, error));
+			CHECK(guarded.openWrite(&first, prefix + "victim", error) == FileOpenResult::error);
+			CHECK(!guarded.handle(&first));
+			guarded.close(&first);
+			std::ifstream preserved(protectedRoot / "victim");
+			std::string content;
+			preserved >> content;
+			CHECK(content == "preserve");
+			std::ifstream source(isolated / "save/source");
+			source >> content;
+			CHECK(content == "local");
+			CHECK(!std::filesystem::exists(isolated / "save/copied"));
+			CHECK(!std::filesystem::exists(isolated / "save/moved"));
+		}
+	}
 	std::filesystem::remove_all(root);
 	return failures ? 1 : 0;
 }

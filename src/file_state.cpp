@@ -182,6 +182,10 @@ bool FileState::resolveSavePath(const std::string &name,
     return false;
   }
   const auto save = std::filesystem::weakly_canonical(root / "save", ec);
+  if (ec || !within(root, save) || within(ref, save)) {
+    error = "invalid save directory";
+    return false;
+  }
   out = std::filesystem::weakly_canonical(root / relative, ec);
   if (ec || !within(save, out) || within(ref, out)) {
     error = "path escapes data root";
@@ -277,6 +281,10 @@ FileOpenResult FileState::openWrite(const VmObject *owner,
     return FileOpenResult::error;
   }
   const auto save = std::filesystem::weakly_canonical(root / "save", ec);
+  if (ec || !within(root, save) || within(ref, save)) {
+    error = "invalid save directory";
+    return FileOpenResult::error;
+  }
   const auto path = std::filesystem::weakly_canonical(root / relative, ec);
   if (ec || !within(save, path) || within(ref, path)) {
     error = "File.open(write) path escapes data root";

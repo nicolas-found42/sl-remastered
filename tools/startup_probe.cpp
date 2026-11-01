@@ -1928,10 +1928,14 @@ int main(int argc, char** argv) {
       options.scriptPath = argv[++i];
     else if (arg == "--reference-root" && i + 1 < argc)
       options.referenceRoot = argv[++i];
-    else if (arg == "--data-root" && i + 1 < argc)
+    else if (arg == "--data-root" && i + 1 < argc) {
+      if (!options.dataRoot.empty()) {
+        std::fprintf(stderr, "startup probe: duplicate --data-root\n");
+        return 2;
+      }
       options.dataRoot = argv[++i];
-    else if (arg == "--capture-frame" || arg == "--class" ||
-             arg == "--crash-on-key")
+    } else if (arg == "--capture-frame" || arg == "--class" ||
+               arg == "--crash-on-key")
       ++i;
     else if (!haveRoot && !arg.empty() && arg[0] != '-') {
       options.gameRoot = arg;
@@ -1960,6 +1964,32 @@ int main(int argc, char** argv) {
         std::fprintf(stderr, "startup probe: data root must not overlap reference or installed game\n");
         return 2;
       }
+    }
+    const auto save = fs::weakly_canonical(data / "save", ec);
+    if (ec || !contains(data, save)) {
+      std::fprintf(stderr, "startup probe: save directory escapes data root\n");
+      return 2;
+    }
+    // FileState rejects escaping destinations; refuse them before any Run output
+    // as well. Do not follow directory symlinks while inspecting existing saves.
+    if (fs::exists(save, ec)) {
+      fs::recursive_directory_iterator it(save, ec), end;
+      for (; !ec && it != end; it.increment(ec)) {
+        const bool symlink = it->is_symlink(ec);
+        if (ec)
+          break;
+        if (!symlink)
+          continue;
+        const auto target = fs::weakly_canonical(it->path(), ec);
+        if (ec || !contains(save, target)) {
+          std::fprintf(stderr, "startup probe: save path escapes data root\n");
+          return 2;
+        }
+      }
+    }
+    if (ec) {
+      std::fprintf(stderr, "startup probe: cannot inspect save directory\n");
+      return 2;
     }
   }
   std::unique_ptr<runlog::RunRecorder> recorder;
