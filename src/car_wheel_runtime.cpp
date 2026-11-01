@@ -140,12 +140,10 @@ buildCarWheelRuntime(const std::vector<CarWheelPrototype> &prototypes,
         wheel->maximumLength, wheel->minimumLength, wheel->reboundDamping,
         radius);
     wheel->suspension.wheelBody = wheel->suspensionBody.get();
-    // FUN_0049f4d0 measures anchor -> contact point with the anchor taken
-    // from the wheel's predicted world state (state pos, i.e. the hub
-    // origin). A wheel-local Y offset here mixes frames: the distance then
-    // far exceeds maxLength, the suspension never extends, and no spring
-    // or tire force can exist.
-    wheel->suspension.anchor = {0, 0, 0};
+    // FUN_00490dc0 (all.c 107172-107208) lowers the probe body by
+    // half its length, then stores that offset at suspension+0x58. The
+    // selector measures from the true anchor, not the probe body's origin.
+    wheel->suspension.anchor = {0, p.friction[0] * 0.5f, 0};
     wheel->suspension.length = wheel->initialLength;
     const float constructorLength =
         p.friction[0] > 0 ? p.friction[0] : 0.9000000357627869f;

@@ -319,7 +319,14 @@ bool wheelReferencePose(const PartPhysics &target, int32_t slotType,
                   type, index, wheels, decline);
     return false;
   }
-  const auto &body = *target.indexedCar->wheels[index]->hubBody;
+  const auto& wheel = *target.indexedCar->wheels[index];
+  const auto &body = *wheel.hubBody;
+  runlog::event(runlog::EventKind::Note,
+                "wheelref pose: slot=%u i=%zu anchor=%.3f,%.3f,%.3f bone=%.3f,%.3f,%.3f center=%.3f,%.3f,%.3f hubY=%.3f rootY=%.3f",
+                type, index, wheel.anchor[0], wheel.anchor[1], wheel.anchor[2],
+                wheel.config.bonePosition[0], wheel.config.bonePosition[1], wheel.config.bonePosition[2],
+                target.indexedCar->center[0], target.indexedCar->center[1], target.indexedCar->center[2],
+                body.state[body.current].pos[1], target.indexedCar->root->state[target.indexedCar->root->current].pos[1]);
   out = body.state[body.current];
   return true;
 }

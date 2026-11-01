@@ -301,6 +301,12 @@ bool CarWorldStepper::step(float seconds, std::string& error) {
       if (!wheel)
         continue;
       const auto& extra = instance.wheelExtras[i];
+      runlog::event(runlog::EventKind::Note,
+                    "wheel setup %zu: radius=%.4g coefficientRadius=%.4g spring=%.4g damping=%.4g rebound=%.4g rest=%.4g min=%.4g max=%.4g",
+                    i, wheel->radius, extra.radius, wheel->suspension.settings.force,
+                    wheel->suspension.settings.damping, wheel->suspension.settings.reboundDamping,
+                    wheel->suspension.settings.restLength, wheel->suspension.settings.minLength,
+                    wheel->suspension.settings.maxLength);
       runlog::event(
           runlog::EventKind::Note,
           "car wheel %zu: hasWheel=%d susp(force=%g damp=%g rebound=%g rest=%g "
@@ -524,6 +530,7 @@ bool CarWorldStepper::step(float seconds, std::string& error) {
     char worstFace[200] =
         "-"; // material word and triangle of the worst contact
     physics::Vec3 worstPartPos{}, worstPointB{}, worstPointA{};
+    physics::Vec3 rootForce{}, rootTorque{};
   } scratch;
   // Stock runs the car callback (00454500 and 0044e690) in the world step's
   // callback pass, before prediction: player controls, wheel steering, the
@@ -1157,6 +1164,8 @@ bool CarWorldStepper::step(float seconds, std::string& error) {
   size_t contactIterations = 0;
   float maxImpulse = 0;
   hooks.finishContacts = [&](const std::vector<physics::DirectContact>& done) {
+    scratch.rootForce = car->root->state[car->root->current].force;
+    scratch.rootTorque = car->root->state[car->root->current].torque;
     if (!done.empty() && !notedWheelEdgewalk_) {
       notedWheelEdgewalk_ = true;
       runlog::event(runlog::EventKind::Note,
@@ -1202,6 +1211,36 @@ bool CarWorldStepper::step(float seconds, std::string& error) {
         ++playerContacts;
         playerCorrections += c.correctionResult != 0;
         playerImpulse = std::max(playerImpulse, std::fabs(c.normalImpulse));
+        if (c.processed) {
+          const auto* face = offerFace(ci);
+          const auto* pair = offerGroundPair(ci);
+          const auto& state = car->root->state[car->root->current];
+          TraceLine detail;
+          detail.add("{\"kind\":\"corrector\",\"tick\":%llu,\"pass\":%zu,"
+                     "\"a\":\"%p\",\"b\":\"%p\",\"leaf\":\"%p\",\"face\":%zu,"
+                     "\"a_label\":\"%s\",\"b_label\":\"%s\","
+                     "\"features\":[%d,%d],\"was_resting\":%d,\"result\":%d,"
+                     "\"sep\":%.9g,\"impulse\":%.9g,\"force\":%.9g,\"friction\":%.9g,"
+                     "\"n\":[%.9g,%.9g,%.9g],\"pa\":[%.9g,%.9g,%.9g],"
+                     "\"pb\":[%.9g,%.9g,%.9g],\"shift\":[%.9g,%.9g,%.9g],"
+                     "\"v\":[%.9g,%.9g,%.9g]}",
+                     static_cast<unsigned long long>(tick_), contactIterations,
+                     static_cast<void*>(c.a), static_cast<void*>(c.b),
+                     face ? static_cast<const void*>(face->leafOwner()) : nullptr,
+                     face ? face->faceIndex() : 0,
+                     bodyLabel(c.a).c_str(), bodyLabel(c.b).c_str(),
+                     pair && pair->bodyFeature ? static_cast<int>(*pair->bodyFeature) : -1,
+                     pair && pair->triangleFeature ? static_cast<int>(*pair->triangleFeature) : -1,
+                     pair ? int(pair->contact.resting) : -1, c.correctionResult,
+                     c.separation, c.normalImpulse, c.normalForce, c.frictionForce,
+                     c.normal[0], c.normal[1], c.normal[2], c.pointA[0], c.pointA[1], c.pointA[2],
+                     c.pointB[0], c.pointB[1], c.pointB[2], state.shift[0], state.shift[1], state.shift[2],
+                     state.vel[0], state.vel[1], state.vel[2]);
+          auto* channel = runlog::traceChannel("contacttrace");
+          if (channel && std::getenv("SLRR_CAR_TRACE"))
+            channel->stream.store(true, std::memory_order_relaxed);
+          runlog::tracePush(channel, detail.text);
+        }
       }
       sepMin = ci ? std::min(sepMin, c.separation) : c.separation;
       sepMax = ci ? std::max(sepMax, c.separation) : c.separation;
@@ -1459,6 +1498,12 @@ bool CarWorldStepper::step(float seconds, std::string& error) {
              lastControls_ ? 1 : 0, instance.throttleState, instance.brakeState,
              instance.clutchState, instance.steeringState, instance.currentGear,
              instance.engineAngularSpeed, instance.transmissionMode);
+    line.add("\"dyn\":{\"F\":[%.4g,%.4g,%.4g],\"T\":[%.4g,%.4g,%.4g],"
+             "\"activity\":[%.4g,%.4g,%.4g],\"invMass\":%.7g},",
+             scratch.rootForce[0], scratch.rootForce[1], scratch.rootForce[2],
+             scratch.rootTorque[0], scratch.rootTorque[1], scratch.rootTorque[2],
+             car->root->activity[0], car->root->activity[1], car->root->activity[2],
+             car->root->proto->invMass);
     line.add("\"wh\":[");
     bool firstWheel = true;
     for (size_t i = 0; i < car->wheels.size() && i < 4; ++i) {
@@ -1471,7 +1516,7 @@ bool CarWorldStepper::step(float seconds, std::string& error) {
                "\"wi\":%d,\"s\":\"%c\",\"t\":\"%c\",\"h\":%d,\"cy\":%.3f,"
                "\"wy\":%.3f,\"sl\":%.2f,\"sa\":%.3f,\"ls\":%.3f,\"aa\":%.3f,"
                "\"rj\":[%.3f,%.3f,%.3f,%.3f],"
-               "\"ca\":%.3f,\"cbd\":%.3f}",
+               "\"ca\":%.3f,\"cbd\":%.3f,\"sn\":[%.3f,%.3f,%.3f],\"sv\":%.4g,\"ds\":%.6g}",
                firstWheel ? "" : ",", i, w->angularSpeed, u.length, u.force,
                u.contactBody ? 1 : 0,
                int(found != witnesses_.end() && found->second), scratch.sel[i],
@@ -1481,7 +1526,8 @@ bool CarWorldStepper::step(float seconds, std::string& error) {
                w->slipMagnitude, scratch.steer[i], w->longitudinalSlip,
                w->slipAngle, scratch.selDiag[i][0], scratch.selDiag[i][1],
                scratch.selDiag[i][2], scratch.selDiag[i][3], scratch.candA[i],
-               scratch.candB[i]);
+               scratch.candB[i], u.normal[0], u.normal[1], u.normal[2],
+               u.projectedVelocity, u.distanceSquared);
       firstWheel = false;
     }
     line.add("],\"col\":{\"pairs\":%zu,\"iter\":%zu,\"n\":[", scratch.pairs,

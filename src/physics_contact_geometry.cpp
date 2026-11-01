@@ -689,6 +689,26 @@ ContactGeometryResult updateDynamicBodyPair(DynamicBodyPair &pair,
   }
   const auto result = updateDirectContactGeometryWithSearch(
       contact, *predicted, sa.radius, sb.radius, worldPoint, world, query);
+  if (result == ContactGeometryResult::Updated && pair.contact.resting &&
+      (fa != pair.firstFeature || fb != pair.secondFeature)) {
+    auto* channel = runlog::traceChannel("contacttrace");
+    if (channel && std::getenv("SLRR_CAR_TRACE"))
+      channel->stream.store(true, std::memory_order_relaxed);
+    char line[512];
+    const auto index = [](const std::optional<size_t>& value) {
+      return value ? static_cast<int>(*value) : -1;
+    };
+    std::snprintf(line, sizeof line,
+                  "{\"kind\":\"dynamic_features\",\"a\":\"%p\",\"b\":\"%p\","
+                  "\"time\":%.6f,\"old\":[%d,%d],\"new\":[%d,%d],"
+                  "\"sep\":%.9g,\"normal_force\":%.9g,\"impulse\":%.9g}",
+                  static_cast<void*>(a), static_cast<void*>(b),
+                  a->state[a->current ^ 1].time,
+                  index(pair.firstFeature), index(pair.secondFeature), index(fa), index(fb),
+                  contact.separation, pair.contact.normalForce, pair.contact.normalImpulse);
+    runlog::tracePush(channel, line);
+
+  }
   if (result != ContactGeometryResult::Unsupported) {
     pair.firstFeature = fa;
     pair.secondFeature = fb;
