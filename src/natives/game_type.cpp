@@ -2309,7 +2309,12 @@ NativeResult gameRefQueueEvent(const std::vector<VmValue>& args,
       // Stock (census 66733) tests only bits N&1, N&2, N&4 of the parsed int
       // and performs no range check; keep the raw value and let the bit
       // decode in car_world_step.cpp interpret it.
+      if (inst.transmissionMode != tr)
+        runlog::event(runlog::EventKind::Note,
+                      "transmission mode: %d->%d gear=%d clutch=%.3f",
+                      inst.transmissionMode, tr, inst.currentGear, inst.clutchState);
       inst.transmissionMode = tr;
+      inst.previousAutomaticClutch = inst.clutchState;
       return std::monostate{};
     }
     if (command == "cruise") {

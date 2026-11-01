@@ -2674,6 +2674,22 @@ int main() {
             {VmValue{null}, VmValue{int32_t{0x10}}, VmValue{string(text)}},
             carRef, &arena, &loaded);
       };
+      // FUN_00458c00 transmission command seeds FUN_0044dd70's history
+      // from the live pedal, including repeated mode changes while in gear.
+      auto& transmission = *car->carInstance;
+      transmission.currentGear = 1;
+      transmission.currentGearRatio = 4;
+      transmission.clutchState = 0.25f;
+      transmission.previousAutomaticClutch = 1;
+      CHECK(std::holds_alternative<std::monostate>(send("transmission 2")));
+      CHECK(std::holds_alternative<std::monostate>(send("transmission 0")));
+      CarControlStepContext clutchStep;
+      clutchStep.engineRunning = clutchStep.automaticClutch = true;
+      clutchStep.displayedEngineSpeed = 600;
+      clutchStep.step = 0.01f;
+      std::string clutchError;
+      CHECK(transmission.advanceControls({}, CarConfig{}, clutchStep, clutchError));
+      CHECK(transmission.currentGear == 1 && transmission.clutchState < 0.25f);
       CHECK(car->carInstance->damageMultiplier == 1.0f);
       CHECK(std::holds_alternative<std::monostate>(
                 send("damage_multiplier 0.375")) &&

@@ -473,6 +473,9 @@ int main() {
     step.engineRunning = true;
     step.drivenWheelSpeed = 2;
     step.time = 20;
+    // FUN_0044d330 expires timers after the automatic controller, so this
+    // first call clears the stale manual-shift timer before auto can run.
+    assert(car.advanceControls(input, config, step, error));
     const auto gear = car.currentGear;
     const auto clutch = car.clutchState;
     assert(!car.advanceControls(input, config, step, error));
@@ -658,6 +661,27 @@ int main() {
     step2.time = 50.1f;
     assert(car2.advanceControls(controls2, config, step2, error));
     assert(car2.currentGear == 1);
+    // FUN_0044dc30 does not gate forward shifts on throttle demand, the
+    // automatic launch speed threshold, or an expired clutch timer.
+    car.currentGear = 1;
+    car.currentGearRatio = config.gearRatios[0];
+    car.shiftState = {};
+    controls.continuous[1] = 0;
+    step.time = 42;
+    assert(car.advanceControls(controls, config, step, error));
+    assert(car.currentGear == 2);
+    // Rolling backwards in a forward gear selects first in semiautomatic;
+    // automatic selects neutral, while manual retains its selected gear.
+    car.currentGear = 3;
+    car.currentGearRatio = config.gearRatios[2];
+    car.shiftState = {};
+    step.drivenWheelSpeed = -0.5f;
+    assert(car.advanceControls(controls, config, step, error));
+    assert(car.currentGear == 1);
+    car.currentGear = 3;
+    step.semiautomatic = false;
+    assert(car.advanceControls(controls, config, step, error));
+    assert(car.currentGear == 3);
   }
   {
     CarRuntimeInstance car;
@@ -695,6 +719,107 @@ int main() {
            car.failureSounds[0].kind == CarFailureSoundEvent::Kind::Engine);
     assert(car.drivetrainContext(config, 0.01f).powerScale ==
            config.enginePower[0] * 0.05f);
+  }
+  {
+    // FUN_0044dd70: automatic clutch protects idle, respects the pedal,
+    // and releases through its own history before the outer pedal smoothing.
+    CarRuntimeInstance car;
+    CarConfig config;
+    CarControlSnapshot input;
+    CarControlStepContext step;
+    step.time = 10;
+    step.step = 0.01f;
+    step.engineRunning = step.automaticClutch = true;
+    step.displayedEngineSpeed = config.rpmIdle * 0.10471975803375244f;
+    car.currentGear = 1;
+    car.currentGearRatio = config.gearRatios[0];
+    car.previousClutchEngineSpeed = step.displayedEngineSpeed;
+    std::string error;
+    assert(car.advanceControls(input, config, step, error));
+    assert(car.previousAutomaticClutch == 1 && car.clutchState > 0.33f);
+    const float disconnected = car.clutchState;
+    // At sufficient engine speed it engages gradually, rather than opening
+    // on every frame or instantaneously erasing the clutch history.
+    step.displayedEngineSpeed = 600;
+    assert(car.advanceControls(input, config, step, error));
+    assert(car.previousAutomaticClutch > 0.66f && car.previousAutomaticClutch < 0.67f);
+    assert(car.clutchState > disconnected);
+    for (int i = 0; i < 100; ++i)
+      assert(car.advanceControls(input, config, step, error));
+    assert(car.clutchState < 0.001f);
+    input.digital[0] = 127;
+    assert(car.advanceControls(input, config, step, error));
+    assert(car.previousAutomaticClutch == 1 && car.clutchState > 0.33f);
+    // Manual clutch disables the automatic intervention, including at idle.
+    step.automaticClutch = false;
+    input.digital[0] = 0;
+    step.displayedEngineSpeed = 0;
+    for (int i = 0; i < 100; ++i)
+      assert(car.advanceControls(input, config, step, error));
+    assert(car.clutchState < 0.001f);
+    // FUN_0044dd70 opens the clutch when the driven speed would overrun
+    // the lesser of the engine and limiter bounds, even with no pedal.
+    step.automaticClutch = true;
+    step.displayedEngineSpeed = 600;
+    step.drivenWheelSpeed = 100;
+    assert(car.advanceControls(input, config, step, error));
+    assert(car.previousAutomaticClutch == 1 && car.clutchState > 0.33f);
+    CarConfig invalid = config;
+    invalid.gearRatios[0] = 0;
+    const float beforeFailure = car.clutchState;
+    assert(!car.advanceControls(input, invalid, step, error));
+    assert(car.clutchState == beforeFailure && car.currentGear == 1);
+    // Neutral (cached zero ratio) and stopped engines leave history alone.
+    step.automaticClutch = true;
+    car.currentGear = 0;
+    car.currentGearRatio = 0;
+    const float previous = car.previousClutchEngineSpeed;
+    assert(car.advanceControls(input, config, step, error));
+    assert(car.previousClutchEngineSpeed == previous);
+    car.currentGear = 1;
+    car.currentGearRatio = config.gearRatios[0];
+    step.engineRunning = false;
+    assert(car.advanceControls(input, config, step, error));
+    assert(car.previousClutchEngineSpeed == previous);
+  }
+  {
+    // FUN_0044e690 uses one latch for both shift directions. A held button
+    // at a gear boundary must still be released before another shift.
+    CarRuntimeInstance car;
+    CarConfig config;
+    CarControlSnapshot input;
+    CarControlStepContext step;
+    step.step = 0.1f;
+    std::string error;
+    const auto shift = [&](int request) {
+      step.time += 1;
+      input.digital[2] = request;
+      assert(car.advanceControls(input, config, step, error));
+    };
+    car.currentGear = config.gearCount;
+    shift(127);
+    assert(car.currentGear == config.gearCount);
+    shift(-127);
+    assert(car.currentGear == config.gearCount);
+    for (int gear = config.gearCount - 1; gear >= 0; --gear) {
+      shift(0);
+      shift(-127);
+      assert(car.currentGear == gear);
+      shift(-127);
+      assert(car.currentGear == gear);
+    }
+    shift(0);
+    shift(-127);
+    assert(car.currentGear == 7);
+    shift(0);
+    shift(-127);
+    assert(car.currentGear == 7);
+    shift(0);
+    shift(127);
+    assert(car.currentGear == 0);
+    shift(0);
+    shift(127);
+    assert(car.currentGear == 1);
   }
   std::printf("car runtime ok\n");
 }

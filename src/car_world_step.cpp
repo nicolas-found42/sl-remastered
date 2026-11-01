@@ -555,13 +555,22 @@ bool CarWorldStepper::step(float seconds, std::string& error) {
               (instance.transmissionMode & 1) != 0 &&
               (instance.transmissionMode & 4) == 0;
           context.semiautomatic = (instance.transmissionMode & 5) == 5;
+          context.automaticClutch = (instance.transmissionMode & 2) == 0;
           context.engineRunning = instance.engineRunning;
           context.positiveMass = car->mass > 0;
           std::string detail;
+          const int previousGear = instance.currentGear;
           if (!instance.advanceControls(*controls, config, context, detail)) {
             why = "car step: controls: " + detail;
             return false;
           }
+          if (previousGear != instance.currentGear)
+            runlog::event(runlog::EventKind::Note,
+                          "transmission: mode=%d gear=%d->%d request=%d clutch=%.3f wheel=%.3f engine=%.3f time=%.3f clutchUntil=%.3f upUntil=%.3f downUntil=%.3f",
+                          instance.transmissionMode, previousGear, instance.currentGear,
+                          controls->digital[2], instance.clutchState, context.drivenWheelSpeed,
+                          context.displayedEngineSpeed, context.time, instance.shiftState.clutchUntil,
+                          instance.shiftState.upUntil, instance.shiftState.downUntil);
         }
       }
       if (const auto angles = calculateCarSteeringAngles(instance, config))
@@ -1511,11 +1520,14 @@ bool CarWorldStepper::step(float seconds, std::string& error) {
     line.add("\"woke_by\":%s,",
              asleepBeforeStep && hooks.wakeCars && stepped ? "\"controls\"" : "null");
     line.add("\"ctl\":{\"src\":%d,\"thr\":%.2f,\"brk\":%.2f,\"clu\":%.2f,"
-             "\"str\":%.2f,\"gear\":%d,\"eng\":%.1f,\"mode\":%d,\"shift\":%d,\"driven\":%.3f},",
+             "\"str\":%.2f,\"gear\":%d,\"eng\":%.1f,\"mode\":%d,\"shift\":%d,"
+             "\"ratio\":%.3f,\"driven\":%.3f,\"displayed\":%.3f,\"autoClutch\":%.3f},",
              lastControls_ ? 1 : 0, instance.throttleState, instance.brakeState,
              instance.clutchState, instance.steeringState, instance.currentGear,
              instance.engineAngularSpeed, instance.transmissionMode,
-             lastControls_ ? lastControls_->digital[2] : 0, instance.drivenWheelSpeed);
+             lastControls_ ? lastControls_->digital[2] : 0,
+             instance.currentGearRatio, instance.drivenWheelSpeed,
+             instance.displayedEngineSpeed, instance.previousAutomaticClutch);
     line.add("\"wh\":[");
     bool firstWheel = true;
     for (size_t i = 0; i < car->wheels.size() && i < 4; ++i) {
