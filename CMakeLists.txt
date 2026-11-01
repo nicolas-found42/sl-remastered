@@ -455,6 +455,12 @@ target_link_libraries(sfx_test PRIVATE sl_data)
 add_test(NAME sfx_unit COMMAND sfx_test)
 set_tests_properties(sfx_unit PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}" ENVIRONMENT "SDL_AUDIODRIVER=dummy")
 
+# The real-device variant: skips itself when only the dummy backend exists.
+add_executable(sfx_device_test tests/sfx_device_test.cpp)
+target_link_libraries(sfx_device_test PRIVATE sl_data)
+add_test(NAME sfx_device_unit COMMAND sfx_device_test)
+set_tests_properties(sfx_device_unit PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
 find_path(FFMPEG_INCLUDE_DIR libavformat/avformat.h REQUIRED)
 find_library(AVFORMAT_LIBRARY avformat REQUIRED)
 find_library(AVCODEC_LIBRARY avcodec REQUIRED)
