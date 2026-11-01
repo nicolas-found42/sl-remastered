@@ -199,3 +199,13 @@ NativeResult systemIsLoading(const std::vector<VmValue> &args, const VmObject *,
   }
   return VmValue{int32_t{now}};
 }
+
+NativeResult systemGetConfigOptions(const std::vector<VmValue>& args, const VmObject*, VmArena* arena,
+                                    const std::vector<const TufaClass*>*) {
+  // FUN_0047c500 -> FUN_00427bf0 refreshes engine settings from live Config.
+  if (!args.empty() || !arena || !arena->gameState || !arena->gameState->refreshConfig)
+    return std::string{"System.getConfigOptions: application configuration unavailable"};
+  std::string error;
+  if (!arena->gameState->refreshConfig(error)) return "System.getConfigOptions: " + error;
+  return std::monostate{};
+}

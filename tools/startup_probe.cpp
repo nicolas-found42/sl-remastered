@@ -697,6 +697,45 @@ static int probeMain(int argc, char** argv, const std::string& runDir) {
                        error.c_str());
           return 1;
         }
+        if (initProbe) {
+          // Keep unsupported graphics changes explicit. Existing default
+          // fidelity gaps are not evidence that a newly selected setting works.
+          std::map<std::string, VmValue> unsupportedGraphics;
+          for (const auto& state : states) if (state.owner == config)
+            for (const auto& field : state.fields)
+              if (field.name == "video_gamma" || field.name == "texture_size" ||
+                  field.name == "texture_save_quality" || field.name == "shadow_size" ||
+                  field.name == "shadow_detail" || field.name == "shadows" ||
+                  field.name == "flares" || field.name == "headlight_rays" ||
+                  field.name == "particle_density") unsupportedGraphics.emplace(field.name, field.value);
+          gameState.refreshConfig = [&, unsupportedGraphics](std::string& detail) {
+            for (const auto& [name, initial] : unsupportedGraphics) {
+              const auto current = vmActiveStaticField(arena, "java.util.Config", name);
+              if (!current || *current != initial) {
+                detail = "unsupported graphics setting change: " + name;
+                runlog::event(runlog::EventKind::Error, "Config refresh rejected: %s", detail.c_str());
+                return false;
+              }
+            }
+            const auto liveInteger = [&](const char* name, std::optional<int32_t>& target) {
+              const auto value = vmActiveStaticField(arena, "java.util.Config", name);
+              if (!value || !std::holds_alternative<int32_t>(*value)) return false;
+              target = std::get<int32_t>(*value); return true;
+            };
+            const auto visibilityDetail = vmActiveStaticField(arena, "java.util.Config", "object_detail");
+            const auto amplitude = vmActiveStaticField(arena, "java.util.Config", "object_detail_amp");
+            if (!visibilityDetail || !amplitude || !std::holds_alternative<float>(*visibilityDetail) ||
+                !std::holds_alternative<float>(*amplitude) ||
+                !liveInteger("resource_loadrate", resourceLoadRate) || !liveInteger("mem_instance_max", instanceMax) ||
+                !liveInteger("mem_sound_max", soundMax) || !liveInteger("mem_texture_max", textureMax) || !liveInteger("mem_vertex_max", meshMax)) {
+              detail = "live Config fields unavailable"; return false;
+            }
+            if (!frameVisibility.configure(std::get<float>(*visibilityDetail), std::get<float>(*amplitude), detail)) return false;
+            runlog::event(runlog::EventKind::Note, "Config refreshed: object_detail=%.6g amplitude=%.6g loadrate=%d instanceMax=%d soundMax=%d textureMax=%d meshMax=%d",
+                          std::get<float>(*visibilityDetail), std::get<float>(*amplitude), *resourceLoadRate, *instanceMax, *soundMax, *textureMax, *meshMax);
+            detail.clear(); return true;
+          };
+        }
         if (diagnosticRenderer) {
           gameState.forceRendering = [&](std::string& renderError) {
             const auto initialFrame = world.frameCounter();
@@ -854,6 +893,27 @@ static int probeMain(int argc, char** argv, const std::string& runDir) {
             gameState.displayModes->push_back(requested);
           displaySize.width = requested[0]; displaySize.height = requested[1];
           recordDisplay("startup-applied", requested, isWindowed);
+          gameState.changeDisplayMode = [&, isWindowed, recordDisplay](PlatformDisplayMode mode, std::string& detail) {
+            // FUN_004b9810 refuses changes in an already-windowed renderer;
+            // the stock OptionsDialog still saves its requested Config fields.
+            if (isWindowed) {
+              runlog::event(runlog::EventKind::Note,
+                            "display change refused: stock windowed renderer requested=%dx%dx%d applied=%dx%d",
+                            mode[0], mode[1], mode[2], displaySize.width, displaySize.height);
+              detail.clear(); return true;
+            }
+            if (!applyDisplayMode(diagnosticWindow.get(), mode, false, detail)) {
+              runlog::event(runlog::EventKind::Error, "display change rejected: requested=%dx%dx%d cause=%s", mode[0], mode[1], mode[2], detail.c_str());
+              return false;
+            }
+            if (!diagnosticRenderer->presentation(mode[0], mode[1], detail)) return false;
+            displaySize.width = mode[0]; displaySize.height = mode[1];
+            int outputWidth = 0, outputHeight = 0;
+            if (!diagnosticRenderer->outputSize(outputWidth, outputHeight, detail)) return false;
+            recordDisplay("change-applied", mode, false);
+            runlog::event(runlog::EventKind::Note, "display simulation scale=%.6g", timers.timeScale());
+            detail.clear(); return true;
+          };
         }
         std::printf("measurement = %.0f; sound = %.6g, %.6g, %.6g\n",
                     measurement.value, sound.volumes[0], sound.volumes[1],
@@ -1053,6 +1113,28 @@ static int probeMain(int argc, char** argv, const std::string& runDir) {
                          error.c_str());
             return 1;
           }
+          const auto finishNormally = [&]() {
+            // Stock shutdown004282c0 destroys the linked resource objects;
+            // unchanged Config.finalize (tree118) saves save/game/options.
+            // The host owns the VM heap, so complete this lifecycle before
+            // releasing its Config receiver and writable FileState.
+            const auto* node = world.configNode();
+            const auto* receiver = node ? node->scriptReceiver : nullptr;
+            const TufaMethod* finalizer = nullptr;
+            for (const auto& list : config->methods) for (const auto& method : list)
+              if (method.words[1] < config->constants.size() && method.words[2] < config->constants.size() &&
+                  config->constants[method.words[1]].text == "finalize" && config->constants[method.words[2]].text == "()V") finalizer = &method;
+            if (!receiver || !finalizer || finalizer->words[3] >= config->trees.size()) {
+              std::fprintf(stderr, "startup probe: Config shutdown finalizer unavailable\n"); return 1;
+            }
+            const auto saved = vmExecute(*config, config->trees[finalizer->words[3]], {receiver}, &nativeRegistry(), &loaded, &states, &arena);
+            if (!saved.ok) {
+              runlog::event(runlog::EventKind::Error, "Config shutdown failed: %s", saved.error.c_str());
+              std::fprintf(stderr, "startup probe: Config shutdown: %s\n", saved.error.c_str()); return 1;
+            }
+            runlog::event(runlog::EventKind::Note, "Config shutdown: stock finalizer completed save/game/options");
+            return 0;
+          };
           float previousFrameSeconds = 0.0f;
           bool noCameraFrameLogged = false;
           std::optional<std::array<float, 3>> cursorInput =
@@ -1519,7 +1601,7 @@ static int probeMain(int argc, char** argv, const std::string& runDir) {
                 // holds only genuine failures.
                 runlog::event(runlog::EventKind::Note,
                               "startup probe: script quit at %.1fs", action.at);
-                return 0;
+                return finishNormally();
               }
               if ((action.verb == "click" || action.verb == "clickn") && platformInput) {
                 float x = std::stof(action.a), y = std::stof(action.b);
@@ -1703,7 +1785,7 @@ static int probeMain(int argc, char** argv, const std::string& runDir) {
             while (SDL_PollEvent(&event)) {
               if (event.type == SDL_EVENT_QUIT ||
                   event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED)
-                return 0;
+                return finishNormally();
               if (event.type == SDL_EVENT_MOUSE_MOTION &&
                   event.motion.windowID ==
                       SDL_GetWindowID(diagnosticWindow.get())) {

@@ -8,6 +8,7 @@ struct FrameVisibilityControls { float worldScale; float threshold; bool frustum
 class FrameVisibilityState {
 public:
 	bool applyConfig(const std::vector<VmStaticFields>& states, std::string& error);
+	bool configure(float detail, float amplitude, std::string& error);
 	void setPriority(int32_t priority);
 	std::optional<FrameVisibilityControls> controls(std::string& error);
 	float loadFactor() const { return loadFactor_; }

@@ -27,7 +27,14 @@ bool FrameVisibilityState::applyConfig(const std::vector<VmStaticFields>& states
 		value = *number;
 	}
 	if (!detail || !amplitude) { error = "frame visibility: Config fields unavailable"; return false; }
-	detail_ = detail; amplitude_ = amplitude; error.clear(); return true;
+	return configure(*detail, *amplitude, error);
+}
+
+bool FrameVisibilityState::configure(float detail, float amplitude, std::string& error) {
+  if (!std::isfinite(detail) || !std::isfinite(amplitude) || amplitude == 0) {
+    error = "frame visibility: invalid detail or amplitude"; return false;
+  }
+  detail_ = detail; amplitude_ = amplitude; error.clear(); return true;
 }
 
 void FrameVisibilityState::setPriority(int32_t priority) {

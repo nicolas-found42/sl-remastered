@@ -22,3 +22,5 @@ NativeResult systemSyncGameTime(const std::vector<VmValue>&, const VmObject*, Vm
 
 NativeResult systemIsLoadingReset(const std::vector<VmValue>&, const VmObject*, VmArena*, const std::vector<const TufaClass*>*);
 NativeResult systemIsLoading(const std::vector<VmValue>&, const VmObject*, VmArena*, const std::vector<const TufaClass*>*);
+
+NativeResult systemGetConfigOptions(const std::vector<VmValue>&, const VmObject*, VmArena*, const std::vector<const TufaClass*>*);

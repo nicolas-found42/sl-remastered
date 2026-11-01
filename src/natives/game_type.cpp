@@ -4548,6 +4548,23 @@ NativeResult gfxDisplayModeName(const std::vector<VmValue> &args,
   return VmValue{identity};
 }
 
+NativeResult gfxChangeVideoMode(const std::vector<VmValue>& args, const VmObject*, VmArena* arena,
+                                const std::vector<const TufaClass*>*) {
+  if (args.size() != 3 || !arena || !arena->gameState || !arena->gameState->changeDisplayMode)
+    return std::string{"GfxEngine.changeVideoMode: application display unavailable"};
+  PlatformDisplayMode mode{};
+  for (size_t i = 0; i < mode.size(); ++i) {
+    const auto* value = std::get_if<int32_t>(&args[i]);
+    if (!value) return std::string{"GfxEngine.changeVideoMode: integer dimensions/depth required"};
+    mode[i] = *value;
+  }
+  // FUN_0047c3f0 passes the three script arguments to the renderer, vtable +0x14.
+  std::string error;
+  if (!arena->gameState->changeDisplayMode(mode, error))
+    return "GfxEngine.changeVideoMode: " + error;
+  return std::monostate{};
+}
+
 NativeResult gfxCurrDisplayMode(const std::vector<VmValue> &args,
                                 const VmObject *, VmArena *arena,
                                 const std::vector<const TufaClass *> *) {

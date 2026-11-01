@@ -51,6 +51,8 @@ struct VmGameState {
   std::optional<int32_t> mouseHelp{};
   std::optional<std::vector<PlatformDisplayMode>> displayModes{};
   std::function<std::optional<PlatformDisplayMode>()> currentDisplayMode{};
+  std::function<bool(std::string &)> refreshConfig{};
+  std::function<bool(PlatformDisplayMode, std::string &)> changeDisplayMode{};
   // Host implements the stock seven resource/render iterations synchronously.
   std::function<bool(std::string &)> forceRendering{};
   // Host implements stock flush 0047c2d0: the seven passes, then the forced
@@ -283,3 +285,5 @@ NativeResult allocateVector3(VmArena *arena,
 NativeResult allocateYpr(VmArena *arena,
                          const std::vector<const TufaClass *> *classes, float y,
                          float p, float r);
+
+NativeResult gfxChangeVideoMode(const std::vector<VmValue>&, const VmObject*, VmArena*, const std::vector<const TufaClass*>*);
