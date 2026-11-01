@@ -269,7 +269,9 @@ inline void setSnapshot(const char *name, const std::string &text) {
 // the steps that led there. Writers do not allocate.
 constexpr size_t kTraceChannels = 3;
 constexpr size_t kTraceCapacity = 512;
-constexpr size_t kTraceLineSize = 2048;
+// Four wheels plus eight contact-pass slots can exceed 2 KiB. Keep the
+// complete step, including its anomaly/error fields, in the bounded ring.
+constexpr size_t kTraceLineSize = 4096;
 struct TraceChannel {
   char name[24] = {};
   char lines[kTraceCapacity][kTraceLineSize];

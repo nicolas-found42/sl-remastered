@@ -188,7 +188,11 @@ bool CarWorldStepper::step(float seconds, std::string& error) {
     }
     entry.sectors = resources_.groundSectorsAt(
         {state.pos[0], state.pos[1], state.pos[2]}, 6.0f);
-    if (entry.sectors.empty()) {
+    // FUN_004a3f90/004a3bc0 do not integrate a sleeping root. A newly
+    // constructed Car sleeps while Scripts assemble and place it; it need
+    // not stand in a loaded City sector yet. Awake roots still require one.
+    if (entry.sectors.empty() &&
+        !(entry.car->root->flags & physics::kBodyAsleep)) {
       error = "car step: no loaded ground sector contains the car at (" +
               std::to_string(state.pos[0]) + ", " + std::to_string(state.pos[1]) +
               ", " + std::to_string(state.pos[2]) + ")";

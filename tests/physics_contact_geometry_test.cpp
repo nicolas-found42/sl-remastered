@@ -1,4 +1,5 @@
 #include "physics_contact_geometry.hpp"
+#include "physics_core_pair.hpp"
 #include <cassert>
 using namespace physics;
 int main() {
@@ -47,26 +48,32 @@ int main() {
   assert(updateDirectContactGeometryWithSearch(c, pair, 0.5f, 0.5f, point,
                                                geometryWorld, query) ==
          ContactGeometryResult::Updated);
-  assert(geometryWorld.queries == 11 && geometryWorld.stepReady == 0 &&
-         a.state[1].stepFlags == 2);
+  assert(geometryWorld.stepReady == 0 && a.state[1].stepFlags == 2);
+  assert(std::fabs(c.separation - 0.2f) < 0.000001f);
   {
-    // 0049c8f0: the predicted pair is clear enough to enter the time search
-    // (0 < distance <= radii) but every sampled pose has intersecting cores.
-    // Stock creates no contact; it does not fall back to the step-start pose.
-    CorePair predicted = pair;
-    predicted.distance = 0.5f;
-    CorePair overlapping = pair;
-    overlapping.distance = -0.2f;
-    auto overlapQuery = [&](const State&, const State&) -> std::optional<CorePair> {
-      return overlapping;
+    // FUN_004a2d10: if time search cannot separate a retained pair, use
+    // its step-start geometry. A radius-0.5 point starts 0.2 from the box
+    // face and ends inside it: the retained separation is 0.2 - 0.5.
+    const auto box = boxCore({1, 1, 1});
+    Body moving = a;
+    moving.state[0].pos = {1.2f, 0, 0};
+    moving.state[1].pos = {0.9f, 0, 0};
+    DirectContact retained{&moving, &b};
+    auto boxQuery = [&](const State& x, const State& y) {
+      std::optional<size_t> feature;
+      return closestPointPolyhedron(x, box, y, feature);
     };
-    ContactGeometryWorld deepWorld;
-    Vec3 deepPoint{};
-    assert(updateDirectContactGeometryWithSearch(c, predicted, 0.5f, 0.5f,
-                                                 deepPoint, deepWorld,
-                                                 overlapQuery) ==
-           ContactGeometryResult::Dropped);
-    assert(deepWorld.queries == 11);
+    const auto predicted = boxQuery(moving.state[1], b.state[1]);
+    assert(predicted);
+    ContactGeometryWorld retainedWorld;
+    Vec3 retainedPoint{};
+    assert(updateDirectContactGeometryWithSearch(retained, *predicted,
+                                                 0.5f, 0, retainedPoint, retainedWorld, boxQuery) ==
+           ContactGeometryResult::Updated);
+    assert(std::fabs(retained.separation + 0.3f) < 0.000001f);
+    // Stock publishes with the last sampled pose (t=1/1024), even though
+    // the local contact geometry above was refreshed at the current pose.
+    assert(std::fabs(retainedPoint[0] - 0.69970703125f) < 0.000001f);
   }
   before = c;
   beforePoint = point;

@@ -205,17 +205,32 @@ ContactGeometryResult updateDirectContactGeometryWithSearch(
         t -= delta;
       delta *= 0.5f;
     }
-    // 0049c8f0 (all.c 116333-116345, 116420): after the ten-step time search
-    // the contact separation is the core distance minus both radii, and a pair
-    // whose cores still intersect (separation <= -(ra + rb), i.e. core
-    // distance <= 0) creates no contact. There is no fallback re-query at the
-    // step-start pose. Stock also latches pair+0x44 bit 0 so the pair stays
-    // rejected until the bodies separate (00497000/00497500); that latch is not
-    // ported. [INFERENCE] the latch only matters when a later step finds a
-    // clear time fraction for a pair that was once deeply overlapped.
-    if (pair.distance <= 0) {
-      world.queries += 1 + extraQueries;
-      return ContactGeometryResult::Dropped;
+    // FUN_004a2d10 (all.c:119902-119909) refreshes a retained pair from
+    // the current poses when the search still cannot separate the shapes.
+    // The rejection in new-pair creation (0049c8f0) is a different lifecycle.
+    if (pair.distance <= radii) {
+      const float sampledDistance = pair.distance;
+      poseA = &c.a->state[c.a->current];
+      poseB = &c.b->state[c.b->current];
+      auto evaluated = query(*poseA, *poseB);
+      if (!evaluated || !std::isfinite(evaluated->distance))
+        return ContactGeometryResult::Unsupported;
+      pair = *evaluated;
+      // pfStack_1e8 still names the last interpolated pose for publication
+      // of the world point (all.c:119954-119975).
+      ++extraQueries;
+      auto* channel = runlog::traceChannel("contacttrace");
+      if (channel && std::getenv("SLRR_CAR_TRACE"))
+        channel->stream.store(true, std::memory_order_relaxed);
+      char line[384];
+      std::snprintf(line, sizeof line,
+                    "{\"kind\":\"overlap\",\"body\":\"%p\",\"other\":\"%p\","
+                    "\"time\":%.6f,\"predicted\":%.9g,\"sampled\":%.9g,"
+                    "\"radii\":%.9g,\"resting\":%d,\"current\":%.9g}",
+                    static_cast<void*>(c.a), static_cast<void*>(c.b),
+                    initialA.time, predictedPair.distance, sampledDistance,
+                    radii, int(c.resting), pair.distance);
+      runlog::tracePush(channel, line);
     }
   }
   DirectContact candidate = c;

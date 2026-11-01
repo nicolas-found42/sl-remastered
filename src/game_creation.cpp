@@ -780,6 +780,9 @@ CreationResult createNativeInstance(GameWorld &world,
       inst.initializeWheelDrivetrain();
     inst.partPhysics = std::move(builtPartPhysics);
     if (isCar) {
+      // FUN_0044a250 (all.c:58972-58979) sleeps the completed compound
+      // before returning it to Scripts for assembly and placement.
+      suspendCar(*inst.carPhysics);
       std::string registrationError;
       auto *root =
           world.registerCarPhysics(*node, inst.carPhysics, registrationError);

@@ -27,6 +27,7 @@ def main():
                                'data': metadata['game_data']['sha256'],
                                'fixture': fixture['files'],
                                'trace': metadata['trace'],
+                               'presentation': metadata.get('presentation', 'visible'),
                                'environment': metadata['environment']})
             mode = metadata['mode']
             script = metadata.get('script_sha256')
