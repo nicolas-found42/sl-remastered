@@ -3,6 +3,7 @@
 #include "natives/car_part.hpp"
 #include "natives/file.hpp"
 #include "natives/game_type.hpp"
+#include "natives/ground_road.hpp"
 #include "natives/lang_object.hpp"
 #include "natives/lang_string.hpp"
 #include "natives/lang_system.hpp"
@@ -1019,6 +1020,13 @@ const std::vector<NativeEntry> entries{
     {"java.game.Vehicle", "hasCrime", "()F", "00440bf0", vehicleHasCrime},
     {"java.util.resource.GroundRef", "getNearestCross",
      "(Ljava.lang.Vector3;F)Ljava.lang.Vector3;", "00483d00", groundGetNearestCross},
+    {"java.util.resource.GroundRef", "alignToRoad",
+     "(Ljava.lang.Vector3;)[Ljava.lang.Vector3;", "00483e60", groundAlignToRoad},
+    {"java.util.resource.GroundRef", "getStartDirection",
+     "(Ljava.lang.Vector3;Ljava.lang.Vector3;)Ljava.lang.Vector3;", "00483400",
+     groundGetStartDirection},
+    {"java.util.resource.GroundRef", "haltTrafficPath",
+     "(Ljava.lang.Vector3;Ljava.lang.Vector3;)V", "004835e0", groundHaltTrafficPath},
     {"java.util.resource.GroundRef", "addTrafficN",
      "(Ljava.util.resource.GameRef;IFFF)I", "00484050", groundAddTrafficN},
     {"java.util.resource.GroundRef", "setPedestrianDensityN", "(F)V", "00484d30",
