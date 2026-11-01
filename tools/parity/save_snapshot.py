@@ -8,6 +8,7 @@ from pathlib import Path
 import shutil
 
 REF = Path(__file__).resolve().parents[2] / 'ref'
+REF = REF.resolve()
 
 
 def manifest(root):

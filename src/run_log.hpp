@@ -509,6 +509,7 @@ struct RunOptions {
   std::string baseDir; // empty: $SLRR_RUN_DIR, else local/runs
   std::vector<std::string> argv;
   std::string gameRoot, dataRoot, scriptPath;
+  std::string referenceRoot = "ref";
   std::string sourceRoot; // empty: source root embedded by the compiler
   bool captureStreams = true;
   bool installHandlers = true;

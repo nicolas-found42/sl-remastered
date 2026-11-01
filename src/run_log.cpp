@@ -1220,15 +1220,23 @@ std::unique_ptr<RunRecorder> RunRecorder::start(const RunOptions &options,
   const std::string name =
       utcStamp(now, "%Y%m%dT%H%M%SZ") + "-" + std::to_string(getpid());
   std::error_code ec;
-  const fs::path reference = fs::weakly_canonical("ref", ec);
+  const fs::path reference = fs::weakly_canonical(options.referenceRoot, ec);
   if (ec) {
     error = "cannot resolve ref directory";
     return nullptr;
   }
   const fs::path resolvedBase = fs::weakly_canonical(base, ec);
-  if (ec || containsPath(reference, resolvedBase)) {
-    error = "run directory must be outside ref";
+  if (ec || containsPath(reference, resolvedBase) ||
+      containsPath(resolvedBase, reference)) {
+    error = "run directory must be outside ref and must not contain it";
     return nullptr;
+  }
+  if (!options.gameRoot.empty()) {
+    const auto game = fs::weakly_canonical(options.gameRoot, ec);
+    if (ec || containsPath(game, resolvedBase) || containsPath(resolvedBase, game)) {
+      error = "run directory must not overlap installed game";
+      return nullptr;
+    }
   }
   fs::create_directories(base, ec);
   fs::path dir = fs::path(base) / name;
@@ -1308,6 +1316,7 @@ std::unique_ptr<RunRecorder> RunRecorder::start(const RunOptions &options,
          << std::count(entries.begin(), entries.end(), '\n') << "\n";
   }
   meta << "game_root: " << options.gameRoot << "\n";
+  meta << "reference_root: " << reference.string() << "\n";
   meta << "data_root: " << options.dataRoot << "\n";
   // The launcher reports a prelaunch inventory; it does not trace game reads.
   std::string gameDataStatus = "unavailable";
