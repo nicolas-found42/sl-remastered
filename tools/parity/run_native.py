@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """Record one native Free Ride attempt with its initial save, script and trace.
 
+Presentation defaults to a hidden, non-focusable native window; --visible opts
+into desktop presentation. Background and rapid routes bypass native intros.
+
 Modes:
   rapid (default) -- bundled tools/scripts/free-ride-fast.txt; waits for the
       splash cancel hotkey, skips the splash with normal Escape, clicks the real
@@ -68,6 +71,12 @@ def main():
     parser.add_argument('--script', help='script file to run instead of the bundled mode script')
     parser.add_argument('--cold-start', action='store_true',
                         help='legacy timed menu entry instead of wait menu; same driving wait')
+    presentation = parser.add_mutually_exclusive_group()
+    presentation.add_argument('--background', dest='background', action='store_true',
+                              help='hidden non-focusable native window (default); no fullscreen or native intros')
+    presentation.add_argument('--visible', dest='background', action='store_false',
+                              help='show the native window and apply stock fullscreen settings')
+    parser.set_defaults(background=True)
     parser.add_argument('--timeout', type=float,
                         help='maximum seconds (default: 120)')
     args = parser.parse_args()
@@ -121,13 +130,17 @@ def main():
             script.write_text(COLD_SCRIPT_TEXT)
         run_dir = out / 'run'
         run_dir.mkdir()
-        cmd = [str(probe), '--init', '--renderer', '--loop', '--visible',
+        cmd = [str(probe), '--init', '--renderer', '--loop',
+               '--background' if args.background else '--visible',
                '--script', str(script), '--data-root', str(data),
                '--reference-root', str(reference), str(game)]
+        if args.background or not args.cold_start:
+            cmd.append('--no-intro')
         metadata = {'probe': str(probe), 'probe_sha256': digest(probe), 'game': str(game),
                     'game_data': data_identity,
                     'reference_root': str(reference),
                     'mode': mode, 'script_source': script_label,
+                    'presentation': 'background' if args.background else 'visible',
                     'script_path': str(script), 'script_sha256': digest(script),
                     'run_dir': str(run_dir),
                     'command': cmd, 'timeout_seconds': timeout,

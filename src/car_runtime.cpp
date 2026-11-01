@@ -45,6 +45,8 @@ bool CarRuntimeInstance::advanceControls(const CarControlSnapshot& input,
                           brakeState,
                           handbrakeState,
                           clutchState,
+                          previousAutomaticClutch,
+                          previousClutchEngineSpeed,
                           shiftState.clutchUntil,
                           shiftState.upUntil,
                           shiftState.downUntil};
@@ -110,27 +112,14 @@ bool CarRuntimeInstance::advanceControls(const CarControlSnapshot& input,
       }
     }
   }
-  if (shift.clutchUntil > 0) {
-    if (shift.clutchUntil <= context.time)
-      shift.clutchUntil = -1;
-    else {
-      clutch = 1;
-      throttle = 0;
-    }
-  }
-  if (shift.upUntil > 0 || shift.downUntil > 0) {
-    if (shift.upUntil < context.time)
-      shift.upUntil = -1;
-    if (shift.downUntil < context.time)
-      shift.downUntil = -1;
-  }
   // Stock flag 0x10 (FUN_0044d720) does launch/reverse/neutral transitions;
   // flag 0x20 (FUN_0044dc30) only up/downshifts between forward gears while
   // moving. Both share the moving-branch shift logic below.
   if ((context.automatic || context.semiautomatic) && context.positiveMass &&
       context.engineRunning && !context.automaticInhibited && !forcedBrake &&
-      shift.clutchUntil <= 0) {
-    if (std::fabs(context.drivenWheelSpeed) > 1.0f) {
+      (context.automatic ? shift.clutchUntil <= 0
+                         : config.gearCount && gear != 0 && gear != 7)) {
+    if (std::fabs(context.drivenWheelSpeed) > 1.0f || context.semiautomatic) {
       if (!carPhysics || carPhysics->wheels.size() > wheelExtras.size()) {
         error = "car controls: driven-wheel state unavailable";
         return false;
@@ -204,10 +193,11 @@ bool CarRuntimeInstance::advanceControls(const CarControlSnapshot& input,
           }
         }
       } else if (gear >= 1 && gear != 7 &&
-                 (demand > 0.1f ? std::fabs(slip) < 0.2f
-                                : gear > 1 && shift.downUntil <= 0)) {
-        if (context.automatic && rpm < 0) {
-          gear = 0;
+                 (context.semiautomatic || demand > 0.1f
+                      ? std::fabs(slip) < 0.2f
+                      : gear > 1 && shift.downUntil <= 0)) {
+        if (rpm < 0 && shift.downUntil <= 0) {
+          gear = context.semiautomatic ? 1 : 0;
           shift.clutchUntil = context.time + 0.2f;
           shifted(false);
         } else if (ratio != 0) {
@@ -257,7 +247,67 @@ bool CarRuntimeInstance::advanceControls(const CarControlSnapshot& input,
       }
     }
   }
+  // FUN_0044dd70 precedes the shift-timer override and pedal smoothing.
+  float nextAutomaticClutch = previousAutomaticClutch;
+  float nextClutchEngineSpeed = previousClutchEngineSpeed;
+  if (context.automaticClutch && context.positiveMass && context.engineRunning &&
+      std::fabs(currentGearRatio) >= 0.01f) {
+    const float clutchValues[] = {clutchRpm, config.rpmIdle, config.gearRatios[0],
+                                  currentGearRatio, config.rearEndRatio, maximumRpm, rpmLimit};
+    for (float value : clutchValues) {
+      if (!std::isfinite(value)) {
+        error = "car controls: non-finite automatic clutch configuration";
+        return false;
+      }
+    }
+    if (config.gearRatios[0] == 0) {
+      error = "car controls: automatic clutch requires first gear ratio";
+      return false;
+    }
+    const float idle = config.rpmIdle * 0.10471975803375244f;
+    const float targetSpeed =
+        (clutchRpm * 0.10471975803375244f - idle) *
+            (std::fabs(currentGearRatio / config.gearRatios[0]) * throttle *
+                 0.699999988079071f +
+             0.30000001192092896f) *
+            0.800000011920929f + idle;
+    const float wheelSpeed = context.drivenWheelSpeed * currentGearRatio;
+    const float predicted = (context.displayedEngineSpeed - previousClutchEngineSpeed) +
+                            context.displayedEngineSpeed;
+    float target = 1;
+    if (wheelSpeed * config.rearEndRatio <=
+        std::min(maximumRpm, rpmLimit) * 0.12566371262073517f) {
+      target = clutch;
+      if (wheelSpeed * config.rearEndRatio <= context.displayedEngineSpeed &&
+          predicted < targetSpeed) {
+        target = 1;
+        if (idle < predicted) {
+          target = 1 - (predicted - idle) / (targetSpeed - idle);
+          if (target < clutch)
+            target = clutch;
+        }
+      }
+    }
+    if (clutch <= target) {
+      const float rate = previousAutomaticClutch < target ? 200.0f : 33.333335876464844f;
+      clutch = (target - previousAutomaticClutch) * std::min(context.step * rate, 1.0f) +
+               previousAutomaticClutch;
+    }
+    if (!std::isfinite(targetSpeed) || !std::isfinite(target) ||
+        !std::isfinite(clutch) || !std::isfinite(predicted)) {
+      error = "car controls: invalid automatic clutch state";
+      return false;
+    }
+    nextAutomaticClutch = clutch;
+    nextClutchEngineSpeed = context.displayedEngineSpeed;
+  }
   // 0044d330 runs after automatic shifting and immediately applies its clutch.
+  if (shift.clutchUntil > 0 && shift.clutchUntil <= context.time)
+    shift.clutchUntil = -1;
+  if (shift.upUntil > 0 && shift.upUntil < context.time)
+    shift.upUntil = -1;
+  if (shift.downUntil > 0 && shift.downUntil < context.time)
+    shift.downUntil = -1;
   if (shift.clutchUntil > context.time && shift.clutchUntil > 0) {
     clutch = 1;
     throttle = 0;
@@ -279,6 +329,8 @@ bool CarRuntimeInstance::advanceControls(const CarControlSnapshot& input,
   brakeState = nextBrake;
   handbrakeState = handbrake;
   clutchState = nextClutch;
+  previousAutomaticClutch = nextAutomaticClutch;
+  previousClutchEngineSpeed = nextClutchEngineSpeed;
   shiftState = shift;
   currentGear = gear;
   // FUN_0044df70 / FUN_0044e120: intervention flags describe actual pedal
