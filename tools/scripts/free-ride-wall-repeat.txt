@@ -1,0 +1,31 @@
+# Stock menu entry, wall impact, reverse separation, renewed forward impact.
+# Screenshots must be interpreted with the matching Cartrace/contacttrace.
+0 wait splash 30
+0 keydown Escape
+0 wait menu 30
+0 keyup Escape
+0 clickn 0.65625 0.264583333
+0 wait driving 60
+0 shot @run/ready.bmp
+0.1 keydown Up
+40 keyup Up
+40 shot @run/first-impact.bmp
+41 keydown Down
+45 keydown Z
+45.2 keyup Z
+46 keydown Z
+46.2 keyup Z
+47 keydown Z
+47.2 keyup Z
+58 keyup Down
+58 shot @run/reverse.bmp
+59 keydown Up
+59 keydown A
+59.2 keyup A
+60 keydown A
+60.2 keyup A
+61 keydown A
+61.2 keyup A
+90 keyup Up
+90 shot @run/renewed-impact.bmp
+91 quit

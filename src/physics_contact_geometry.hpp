@@ -13,7 +13,9 @@ updateDirectContactGeometry(DirectContact &contact, const CorePair &pair,
                             float radiusA, float radiusB, Vec3 &worldPoint);
 // 004a8410 interpolation used by the search; body.current must be 0 or 1.
 State interpolateContactPose(const Body &body, float fraction);
-// Evaluates intermediate poses during the stock ten-step search. Return nullopt
+// Evaluates intermediate/current poses for retained pairs (004a2d10), including
+// the current-pose recheck when the ten-step search cannot separate them.
+// This is not the new-pair creation/rejection path in 0049c8f0. Return nullopt
 // when the underlying closest-core query cannot evaluate the supplied poses.
 using ContactCoreQuery =
     std::function<std::optional<CorePair>(const State &, const State &)>;

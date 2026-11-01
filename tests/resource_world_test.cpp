@@ -1545,6 +1545,12 @@ static void cityGamePayload() {
     const auto hit = queryGamePhysicsFace(g, 0, {0, -1, 0}, {0, 1, 0});
     CHECK(hit.status == GamePhysicsHitStatus::Hit && hit.fraction == 0.5f &&
           hit.materialWord == 6 && hit.point[1] == 0);
+    // 0049fa60 permits a segment starting on the face to create contact;
+    // the returned fraction is zero, rather than an unsupported geometry.
+    const auto touching = queryGamePhysicsFace(g, 0, {0, 0, 0}, {0, 1, 0});
+    CHECK(touching.status == GamePhysicsHitStatus::Hit && touching.fraction == 0 &&
+          touching.materialWord == 6 && touching.point == (std::array<float, 3>{0, 0, 0}));
+    CHECK(queryGamePhysicsFace(g, 0, {20, 0, 0}, {20, 1, 0}).status == GamePhysicsHitStatus::Miss);
   }
   CHECK(!view.dependencies.empty());
   if (!view.dependencies.empty())

@@ -22,7 +22,7 @@ with tempfile.TemporaryDirectory(prefix='sl-shot-') as temp:
         script.write_text(actions)
         base = root / ('runs-' + name)
         env = dict(os.environ, SLRR_RUN_DIR=str(base))
-        args = [str(probe), '--init', '--renderer', '--loop', '--visible', '--script', str(script), '--data-root', str(data)]
+        args = [str(probe), '--init', '--renderer', '--loop', '--background', '--no-intro', '--script', str(script), '--data-root', str(data)]
         if no_log:
             args.append('--no-run-log')
         return subprocess.run(args + [str(game)], env=env, capture_output=True, text=True, timeout=90), base

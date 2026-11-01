@@ -2,8 +2,11 @@
 
 #include "car_physics.hpp"
 #include "ground_runtime.hpp"
+#include "run_log.hpp"
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
+#include <cstdlib>
 #include <functional>
 #include <unordered_set>
 #include <utility>
@@ -390,6 +393,33 @@ makeWheelGroundContact(std::unique_ptr<SpatialGroundFace> face,
       queryGamePhysicsFace(*face->geometry(), face->faceIndex(), start, end);
   if (hit.status == GamePhysicsHitStatus::Unsupported) {
     result.detail = "wheel face intersection unsupported";
+    // Keep the exact rejected PHYS query, rather than diagnosing a wheel
+    // contact refusal from a later screenshot or rounded Cartrace pose.
+    auto* channel = runlog::traceChannel("contacttrace");
+    if (channel && std::getenv("SLRR_CAR_TRACE"))
+      channel->stream.store(true, std::memory_order_relaxed);
+    const auto& triangle = face->geometry()->triangles[face->faceIndex()];
+    const auto& vertices = face->geometry()->vertices;
+    if (std::any_of(triangle.vertices.begin(), triangle.vertices.end(),
+                    [&](size_t index) { return index >= vertices.size(); })) {
+      runlog::event(runlog::EventKind::Error,
+                    "wheel face intersection: invalid vertex indices on face %zu", face->faceIndex());
+      return result;
+    }
+    const auto& a = vertices[triangle.vertices[0]];
+    const auto& b = vertices[triangle.vertices[1]];
+    const auto& c = vertices[triangle.vertices[2]];
+    char line[1024];
+    std::snprintf(line, sizeof line,
+                  "{\"kind\":\"wheel-face-refusal\",\"wheel\":\"%p\",\"leaf\":\"%p\","
+                  "\"face\":%zu,\"time\":%.9g,\"start\":[%.9g,%.9g,%.9g],"
+                  "\"end\":[%.9g,%.9g,%.9g],\"n\":[%.9g,%.9g,%.9g],"
+                  "\"vertices\":[[%.9g,%.9g,%.9g],[%.9g,%.9g,%.9g],[%.9g,%.9g,%.9g]]}",
+                  static_cast<void*>(wheel.get()), static_cast<const void*>(face->leafOwner()),
+                  face->faceIndex(), state.time, start[0], start[1], start[2],
+                  end[0], end[1], end[2], triangle.normal[0], triangle.normal[1], triangle.normal[2],
+                  a[0], a[1], a[2], b[0], b[1], b[2], c[0], c[1], c[2]);
+    runlog::tracePush(channel, line);
     return result;
   }
   if (hit.status == GamePhysicsHitStatus::Miss) {

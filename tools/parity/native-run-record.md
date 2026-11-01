@@ -10,6 +10,12 @@ python3 -I tools/parity/run_native.py local/verify/native-attempt-unique \
   --save local/rapid-testing/baseline-data/save
 ```
 
+The recorder defaults to a hidden, non-focusable native window and skips native
+intro movies. `--background` selects this explicitly; `--visible` opts into
+desktop presentation and the stock fullscreen setting. Background Runs do not
+prove desktop/fullscreen behavior. The visible normal cold route is
+`--cold-start --visible`.
+
 The default rapid script waits for the actual Main Menu, enters Free Ride through
 normal input, waits for the player's physical Car and presented camera, then
 holds Up for two logical seconds. `--cold-start` retains the legacy 10/13/13.5-second
@@ -51,7 +57,7 @@ measured scope and retained local replay/report commands.
 
 `python3 -I tools/parity/summarize_native_runs.py OUTPUT...` prints samples,
 failure count, medians and ranges as JSON. It rejects differing executable,
-data, fixture or recorded environment identities and differing scripts within a
+data, fixture, presentation or recorded environment identities and differing scripts within a
 mode. It counts observed timings explicitly, retaining `null` when unobserved.
 This summary does not judge driving outcomes or stock Parity.
 
