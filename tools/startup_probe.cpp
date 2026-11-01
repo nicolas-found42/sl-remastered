@@ -1181,6 +1181,7 @@ static int probeMain(int argc, char** argv, const std::string& runDir) {
             *static_cast<volatile int*>(nullptr) = 1;
             return 1;
           };
+          bool menuMilestone = false, drivingMilestone = false;
           double lastWorldSummary = -5.0;
           struct CarSample {
             float x = 0.f;
@@ -1382,6 +1383,23 @@ static int probeMain(int argc, char** argv, const std::string& runDir) {
             std::string scriptError;
             const double scriptNow =
                 std::chrono::duration<double>(frameStarted - loopStarted).count();
+            // Observe both routes without changing the script's logical clock.
+            const auto milestone = [&](const char* name, bool& recorded) {
+              if (!recorded && !scriptReady(name)) {
+                recorded = true;
+                const double process = std::chrono::duration<double>(
+                    frameStarted - processClockOrigin).count();
+                std::printf("startup probe: milestone %s process=%.3f "
+                            "loop=%.3f frame=%u\n", name, process, scriptNow,
+                            static_cast<unsigned>(world.frameCounter()));
+                runlog::event(runlog::EventKind::Note,
+                              "milestone %s process=%.3f loop=%.3f frame=%u",
+                              name, process, scriptNow,
+                              static_cast<unsigned>(world.frameCounter()));
+              }
+            };
+            milestone("menu", menuMilestone);
+            milestone("driving", drivingMilestone);
             while (const auto* next = script.poll(
                        scriptNow, scriptReady, waitComplete, scriptError)) {
               const auto& action = *next;

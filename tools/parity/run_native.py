@@ -24,6 +24,7 @@ import importlib.util
 import json
 import math
 import os
+import re
 from pathlib import Path
 import shutil
 import subprocess
@@ -54,6 +55,7 @@ def digest(path):
 
 
 def main():
+    preparation_started = time.monotonic()
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('output', help='new output directory outside ref/')
@@ -129,6 +131,8 @@ def main():
                     'run_dir': str(run_dir),
                     'command': cmd, 'timeout_seconds': timeout,
                     'trace': {'SLRR_TRACE_RANDOM_SEED': '1', 'SLRR_TRACE_CAR_CREATION': '1'},
+                    'environment': {key: value for key, value in os.environ.items()
+                                    if key.startswith(('SLRR_', 'SDL_'))},
                     'started_utc': datetime.datetime.now(datetime.timezone.utc).isoformat()}
         (out / 'metadata.json').write_text(json.dumps(metadata, indent=2) + '\n')
         environment = os.environ.copy()
@@ -136,6 +140,7 @@ def main():
         # Run-local recorder: @run shots and run telemetry land inside the record.
         environment['SLRR_RUN_DIR'] = str(run_dir)
         start = time.monotonic()
+        preparation_seconds = start - preparation_started
         # Keep cwd-relative writes disposable. The probe receives an explicit
         # Reference Folder for both save guards and stock cursor resources.
         with (out / 'stdout.log').open('w') as stdout, (out / 'stderr.log').open('w') as stderr:
@@ -149,6 +154,17 @@ def main():
                 status = {'exit_code': None, 'timed_out': False, 'error': str(error)}
         status['elapsed_seconds'] = time.monotonic() - start
         status['source_save_unchanged'] = (snapshot_module.manifest(save) == initial_save['files'])
+        milestones = {}
+        for name, process, loop, frame in re.findall(
+                r'startup probe: milestone (menu|driving) process=([0-9.]+) loop=([0-9.]+) frame=(\d+)',
+                (out / 'stdout.log').read_text(errors='replace')):
+            milestones.setdefault(name, {'process_seconds': float(process),
+                                         'loop_seconds': float(loop), 'frame': int(frame)})
+        status['milestones'] = milestones
+        status['timing'] = {'preparation_seconds': preparation_seconds,
+                            'menu_seconds': milestones.get('menu', {}).get('process_seconds'),
+                            'driving_seconds': milestones.get('driving', {}).get('process_seconds'),
+                            'total_seconds': time.monotonic() - preparation_started}
         (out / 'result.json').write_text(json.dumps(status, indent=2) + '\n')
         print(json.dumps(status))
         if status['timed_out'] or status['exit_code'] != 0 or not status['source_save_unchanged']:

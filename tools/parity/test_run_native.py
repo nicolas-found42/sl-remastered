@@ -15,7 +15,7 @@ class NativeRecordTest(unittest.TestCase):
             (save / 'game').mkdir(parents=True)
             (save / 'game/options').write_bytes(b'initial')
             probe = root / 'probe'
-            probe.write_text('#!/usr/bin/env python3\nimport os, sys\nfrom pathlib import Path\nassert os.environ["SLRR_TRACE_RANDOM_SEED"] == "1"\nassert os.environ["SLRR_TRACE_CAR_CREATION"] == "1"\nPath(sys.argv[sys.argv.index("--data-root") + 1], "save/game/options").write_bytes(b"changed")\n')
+            probe.write_text('#!/usr/bin/env python3\nimport os, sys\nfrom pathlib import Path\nassert os.environ["SLRR_TRACE_RANDOM_SEED"] == "1"\nassert os.environ["SLRR_TRACE_CAR_CREATION"] == "1"\nPath(sys.argv[sys.argv.index("--data-root") + 1], "save/game/options").write_bytes(b"changed")\nprint("startup probe: milestone menu process=1.250 loop=1.000 frame=12")\nprint("startup probe: milestone driving process=3.500 loop=3.250 frame=25")\n')
             probe.chmod(0o755)
             out = root / 'record'
             tool = Path(__file__).with_name('run_native.py')
@@ -26,7 +26,12 @@ class NativeRecordTest(unittest.TestCase):
             self.assertEqual((save / 'game/options').read_bytes(), b'initial')
             self.assertEqual((out / 'data/save/game/options').read_bytes(), b'changed')
             self.assertEqual(json.loads((out / 'result.json').read_text())['exit_code'], 0)
-            self.assertTrue(json.loads((out / 'result.json').read_text())['source_save_unchanged'])
+            status = json.loads((out / 'result.json').read_text())
+            self.assertTrue(status['source_save_unchanged'])
+            self.assertEqual(status['timing']['menu_seconds'], 1.25)
+            self.assertEqual(status['timing']['driving_seconds'], 3.5)
+            self.assertGreater(status['timing']['preparation_seconds'], 0)
+            self.assertGreaterEqual(status['timing']['total_seconds'], status['elapsed_seconds'] + status['timing']['preparation_seconds'])
             metadata = json.loads((out / 'metadata.json').read_text())
             self.assertEqual(metadata['game_data']['status'], 'complete')
             manifest = json.loads((out / 'game-data-manifest.json').read_text())

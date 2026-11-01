@@ -107,3 +107,7 @@ parent validates the original checkout. This ticket does not rewrite artifact
 checks or copy the proprietary corpus to bypass that refusal. Direct Run-log integration checks
 pass for error, SIGSEGV, abort, throw, SIGTERM, SIGKILL, and partial Runs.
 The existing screenshot safety checks and ten replay tests also pass.
+
+The repeated rapid/cold comparison and remaining acceptance limits are recorded
+in [rapid-benchmark-evidence.md](rapid-benchmark-evidence.md). This supersedes no
+Native or Parity status from the isolated-path evidence above.
