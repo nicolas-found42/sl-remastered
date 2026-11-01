@@ -1,0 +1,21 @@
+# Rest, acceleration, steering and braking through normal Free Ride entry.
+0 wait splash 30
+0 keydown Escape
+0 wait menu 30
+0 keyup Escape
+0 clickn 0.65625 0.264583333
+0 wait driving 60
+0 shot @run/ready.bmp
+4 shot @run/resting.bmp
+4.1 keydown Up
+7 shot @run/accelerating.bmp
+7.1 keydown Left
+7.6 shot @run/steering.bmp
+7.8 keyup Left
+8 keyup Up
+8.1 keydown Down
+11 shot @run/braking.bmp
+14 shot @run/stopping.bmp
+14.1 keyup Down
+16 shot @run/stopped.bmp
+16.1 quit

@@ -10,6 +10,7 @@
 #include "ground_runtime.hpp"
 #include "pack_registry.hpp"
 #include "physics_body.hpp"
+#include "physics_compound.hpp"
 #include "resource_world.hpp"
 #include "world_model.hpp"
 
@@ -34,6 +35,18 @@ int main() {
     uint32_t id = 0;
     assert(packs.resolveLiteral(pack, entry, id, error));
     return id;
+  };
+
+  const auto placeChildren = [](CarPhysics& car) {
+    // Mirror normal setMatrix placement, including sleeping descendants.
+    for (auto it = car.teardownOrder.rbegin(); it != car.teardownOrder.rend(); ++it) {
+      auto& body = **it;
+      if (!body.attachment) continue;
+      const auto& parent = *body.attachment->parent;
+      physics::predictChildPose(parent.state[parent.current],
+                                body.attachment->relative, body.state[body.current]);
+      body.state[body.current ^ 1] = body.state[body.current];
+    }
   };
 
   // --- Ground sector -------------------------------------------------------
@@ -271,6 +284,7 @@ int main() {
     // contact can wake it.
     parkedRoot.state[0].pos = {2.5f, 0.8f, 0};
     parkedRoot.state[1] = parkedRoot.state[0];
+    placeChildren(*parkedNode->carInstance->carPhysics);
     suspendCar(*parkedNode->carInstance->carPhysics);
     assert(parkedRoot.flags & physics::kBodyAsleep);
 
@@ -310,6 +324,61 @@ int main() {
            parkedRoot.state[0].time == parkedState0.time);
     assert(parkedRoot.state[1].pos == parkedState1.pos &&
            parkedRoot.state[1].vel == parkedState1.vel);
+  }
+
+  // Distinct registered Cars must meet through leaf geometry, including
+  // separation and a renewed approach with the same stepper/cache.
+  for (auto* node : world.carNodes())
+    world.destroy(*node);
+  auto makeImpactCar = [&](const char* name) {
+    auto built = buildDetachedCarPhysics(*script->car, "0,0,0,0,0,0,0", 0,
+                                         {0, physics::k::gravityY, 0}, error);
+    assert(built && error.empty());
+    auto* node = world.addTypedChild(*world.defaultParent(), 1, name, 0);
+    assert(node);
+    node->nativeDevice = "car";
+    node->carInstance = std::make_unique<CarRuntimeInstance>();
+    node->carInstance->isCar = true;
+    node->carInstance->carPhysics = std::shared_ptr<CarPhysics>(std::move(built));
+    setLinkOwner(node->carInstance->prototypeSource, script);
+    world.noteInstanceCreated(*node);
+    world.markLoaded(*node);
+    assert(world.registerCarPhysics(*node, node->carInstance->carPhysics, error));
+    return node;
+  };
+  auto* impactA = makeImpactCar("impact-a");
+  auto* impactB = makeImpactCar("impact-b");
+  auto placeImpact = [&](float distance, float speed) {
+    for (auto* node : {impactA, impactB}) {
+      auto& physics = *node->carInstance->carPhysics;
+      wakeCar(physics);
+      auto& body = *physics.root;
+      const float sign = node == impactA ? -1.0f : 1.0f;
+      auto state = body.state[body.current];
+      state.pos = {0, 2.5f, sign * distance};
+      state.vel = {0, 0, -sign * speed};
+      state.omega = {};
+      state.rot = physics::matrixIdentity();
+      state.quat = {0, 0, 0, 1};
+      body.state[0] = body.state[1] = state;
+      placeChildren(physics);
+    }
+  };
+  for (int approach = 0; approach < 2; ++approach) {
+    placeImpact(3.5f, 0);
+    assert(stepper.step(stepSeconds, error) && error.empty());
+    assert(stepper.debugDynamicPairCount() == 0);
+    placeImpact(2.2f, 3);
+    for (int i = 0; i < 25; ++i)
+      assert(stepper.step(stepSeconds, error) && error.empty());
+    const auto& a = *impactA->carInstance->carPhysics->root;
+    const auto& b = *impactB->carInstance->carPhysics->root;
+    const auto& sa = a.state[a.current];
+    const auto& sb = b.state[b.current];
+    // At this height neither Car has landed. Only the body impact can
+    // reverse their approach; a missing traversal simply lets them pass.
+    assert(sa.vel[2] < 1 && sb.vel[2] > -1);
+    assert(sb.pos[2] - sa.pos[2] > 3.5f);
   }
 
   return 0;
