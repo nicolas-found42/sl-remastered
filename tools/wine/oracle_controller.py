@@ -85,7 +85,7 @@ def main():
     if not cmd or not (0 < a.timeout < 86400):
         p.error('a command and timeout in (0, 86400) are required')
     dest = Path(a.record_dir).resolve()
-    ref = Path(__file__).resolve().parents[2] / 'ref'
+    ref = (Path(__file__).resolve().parents[2] / 'ref').resolve()
     if dest == ref or ref in dest.parents:
         p.error('record directory must be outside ref/')
     dest.mkdir(parents=True, exist_ok=False)
