@@ -156,6 +156,7 @@ int main() {
       objectPhysics->instantiate({2.5f, 2.5f, 0.0f}, {0, 0, 0}, error);
   assert(instance.has_value() && error.empty());
   physics::Body* boxRoot = instance->root.get();
+  const auto boxBodies = instance->tree; // world ownership keeps these stable after sleep
   const float spawnY = boxRoot->state[boxRoot->current].pos[1];
   assert(std::fabs(spawnY - 2.5f) < 1e-4f);
   auto* objectNode = world.addTypedChild(*world.defaultParent(), 1, "cone", 0);
@@ -217,7 +218,7 @@ int main() {
   assert(speed < 0.3f);
   // FUN_004a4ed0: true sleep, not merely low visual velocity.
   assert((boxRoot->flags & physics::kBodyAsleep) != 0);
-  for (const auto* body : world.steppedObjectPhysics().front()->bodies())
+  for (const auto* body : boxBodies)
     assert((body->flags & physics::kBodyAsleep) != 0);
   // The collector retained body/ground-face pairs for the box while it was
   // awake and touching (the old code never built any).

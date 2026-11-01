@@ -94,6 +94,8 @@ public:
   const GroundMaterial *retainedMaterial() const;
   // Why tireCandidate() is null (diagnostics): the first failing check.
   const char *tireBlock() const;
+  // Borrowed face identity remains owned by this witness; check valid() before use.
+  const SpatialGroundFace* groundFace() const { return face_.get(); }
 
 private:
   bool validGeometry() const;
