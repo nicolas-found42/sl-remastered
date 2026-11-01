@@ -55,7 +55,7 @@ static int probeMain(int argc, char** argv, const std::string& runDir) {
   bool constructor = false, initProbe = false, haveRoot = false,
        noInput = false, useRenderer = false;
   bool renderFrame = false, visibleWindow = false, runLoop = false,
-       holdFrame = false, captureOnError = false;
+       holdFrame = false, captureOnError = false, noIntro = false;
   std::vector<std::string> extraNames;
   for (int i = 1; i < argc; ++i) {
     const std::string arg = argv[i];
@@ -74,6 +74,11 @@ static int probeMain(int argc, char** argv, const std::string& runDir) {
       visibleWindow = true;
     else if (arg == "--hold-frame" && !holdFrame)
       holdFrame = true;
+    // Harness route switch, not a game behavior: the stock executable plays
+    // its native startup videos on every launch (FUN_0058c700). The rapid
+    // iteration route may opt out; the cold-start route must not.
+    else if (arg == "--no-intro" && !noIntro)
+      noIntro = true;
     else if (arg == "--capture-frame" && captureFrame.empty() && i + 1 < argc)
       captureFrame = argv[++i];
     else if (arg == "--capture-on-error" && !captureOnError)
@@ -244,6 +249,7 @@ static int probeMain(int argc, char** argv, const std::string& runDir) {
   VmMeasurementState measurement{};
   std::unique_ptr<SoundEffects> soundEffects;
   std::unique_ptr<AudioOutput> musicOutput;
+  std::unique_ptr<AudioOutput> videoOutput;
   std::unique_ptr<MusicBackend> musicBackend;
   std::unique_ptr<MusicPlayer> musicPlayer;
   std::unique_ptr<MusicPlayerControl> musicControl;
@@ -317,6 +323,11 @@ static int probeMain(int argc, char** argv, const std::string& runDir) {
         [&](int32_t device, int32_t axis) {
           return platformInput->type(device, axis);
         });
+    world.setInputAxisReaders(
+        [&](int32_t device, int32_t axis) {
+          return platformInput->axisName(device, axis);
+        },
+        [&](int32_t device) { return platformInput->axisCount(device); });
     world.setCursorSelector([&](int32_t index, bool visible,
                                 std::string& cursorError) {
       return platformInput->selectStockCursor(
@@ -357,6 +368,12 @@ static int probeMain(int argc, char** argv, const std::string& runDir) {
       return 1;
     }
     musicBackend = createAudioToolboxMusicBackend(*musicOutput);
+    videoOutput = AudioOutput::create(error);
+    if (!videoOutput) {
+      std::fprintf(stderr, "startup probe: video audio output: %s\n", error.c_str());
+      return 1;
+    }
+    runlog::event(runlog::EventKind::Note, "video audio device: %s", videoOutput->describeDevice().c_str());
     musicPlayer = MusicPlayer::create(root, *musicBackend,
                                       MusicPlayer::steadyClockTicks(), error);
     if (!musicPlayer) {
@@ -395,7 +412,7 @@ static int probeMain(int argc, char** argv, const std::string& runDir) {
           width, height, static_cast<int32_t>(SDL_BITSPERPIXEL(format))};
     };
     gameState.renderer = diagnosticRenderer.get();
-    videoPlayer = std::make_unique<VideoPlayer>(*diagnosticRenderer, root);
+    videoPlayer = std::make_unique<VideoPlayer>(*diagnosticRenderer, root, videoOutput.get());
     gameState.video = videoPlayer.get();
     std::puts("renderer: awaiting stock Config display settings");
   }
@@ -701,13 +718,14 @@ static int probeMain(int argc, char** argv, const std::string& runDir) {
           // Keep unsupported graphics changes explicit. Existing default
           // fidelity gaps are not evidence that a newly selected setting works.
           std::map<std::string, VmValue> unsupportedGraphics;
-          for (const auto& state : states) if (state.owner == config)
-            for (const auto& field : state.fields)
-              if (field.name == "video_gamma" || field.name == "texture_size" ||
-                  field.name == "texture_save_quality" || field.name == "shadow_size" ||
-                  field.name == "shadow_detail" || field.name == "shadows" ||
-                  field.name == "flares" || field.name == "headlight_rays" ||
-                  field.name == "particle_density") unsupportedGraphics.emplace(field.name, field.value);
+          for (const auto& state : states)
+            if (state.owner == config)
+              for (const auto& field : state.fields)
+                if (field.name == "video_gamma" || field.name == "texture_size" ||
+                    field.name == "texture_save_quality" || field.name == "shadow_size" ||
+                    field.name == "shadow_detail" || field.name == "shadows" ||
+                    field.name == "flares" || field.name == "headlight_rays" ||
+                    field.name == "particle_density") unsupportedGraphics.emplace(field.name, field.value);
           gameState.refreshConfig = [&, unsupportedGraphics](std::string& detail) {
             for (const auto& [name, initial] : unsupportedGraphics) {
               const auto current = vmActiveStaticField(arena, "java.util.Config", name);
@@ -720,7 +738,8 @@ static int probeMain(int argc, char** argv, const std::string& runDir) {
             const auto liveInteger = [&](const char* name, std::optional<int32_t>& target) {
               const auto value = vmActiveStaticField(arena, "java.util.Config", name);
               if (!value || !std::holds_alternative<int32_t>(*value)) return false;
-              target = std::get<int32_t>(*value); return true;
+              target = std::get<int32_t>(*value);
+              return true;
             };
             const auto visibilityDetail = vmActiveStaticField(arena, "java.util.Config", "object_detail");
             const auto amplitude = vmActiveStaticField(arena, "java.util.Config", "object_detail_amp");
@@ -728,12 +747,14 @@ static int probeMain(int argc, char** argv, const std::string& runDir) {
                 !std::holds_alternative<float>(*amplitude) ||
                 !liveInteger("resource_loadrate", resourceLoadRate) || !liveInteger("mem_instance_max", instanceMax) ||
                 !liveInteger("mem_sound_max", soundMax) || !liveInteger("mem_texture_max", textureMax) || !liveInteger("mem_vertex_max", meshMax)) {
-              detail = "live Config fields unavailable"; return false;
+              detail = "live Config fields unavailable";
+              return false;
             }
             if (!frameVisibility.configure(std::get<float>(*visibilityDetail), std::get<float>(*amplitude), detail)) return false;
             runlog::event(runlog::EventKind::Note, "Config refreshed: object_detail=%.6g amplitude=%.6g loadrate=%d instanceMax=%d soundMax=%d textureMax=%d meshMax=%d",
                           std::get<float>(*visibilityDetail), std::get<float>(*amplitude), *resourceLoadRate, *instanceMax, *soundMax, *textureMax, *meshMax);
-            detail.clear(); return true;
+            detail.clear();
+            return true;
           };
         }
         if (diagnosticRenderer) {
@@ -850,21 +871,27 @@ static int probeMain(int argc, char** argv, const std::string& runDir) {
             }
         if (diagnosticRenderer) {
           const auto integerConfig = [&](const char* name) -> std::optional<int32_t> {
-            for (const auto& state : states) if (state.owner == config)
-              for (const auto& field : state.fields) if (field.name == name)
-                if (const auto* value = std::get_if<int32_t>(&field.value)) return *value;
+            for (const auto& state : states)
+              if (state.owner == config)
+                for (const auto& field : state.fields)
+                  if (field.name == name)
+                    if (const auto* value = std::get_if<int32_t>(&field.value)) return *value;
             return std::nullopt;
           };
           auto width = integerConfig("video_x"), height = integerConfig("video_y");
           auto depth = integerConfig("video_depth"), windowed = integerConfig("video_windowed");
           if (!width || !height || !depth || !windowed) {
-            std::fprintf(stderr, "startup probe: stock Config display fields unavailable\n"); return 1;
+            std::fprintf(stderr, "startup probe: stock Config display fields unavailable\n");
+            return 1;
           }
           PlatformDisplayMode requested{*width, *height, *depth};
           bool isWindowed = *windowed != 0;
           // FUN_0058c700 -> FUN_004fc1b0: either zero dimension selects the
           // stock 640x480x32 windowed fallback before renderer initialization.
-          if (*width == 0 || *height == 0) { requested = {640, 480, 32}; isWindowed = true; }
+          if (*width == 0 || *height == 0) {
+            requested = {640, 480, 32};
+            isWindowed = true;
+          }
           const auto recordDisplay = [&](const char* cause, PlatformDisplayMode mode, bool windowedMode) {
             int windowWidth = 0, windowHeight = 0, renderWidth = 0, renderHeight = 0, backingWidth = 0, backingHeight = 0;
             SDL_GetWindowSize(diagnosticWindow.get(), &windowWidth, &windowHeight);
@@ -880,19 +907,127 @@ static int probeMain(int argc, char** argv, const std::string& runDir) {
           };
           recordDisplay("before-startup", requested, isWindowed);
           if (visibleWindow && !SDL_ShowWindow(diagnosticWindow.get())) {
-            std::fprintf(stderr, "startup probe: show configured window: %s\n", SDL_GetError()); return 1;
+            std::fprintf(stderr, "startup probe: show configured window: %s\n", SDL_GetError());
+            return 1;
           }
           if (!applyDisplayMode(diagnosticWindow.get(), requested, isWindowed, error)) {
             runlog::event(runlog::EventKind::Error, "display startup rejected: %s", error.c_str());
-            std::fprintf(stderr, "startup probe: configured display: %s\n", error.c_str()); return 1;
+            std::fprintf(stderr, "startup probe: configured display: %s\n", error.c_str());
+            return 1;
           }
           if (!diagnosticRenderer->presentation(requested[0], requested[1], error)) {
-            std::fprintf(stderr, "startup probe: display presentation: %s\n", error.c_str()); return 1;
+            std::fprintf(stderr, "startup probe: display presentation: %s\n", error.c_str());
+            return 1;
           }
           if (std::find(gameState.displayModes->begin(), gameState.displayModes->end(), requested) == gameState.displayModes->end())
             gameState.displayModes->push_back(requested);
-          displaySize.width = requested[0]; displaySize.height = requested[1];
+          displaySize.width = requested[0];
+          displaySize.height = requested[1];
           recordDisplay("startup-applied", requested, isWindowed);
+          // Stock FUN_0058c700 plays the native startup videos after display
+          // and sound initialization and before the script world runs
+          // (all.c:302193). FUN_0054c170 skips an absent file; each
+          // FUN_0055c470 playback blocks and checks GetAsyncKeyState(VK_ESCAPE)
+          // on every iteration. Audio streams are present in the 2005 files
+          // and are rendered through the default playback device (videoOutput),
+          // like stock DirectShow. Menu videos (prime.avi) carry no audio.
+          if (!noIntro && visibleWindow && runLoop && videoPlayer) {
+            // Stock checks GetAsyncKeyState(VK_ESCAPE) with no press edge, so a
+            // key already held when playback starts skips it on the first
+            // iteration. A script whose first action is "0 keydown Escape"
+            // models exactly that held-from-launch state; without it the
+            // intros play to their end like the stock executable.
+            bool launchEscapeHeld = false;
+            if (!scriptPath.empty()) {
+              std::ifstream scripted(scriptPath);
+              for (std::string line; std::getline(scripted, line);) {
+                std::istringstream fields(line);
+                double at = 0;
+                std::string verb, key;
+                if (!(fields >> at >> verb) || at > 0.0) continue;
+                std::getline(fields >> std::ws, key);
+                if (verb == "keydown" && key == "Escape") {
+                  platformInput->setSyntheticKey(SDL_SCANCODE_ESCAPE, true);
+                  launchEscapeHeld = true;
+                  break;
+                }
+                if (verb == "keyup" && key == "Escape") break;
+              }
+            }
+            for (const char* intro :
+                 {"data\\fmv\\Activision.avi", "data\\fmv\\Invictus.avi",
+                  "data\\fmv\\StreetLegal.avi"}) {
+              const auto introOrigin = std::chrono::steady_clock::now();
+              if (!videoPlayer->open(intro, false, 0.0, error)) {
+                if (error.find("file not found") != std::string::npos) {
+                  runlog::event(runlog::EventKind::Note,
+                                "startup video %s absent; skipped", intro);
+                  error.clear();
+                  continue;
+                }
+                runlog::event(runlog::EventKind::Error,
+                              "startup video open: %s", error.c_str());
+                std::fprintf(stderr, "startup probe: startup video: %s\n",
+                             error.c_str());
+                return 1;
+              }
+              // open() anchored the timeline at 0.0; elapsed playback seconds
+              // are the same monotonic clock stock's DirectShow loop uses.
+              bool skipped = false;
+              while (videoPlayer->playing()) {
+                SDL_PumpEvents();
+                // The probe records key state in beginFrame; stock reads
+                // GetAsyncKeyState with no ControlSet mapping, so both the
+                // real and scripted key state count here.
+                platformInput->beginFrame();
+                const bool* keys = SDL_GetKeyboardState(nullptr);
+                if ((keys && keys[SDL_SCANCODE_ESCAPE]) ||
+                    platformInput->keyHeld(SDL_SCANCODE_ESCAPE)) {
+                  skipped = true;
+                  // Stock breaks the DirectShow loop on the same key state.
+                  runlog::event(runlog::EventKind::Note,
+                                "startup video %s skipped", intro);
+                  break;
+                }
+                const double seconds = std::chrono::duration<double>(
+                                           std::chrono::steady_clock::now() -
+                                           introOrigin)
+                                           .count();
+                if (!videoPlayer->draw(seconds, error) ||
+                    !diagnosticRenderer->present(error)) {
+                  runlog::event(runlog::EventKind::Error,
+                                "startup video draw: %s", error.c_str());
+                  std::fprintf(stderr, "startup probe: startup video: %s\n",
+                               error.c_str());
+                  return 1;
+                }
+                SDL_Delay(5);
+              }
+              // Stock FUN_0055c470 blocks until the DirectShow graph's
+              // end-of-stream, which covers the audio renderer: after a
+              // naturally ended intro, let the queued audio tail drain
+              // (bounded by the 2 s queue capacity) before closing.
+              if (!skipped && videoPlayer->drainingAudioTail()) {
+                const auto drainDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
+                while (std::chrono::steady_clock::now() < drainDeadline) {
+                  size_t queued = 0;
+                  std::string ignored;
+                  if (!videoOutput->queuedSamples(queued, ignored) || queued == 0) break;
+                  SDL_PumpEvents();
+                  SDL_Delay(20);
+                }
+              }
+              videoPlayer->close();
+              if (!skipped) {
+                runlog::event(runlog::EventKind::Note,
+                              "startup video %s finished", intro);
+              }
+            }
+            // The held-at-launch model covers the intro videos only; the
+            // script's own keydown/keyup actions own the state afterwards.
+            if (launchEscapeHeld)
+              platformInput->setSyntheticKey(SDL_SCANCODE_ESCAPE, false);
+          }
           gameState.changeDisplayMode = [&, isWindowed, recordDisplay](PlatformDisplayMode mode, std::string& detail) {
             // FUN_004b9810 refuses changes in an already-windowed renderer;
             // the stock OptionsDialog still saves its requested Config fields.
@@ -900,19 +1035,22 @@ static int probeMain(int argc, char** argv, const std::string& runDir) {
               runlog::event(runlog::EventKind::Note,
                             "display change refused: stock windowed renderer requested=%dx%dx%d applied=%dx%d",
                             mode[0], mode[1], mode[2], displaySize.width, displaySize.height);
-              detail.clear(); return true;
+              detail.clear();
+              return true;
             }
             if (!applyDisplayMode(diagnosticWindow.get(), mode, false, detail)) {
               runlog::event(runlog::EventKind::Error, "display change rejected: requested=%dx%dx%d cause=%s", mode[0], mode[1], mode[2], detail.c_str());
               return false;
             }
             if (!diagnosticRenderer->presentation(mode[0], mode[1], detail)) return false;
-            displaySize.width = mode[0]; displaySize.height = mode[1];
+            displaySize.width = mode[0];
+            displaySize.height = mode[1];
             int outputWidth = 0, outputHeight = 0;
             if (!diagnosticRenderer->outputSize(outputWidth, outputHeight, detail)) return false;
             recordDisplay("change-applied", mode, false);
             runlog::event(runlog::EventKind::Note, "display simulation scale=%.6g", timers.timeScale());
-            detail.clear(); return true;
+            detail.clear();
+            return true;
           };
         }
         std::printf("measurement = %.0f; sound = %.6g, %.6g, %.6g\n",
@@ -1121,16 +1259,19 @@ static int probeMain(int argc, char** argv, const std::string& runDir) {
             const auto* node = world.configNode();
             const auto* receiver = node ? node->scriptReceiver : nullptr;
             const TufaMethod* finalizer = nullptr;
-            for (const auto& list : config->methods) for (const auto& method : list)
-              if (method.words[1] < config->constants.size() && method.words[2] < config->constants.size() &&
-                  config->constants[method.words[1]].text == "finalize" && config->constants[method.words[2]].text == "()V") finalizer = &method;
+            for (const auto& list : config->methods)
+              for (const auto& method : list)
+                if (method.words[1] < config->constants.size() && method.words[2] < config->constants.size() &&
+                    config->constants[method.words[1]].text == "finalize" && config->constants[method.words[2]].text == "()V") finalizer = &method;
             if (!receiver || !finalizer || finalizer->words[3] >= config->trees.size()) {
-              std::fprintf(stderr, "startup probe: Config shutdown finalizer unavailable\n"); return 1;
+              std::fprintf(stderr, "startup probe: Config shutdown finalizer unavailable\n");
+              return 1;
             }
             const auto saved = vmExecute(*config, config->trees[finalizer->words[3]], {receiver}, &nativeRegistry(), &loaded, &states, &arena);
             if (!saved.ok) {
               runlog::event(runlog::EventKind::Error, "Config shutdown failed: %s", saved.error.c_str());
-              std::fprintf(stderr, "startup probe: Config shutdown: %s\n", saved.error.c_str()); return 1;
+              std::fprintf(stderr, "startup probe: Config shutdown: %s\n", saved.error.c_str());
+              return 1;
             }
             runlog::event(runlog::EventKind::Note, "Config shutdown: stock finalizer completed save/game/options");
             return 0;
@@ -1146,13 +1287,16 @@ static int probeMain(int argc, char** argv, const std::string& runDir) {
             float renderX = 0, renderY = 0;
             if (!diagnosticRenderer->outputSize(width, height, error) ||
                 !diagnosticRenderer->windowToRender(x, y, renderX, renderY)) {
-              cursorMappingFailed = true; cursorInput.reset(); return;
+              cursorMappingFailed = true;
+              cursorInput.reset();
+              return;
             }
             // The host desktop may letterbox the stock content resolution.
             // Bars are outside the game viewport, not clamped onto edge buttons.
             if (renderX < 0 || renderY < 0 || renderX > static_cast<float>(width) || renderY > static_cast<float>(height)) {
               if (record) runlog::event(runlog::EventKind::Input, "cursor ignored outside content: window=%.3f,%.3f content=%.3f,%.3f size=%dx%d", x, y, renderX, renderY, width, height);
-              cursorInput.reset(); return;
+              cursorInput.reset();
+              return;
             }
             const auto point = normalizeCursorPosition(renderX, renderY, width, height);
             if (record && point) runlog::event(runlog::EventKind::Input, "cursor mapping: window=%.3f,%.3f content=%.3f,%.3f size=%dx%d normalized=%.6g,%.6g", x, y, renderX, renderY, width, height, (*point)[0], (*point)[1]);
@@ -1559,9 +1703,11 @@ static int probeMain(int argc, char** argv, const std::string& runDir) {
               if (!recorded && !scriptReady(name)) {
                 recorded = true;
                 const double process = std::chrono::duration<double>(
-                    frameStarted - processClockOrigin).count();
+                                           frameStarted - processClockOrigin)
+                                           .count();
                 std::printf("startup probe: milestone %s process=%.3f "
-                            "loop=%.3f frame=%u\n", name, process, scriptNow,
+                            "loop=%.3f frame=%u\n",
+                            name, process, scriptNow,
                             static_cast<unsigned>(world.frameCounter()));
                 runlog::event(runlog::EventKind::Note,
                               "milestone %s process=%.3f loop=%.3f frame=%u",
@@ -1818,7 +1964,8 @@ static int probeMain(int argc, char** argv, const std::string& runDir) {
               }
             }
             if (cursorMappingFailed) {
-              std::fprintf(stderr, "startup probe: cursor presentation mapping failed: %s\n", SDL_GetError()); return 1;
+              std::fprintf(stderr, "startup probe: cursor presentation mapping failed: %s\n", SDL_GetError());
+              return 1;
             }
             runlog::inputFlush(sinceLoopStart());
             platformInput->beginFrame(animationDispatch == nullptr);

@@ -104,6 +104,24 @@ std::optional<uint32_t> sceneScyMaterialType(const ScxMaterial &material) {
   return type;
 }
 
+std::optional<SceneScyBlend> sceneScyBlendState(const ScxMaterial &material) {
+  if (!material.scyV3)
+    return std::nullopt;
+  const float alpha = material.diffuse[3];
+  if (!std::isfinite(alpha))
+    return std::nullopt;
+  // 004be950: `(flags & 1) || diffuse.a < 0.99f` selects the transparent
+  // branch; only then does flag 0x800 choose the alpha test over blending.
+  // Flag 0x1000 selects material type 10/2 (VCA) and is unrelated.
+  constexpr float kOpaqueAlpha = 0.99f; // DAT_005f0d28
+  if ((material.flags & 1u) || alpha < kOpaqueAlpha) {
+    if (material.flags & 0x800u)
+      return SceneScyBlend::AlphaTest;
+    return SceneScyBlend::AlphaBlend;
+  }
+  return SceneScyBlend::Opaque;
+}
+
 uint32_t sceneSphereRelation(const std::array<float, 3> &boundCenter,
                              float boundRadius,
                              const std::array<float, 3> &center, float radius) {

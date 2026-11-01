@@ -70,3 +70,75 @@ across those transitions remain pending. Gamma, shadow, texture-detail, flare,
 headlight, and particle rendering controls are not verified by this checkpoint.
 The two settings Natives remain unimplemented here rather than accepting no-op
 changes. Full integration checks belong to the parent integration checkout.
+
+## Blocker at the apply/cancel step (2026-11-01)
+
+Reaching the settings apply path is blocked by a VM semantics divergence, not by
+the display code. Run `local/runs/20261101T113035Z-85061` selects a resolution in
+Video Options (`clickn 0.6 0.2`) and then presses Back (`clickn 0.94 0.925`). The
+run aborts with `null or invalid qualified receiver` with the stack
+`Group.handleEvent` (tree 10 pc 583 line 277) -> `Osd.deactivateText` (tree 72
+pc 7 line 296) -> `MultiChoice.unfocus` (tree 2 pc 10 line 38) ->
+`Vector.removeElement` (tree 24 pc 7 line 283) -> `Vector.indexOf(Object,I)`
+(tree 12 pc 6 line 141) -> `Vector.indexOf` (tree 13 pc 13 line 148).
+
+Stock VM evidence: `FUN_0041fbc0` (stock `Thread::callMethod`) rejects a null
+receiver for a non-native method only by logging
+`Thread::callMethod: instance method called with no instance`
+(string at virtual address `0x0060c2e8` in the authority image, MD5
+`e686099e7233bb7d7c461b1b35c5064c`) and returning `-1`
+(`0041fbe8` tests method flag `0x8`, `0041fbf6` tests the receiver, and the
+`0041fc03`/`0041fc0e` path logs then returns -1). The caller
+`FUN_004207c0` keeps running (`local/census/DecompileAt-004207c0.log`). The
+Port instead returns a fatal VM error from the qualified-receiver path
+(`src/vm.cpp`, "null or invalid qualified receiver"), which is why the stock
+script sequence aborts the run.
+
+Stock script evidence: `MultiChoice.unfocus` sets `hkl`/`hkr` to null
+(`MultiChoice.class` tree 2 node 20), so a second `unfocus` on the same gadget
+passes a null search value to `Vector.removeElement`, which calls
+`search.equals(...)` with a null receiver. Rejecting that call is the port's VM
+policy; the stock VM evidently tolerates the null receiver, since stock ships
+this exact script on the Back/cancel path. Back alone (`.../t45-back`) and
+selection alone (`.../t45-sel`) both exit ok, so the failing sequence is the
+post-selection redraw plus Back.
+
+Consequence: applying/persisting/cancelling a display change through the stock
+Options UI cannot be exercised until the VM matches stock for a null receiver
+(and the subsequent `hkl.inactivate()` on null). Startup presentation below is
+verified with a real window capture
+(run `local/runs/20261101T113010Z-84628`: `video-options.bmp`, window 1265x949,
+render 800x600, fullscreen=1, exclusive=0).
+
+## VM null-receiver fix (2026-11-01)
+
+`src/vm.cpp` now mirrors stock `FUN_0041fbc0` for a null receiver on a
+non-static qualified call: it logs
+`vm: instance method called with no instance: <Class>.<name><desc>` via
+runlog, skips the body, drops the arguments, and pushes the declared return
+type's default value (0 for `I`, 0.0 for `F`, monostate for `V`, null for
+references), so the caller keeps running. The method is still resolved first
+(local-slot/field static types via the descriptor, executing class otherwise)
+so the skip uses the real signature; the receiver re-resolution against a
+non-null `this` is bypassed in this case. Tests: `testNullReceiverSkipsBody`
+plus updated null-receiver expectations in `vm_eval_name_test`, `vm_test`, and
+`vm_native_call_test` (all pass).
+
+Post-fix Runs (same scenarios as the blocker above):
+- `local/runs/20261101T115024Z-13837` (apply): status=ok. Selecting a
+  resolution applies it live (`display change-applied: requested=2048x1330x32
+  windowed=0 ... fullscreen=1 exclusive=1`), Back returns to the Options group,
+  and shutdown runs the stock finalizer (`Config shutdown: stock finalizer
+  completed save/game/options`). The log shows the stock-policy notes on the
+  exact blocker path: `java.lang.Object.equals(Ljava.lang.Object;)I` on the
+  null search value and `java.io.Hotkey.inactivate()V` on null `hkl`.
+  `save/game/options` is rewritten with the new resolution fields
+  (0x0320/0x0258 -> 0x0800/0x0500 at bytes 0x14/0x18).
+- `local/runs/20261101T115042Z-14368` (cancel): status=ok, no mode change
+  applied, same null-receiver notes on the Back path.
+- Restart reload: a fresh run after the apply reads the persisted file and
+  reports `display startup-applied: requested=2048x1280x32 windowed=0 ...
+  fullscreen=1 exclusive=1`.
+
+Gate: `tools/check.sh` 119/120; the single failure `object_world_step_unit`
+fails identically on the integration tip `f090ebb` (pre-existing).

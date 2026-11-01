@@ -207,6 +207,20 @@ NativeResult inputLastKey(const std::vector<VmValue> &, const VmObject *,
                           VmArena *, const std::vector<const TufaClass *> *);
 NativeResult inputGetAxis(const std::vector<VmValue> &, const VmObject *,
                           VmArena *, const std::vector<const TufaClass *> *);
+NativeResult inputAxisName(const std::vector<VmValue> &, const VmObject *,
+                           VmArena *, const std::vector<const TufaClass *> *);
+NativeResult inputActiveAxis(const std::vector<VmValue> &, const VmObject *,
+                             VmArena *, const std::vector<const TufaClass *> *);
+NativeResult inputMapAxis(const std::vector<VmValue> &, const VmObject *,
+                          VmArena *, const std::vector<const TufaClass *> *);
+NativeResult inputSetAxisSmooth(const std::vector<VmValue> &, const VmObject *,
+                                VmArena *, const std::vector<const TufaClass *> *);
+NativeResult controllerUserSetAxisSpeed(const std::vector<VmValue> &, const VmObject *,
+                                        VmArena *, const std::vector<const TufaClass *> *);
+NativeResult controllerUserGetAxisVal(const std::vector<VmValue> &, const VmObject *,
+                                      VmArena *, const std::vector<const TufaClass *> *);
+NativeResult controllerUserSetAxisForce(const std::vector<VmValue> &, const VmObject *,
+                                        VmArena *, const std::vector<const TufaClass *> *);
 
 NativeResult gfxNumDisplayModes(const std::vector<VmValue> &, const VmObject *,
                                 VmArena *,

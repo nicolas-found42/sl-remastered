@@ -1,0 +1,21 @@
+0 wait splash 30
+0 keydown Escape
+0 wait menu 30
+0 keyup Escape
+0 clickn 0.656 0.265
+0 wait driving 60
+0.1 keydown Up
+2 shot @run/w02.bmp
+4 shot @run/w04.bmp
+6 shot @run/w06.bmp
+8 shot @run/w08.bmp
+9 shot @run/w09.bmp
+10 shot @run/w10.bmp
+11 shot @run/w11.bmp
+12 shot @run/w12.bmp
+13 shot @run/w13.bmp
+14 shot @run/w14.bmp
+15 shot @run/w15.bmp
+16 keyup Up
+16.5 shot @run/w16.bmp
+17.5 quit

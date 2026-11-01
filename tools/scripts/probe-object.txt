@@ -1,0 +1,19 @@
+# Calibration: steer Right (z-) while driving -x to aim at the stepped prop
+# near (-318.2, 10.1, 1026.2), then keep driving to the wall at x~-344.
+0 wait splash 30
+0 keydown Escape
+0 wait menu 30
+0 keyup Escape
+0 clickn 0.65625 0.264583333
+0 wait driving 60
+0 shot @run/ready.bmp
+0.1 sdl_keydown Up
+3.0 sdl_keydown Right
+4.6 sdl_keyup Right
+5.5 shot @run/prop-approach.bmp
+6.5 shot @run/prop-hit.bmp
+8.0 shot @run/after-prop.bmp
+10 shot @run/wall-approach.bmp
+13 sdl_keyup Up
+13.5 shot @run/end.bmp
+14.5 quit

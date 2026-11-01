@@ -1,0 +1,10 @@
+0 shot @run/splash0.bmp
+0.3 shot @run/splash1.bmp
+0.8 wait menu 90
+0.8 shot @run/menu-auto.bmp
+1.3 shot @run/v1.bmp
+1.8 shot @run/v2.bmp
+2.3 shot @run/v3.bmp
+2.8 shot @run/v4.bmp
+3.3 shot @run/v5.bmp
+3.8 quit

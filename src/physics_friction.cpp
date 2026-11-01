@@ -161,7 +161,10 @@ int correctDirectContact(DirectContact& c, DirectContactWorld& world) {
   const float velocity = (va[1]-vb[1])*c.normal[1] + (va[0]-vb[0])*c.normal[0] + (va[2]-vb[2])*c.normal[2];
   if (!std::isfinite(c.friction) || !std::isfinite(c.bounce) ||
       !std::isfinite(c.normalImpulse) || !std::isfinite(c.frictionForce) ||
-      !std::isfinite(c.normalForce) || c.normalForce < 0) return -1;
+      !std::isfinite(c.normalForce)) return -1;
+  // No nonnegative bound on the accumulated +0xa4 normal force: 00496050
+  // only accumulates it and never validates the sign, matching the signed
+  // resting responses the 004927f0 diagonal keeps.
   const bool bothPredicted=(a.state[a.current^1].stepFlags & 1u) && (b.state[b.current^1].stepFlags & 1u);
   float drive=c.resting && !bothPredicted && c.separation<0.03f ? (0.03f-c.separation)*10.0f : 0;
   if (velocity < -0.2f) drive-=((velocity-(-0.2f))*(c.bounce+1.0f));

@@ -3,6 +3,7 @@
 #include "natives/car_part.hpp"
 #include "natives/file.hpp"
 #include "natives/game_type.hpp"
+#include "natives/ground_road.hpp"
 #include "natives/lang_object.hpp"
 #include "natives/lang_string.hpp"
 #include "natives/lang_system.hpp"
@@ -28,13 +29,13 @@
 
 namespace {
 
-bool readVector3Components(const VmObject *object, float &x, float &y, float &z) {
+bool readVector3Components(const VmObject* object, float& x, float& y, float& z) {
   if (!object)
     return false;
-  const VmField *fx = nullptr;
-  const VmField *fy = nullptr;
-  const VmField *fz = nullptr;
-  for (const auto &field : object->fields) {
+  const VmField* fx = nullptr;
+  const VmField* fy = nullptr;
+  const VmField* fz = nullptr;
+  for (const auto& field : object->fields) {
     if (field.descriptor != "F" || !std::holds_alternative<float>(field.value))
       continue;
     if (field.name == "x")
@@ -51,42 +52,42 @@ bool readVector3Components(const VmObject *object, float &x, float &y, float &z)
   z = std::get<float>(fz->value);
   return true;
 }
-NativeResult buildNumber(const std::vector<VmValue> &args, const VmObject *,
-                         VmArena *, const std::vector<const TufaClass *> *) {
+NativeResult buildNumber(const std::vector<VmValue>& args, const VmObject*,
+                         VmArena*, const std::vector<const TufaClass*>*) {
   if (!args.empty())
     return std::string{"buildNumber expects no arguments"};
   return VmValue{int32_t{606}};
 }
 
-NativeResult enableDebugDump(const std::vector<VmValue> &args, const VmObject *,
-                             VmArena *,
-                             const std::vector<const TufaClass *> *) {
-  if (args.size() != 1 || !std::holds_alternative<const VmObject *>(args[0]))
+NativeResult enableDebugDump(const std::vector<VmValue>& args, const VmObject*,
+                             VmArena*,
+                             const std::vector<const TufaClass*>*) {
+  if (args.size() != 1 || !std::holds_alternative<const VmObject*>(args[0]))
     return std::string{"enableDebugDump expects one reference argument"};
   return VmValue{int32_t{0}};
 }
 
-NativeResult resourceNewNative(const std::vector<VmValue> &args,
-                               const VmObject *receiver, VmArena *arena,
-                               const std::vector<const TufaClass *> *classes) {
+NativeResult resourceNewNative(const std::vector<VmValue>& args,
+                               const VmObject* receiver, VmArena* arena,
+                               const std::vector<const TufaClass*>* classes) {
   if (!args.empty() || !receiver || !arena || !classes)
     return std::string{"invalid ResourceRef receiver"};
   bool owned = false;
-  for (const auto &object : arena->objects)
+  for (const auto& object : arena->objects)
     if (object.get() == receiver)
       owned = true;
   if (!owned)
     return std::string{"invalid ResourceRef receiver"};
-  const TufaClass *current = receiver->runtimeClass;
-  std::vector<const TufaClass *> visited;
+  const TufaClass* current = receiver->runtimeClass;
+  std::vector<const TufaClass*> visited;
   while (current && visited.size() < 128) {
     bool loaded = false;
-    for (const auto *candidate : *classes)
+    for (const auto* candidate : *classes)
       if (candidate == current)
         loaded = true;
     if (!loaded || !current->hasClassHeader)
       return std::string{"invalid ResourceRef class"};
-    for (const auto *prior : visited)
+    for (const auto* prior : visited)
       if (prior == current)
         return std::string{"cyclic ResourceRef class"};
     visited.push_back(current);
@@ -95,20 +96,20 @@ NativeResult resourceNewNative(const std::vector<VmValue> &args,
     const auto parent = current->classHeader[3];
     if (parent >= current->constants.size())
       return std::string{"invalid ResourceRef class"};
-    const auto &ref = current->constants[parent];
+    const auto& ref = current->constants[parent];
     if (ref.kind != 4 || ref.a >= current->constants.size() ||
         current->constants[ref.a].kind != 0)
       return std::string{"invalid ResourceRef class"};
-    const auto &name = current->constants[ref.a].text;
+    const auto& name = current->constants[ref.a].text;
     current = nullptr;
-    for (const auto *candidate : *classes)
+    for (const auto* candidate : *classes)
       if (candidate && candidate->name == name)
         current = candidate;
   }
   if (!current || current->name != "java.util.resource.ResourceRef")
     return std::string{"invalid ResourceRef class"};
-  VmField *ptr = nullptr;
-  for (auto &field : receiver->fields)
+  VmField* ptr = nullptr;
+  for (auto& field : receiver->fields)
     if (field.name == "ptr") {
       if (ptr)
         return std::string{"ambiguous Native.ptr"};
@@ -135,17 +136,17 @@ NativeResult resourceNewNative(const std::vector<VmValue> &args,
 
 } // namespace
 
-VmResourceState *nativeResourceState(const VmObject *object, VmArena *arena) {
+VmResourceState* nativeResourceState(const VmObject* object, VmArena* arena) {
   if (!object || !arena)
     return nullptr;
   bool owned = false;
-  for (const auto &candidate : arena->objects)
+  for (const auto& candidate : arena->objects)
     if (candidate.get() == object)
       owned = true;
   if (!owned)
     return nullptr;
-  const VmField *ptr = nullptr;
-  for (const auto &candidate : object->fields)
+  const VmField* ptr = nullptr;
+  for (const auto& candidate : object->fields)
     if (candidate.name == "ptr") {
       if (ptr || candidate.descriptor != "I")
         return nullptr;
@@ -153,39 +154,39 @@ VmResourceState *nativeResourceState(const VmObject *object, VmArena *arena) {
     }
   if (!ptr)
     return nullptr;
-  const auto *handle = std::get_if<int32_t>(&ptr->value);
+  const auto* handle = std::get_if<int32_t>(&ptr->value);
   if (!handle || *handle <= 0 ||
       static_cast<size_t>(*handle) > arena->resourceStates.size())
     return nullptr;
-  auto &state = arena->resourceStates[static_cast<size_t>(*handle) - 1];
+  auto& state = arena->resourceStates[static_cast<size_t>(*handle) - 1];
   return state.owner == object ? &state : nullptr;
 }
 
 namespace {
-NativeResult resourceDuplicate(const std::vector<VmValue> &args,
-                               const VmObject *receiver, VmArena *arena,
-                               const std::vector<const TufaClass *> *) {
-  if (args.size() != 1 || !std::holds_alternative<const VmObject *>(args[0]))
+NativeResult resourceDuplicate(const std::vector<VmValue>& args,
+                               const VmObject* receiver, VmArena* arena,
+                               const std::vector<const TufaClass*>*) {
+  if (args.size() != 1 || !std::holds_alternative<const VmObject*>(args[0]))
     return std::string{"invalid ResourceRef.duplicate argument"};
-  auto *destination = nativeResourceState(receiver, arena);
+  auto* destination = nativeResourceState(receiver, arena);
   if (!destination)
     return std::string{"invalid ResourceRef.duplicate receiver"};
-  const auto *sourceObject = std::get<const VmObject *>(args[0]);
-  const auto *source =
+  const auto* sourceObject = std::get<const VmObject*>(args[0]);
+  const auto* source =
       sourceObject ? nativeResourceState(sourceObject, arena) : nullptr;
   if (sourceObject && !source)
     return std::string{"invalid ResourceRef.duplicate source"};
   // World-backed references use ReceiverBinding, not the legacy fixture's
   // attachment.
   if (source && arena->gameState) {
-    auto &game = *arena->gameState;
+    auto& game = *arena->gameState;
     const auto sourceHandle =
         static_cast<int32_t>(source - arena->resourceStates.data()) + 1;
     const auto destHandle =
         static_cast<int32_t>(destination - arena->resourceStates.data()) + 1;
     const auto srcIt = game.bindings.find(sourceHandle);
     const auto dstIt = game.bindings.find(destHandle);
-    LinkOwner *sourceOwner = srcIt == game.bindings.end() || !srcIt->second
+    LinkOwner* sourceOwner = srcIt == game.bindings.end() || !srcIt->second
                                  ? nullptr
                                  : srcIt->second->link.owner;
     const bool destLinked = dstIt != game.bindings.end() && dstIt->second &&
@@ -218,10 +219,10 @@ NativeResult resourceDuplicate(const std::vector<VmValue> &args,
             return std::string{
                 "ResourceRef.duplicate: material clone unsupported"};
           std::string error;
-          auto *clone = sceneCloneMaterial(*game.resources, node, error);
+          auto* clone = sceneCloneMaterial(*game.resources, node, error);
           if (!clone)
             return "ResourceRef.duplicate: " + error;
-          auto &slot = game.bindings[destHandle];
+          auto& slot = game.bindings[destHandle];
           if (!slot)
             slot = std::make_unique<ReceiverBinding>();
           setLinkOwner(slot->link, clone);
@@ -230,10 +231,10 @@ NativeResult resourceDuplicate(const std::vector<VmValue> &args,
         }
         if (node.type == 5) {
           std::string error;
-          auto *clone = sceneCloneMesh(*game.resources, node, error);
+          auto* clone = sceneCloneMesh(*game.resources, node, error);
           if (!clone)
             return "ResourceRef.duplicate: " + error;
-          auto &slot = game.bindings[destHandle];
+          auto& slot = game.bindings[destHandle];
           if (!slot)
             slot = std::make_unique<ReceiverBinding>();
           setLinkOwner(slot->link, clone);
@@ -245,12 +246,12 @@ NativeResult resourceDuplicate(const std::vector<VmValue> &args,
             return std::string{
                 "ResourceRef.duplicate: texture renderer unavailable"};
           std::string error;
-          WorldNode *clone = sceneCloneTexture(*game.resources,
+          WorldNode* clone = sceneCloneTexture(*game.resources,
                                                *arena->gameState->renderer, node,
                                                error);
           if (!clone)
             return "ResourceRef.duplicate: " + error;
-          auto &slot = game.bindings[destHandle];
+          auto& slot = game.bindings[destHandle];
           if (!slot)
             slot = std::make_unique<ReceiverBinding>();
           setLinkOwner(slot->link, clone);
@@ -259,10 +260,10 @@ NativeResult resourceDuplicate(const std::vector<VmValue> &args,
         }
         if (node.type == 13) {
           std::string error;
-          WorldNode *clone = sceneCloneRenderLight(*game.resources, node, error);
+          WorldNode* clone = sceneCloneRenderLight(*game.resources, node, error);
           if (!clone)
             return "ResourceRef.duplicate: " + error;
-          auto &slot = game.bindings[destHandle];
+          auto& slot = game.bindings[destHandle];
           if (!slot)
             slot = std::make_unique<ReceiverBinding>();
           setLinkOwner(slot->link, clone);
@@ -270,7 +271,7 @@ NativeResult resourceDuplicate(const std::vector<VmValue> &args,
           return std::monostate{};
         }
       }
-      auto &slot = game.bindings[destHandle];
+      auto& slot = game.bindings[destHandle];
       if (!slot)
         slot = std::make_unique<ReceiverBinding>();
       setLinkOwner(slot->link, sourceOwner);
@@ -283,15 +284,15 @@ NativeResult resourceDuplicate(const std::vector<VmValue> &args,
   return std::monostate{};
 }
 
-NativeResult threadInit(const std::vector<VmValue> &args,
-                        const VmObject *receiver, VmArena *arena,
-                        const std::vector<const TufaClass *> *) {
+NativeResult threadInit(const std::vector<VmValue>& args,
+                        const VmObject* receiver, VmArena* arena,
+                        const std::vector<const TufaClass*>*) {
   if (!arena || !arena->scheduler || args.size() != 1)
     return std::string{"thread scheduler unavailable"};
-  const auto *name = std::get_if<const VmObject *>(&args[0]);
+  const auto* name = std::get_if<const VmObject*>(&args[0]);
   if (!name || !*name)
     return std::string{"thread name unavailable"};
-  for (const auto &entry : arena->strings)
+  for (const auto& entry : arena->strings)
     if (entry.second == *name) {
       const auto result = arena->scheduler->createThread(receiver, entry.first);
       return result.ok ? NativeResult{std::monostate{}}
@@ -299,27 +300,27 @@ NativeResult threadInit(const std::vector<VmValue> &args,
     }
   return std::string{"thread name is not an interned string"};
 }
-NativeResult threadStart(const std::vector<VmValue> &, const VmObject *receiver,
-                         VmArena *arena,
-                         const std::vector<const TufaClass *> *) {
+NativeResult threadStart(const std::vector<VmValue>&, const VmObject* receiver,
+                         VmArena* arena,
+                         const std::vector<const TufaClass*>*) {
   if (!arena || !arena->scheduler)
     return std::string{"thread scheduler unavailable"};
   const auto result = arena->scheduler->start(receiver);
   return result.ok ? NativeResult{std::monostate{}}
                    : NativeResult{result.error};
 }
-NativeResult threadStop(const std::vector<VmValue> &, const VmObject *receiver,
-                        VmArena *arena,
-                        const std::vector<const TufaClass *> *) {
+NativeResult threadStop(const std::vector<VmValue>&, const VmObject* receiver,
+                        VmArena* arena,
+                        const std::vector<const TufaClass*>*) {
   if (!arena || !arena->scheduler)
     return std::string{"thread scheduler unavailable"};
   const auto result = arena->scheduler->stop(receiver);
   return result.ok ? NativeResult{std::monostate{}}
                    : NativeResult{result.error};
 }
-NativeResult threadSleep(const std::vector<VmValue> &args, const VmObject *,
-                         VmArena *arena,
-                         const std::vector<const TufaClass *> *) {
+NativeResult threadSleep(const std::vector<VmValue>& args, const VmObject*,
+                         VmArena* arena,
+                         const std::vector<const TufaClass*>*) {
   if (!arena || !arena->scheduler || args.size() != 1 ||
       !std::holds_alternative<float>(args[0]))
     return std::string{"thread sleep unavailable"};
@@ -327,12 +328,12 @@ NativeResult threadSleep(const std::vector<VmValue> &args, const VmObject *,
   return result.ok ? NativeResult{std::monostate{}}
                    : NativeResult{result.error};
 }
-NativeResult threadIsAlive(const std::vector<VmValue> &, const VmObject *,
-                           VmArena *, const std::vector<const TufaClass *> *) {
+NativeResult threadIsAlive(const std::vector<VmValue>&, const VmObject*,
+                           VmArena*, const std::vector<const TufaClass*>*) {
   return VmValue{int32_t{0}};
 }
-NativeResult threadSetPriority(const std::vector<VmValue> &args, const VmObject *receiver,
-                               VmArena *arena, const std::vector<const TufaClass *> *) {
+NativeResult threadSetPriority(const std::vector<VmValue>& args, const VmObject* receiver,
+                               VmArena* arena, const std::vector<const TufaClass*>*) {
   if (!arena || !arena->scheduler || args.size() != 1 ||
       !std::holds_alternative<int32_t>(args[0]))
     return std::string{"thread setPriority unavailable"};
@@ -342,27 +343,27 @@ NativeResult threadSetPriority(const std::vector<VmValue> &args, const VmObject 
                    : NativeResult{result.error};
 }
 
-NativeResult objectWait(const std::vector<VmValue> &args,
-                        const VmObject *receiver, VmArena *arena,
-                        const std::vector<const TufaClass *> *) {
+NativeResult objectWait(const std::vector<VmValue>& args,
+                        const VmObject* receiver, VmArena* arena,
+                        const std::vector<const TufaClass*>*) {
   if (!args.empty() || !arena || !arena->scheduler)
     return std::string{"object wait scheduler unavailable"};
   const auto result = arena->scheduler->wait(receiver);
   return result.ok ? NativeResult{std::monostate{}}
                    : NativeResult{result.error};
 }
-NativeResult objectNotify(const std::vector<VmValue> &args,
-                          const VmObject *receiver, VmArena *arena,
-                          const std::vector<const TufaClass *> *) {
+NativeResult objectNotify(const std::vector<VmValue>& args,
+                          const VmObject* receiver, VmArena* arena,
+                          const std::vector<const TufaClass*>*) {
   if (!args.empty() || !arena || !arena->scheduler)
     return std::string{"object notify scheduler unavailable"};
   const auto result = arena->scheduler->notify(receiver, false);
   return result.ok ? NativeResult{std::monostate{}}
                    : NativeResult{result.error};
 }
-NativeResult objectNotifyAll(const std::vector<VmValue> &args,
-                             const VmObject *receiver, VmArena *arena,
-                             const std::vector<const TufaClass *> *) {
+NativeResult objectNotifyAll(const std::vector<VmValue>& args,
+                             const VmObject* receiver, VmArena* arena,
+                             const std::vector<const TufaClass*>*) {
   if (!args.empty() || !arena || !arena->scheduler)
     return std::string{"object notify scheduler unavailable"};
   const auto result = arena->scheduler->notify(receiver, true);
@@ -370,10 +371,10 @@ NativeResult objectNotifyAll(const std::vector<VmValue> &args,
                    : NativeResult{result.error};
 }
 
-GroundFactoryResult *linkedGroundFactory(const VmObject *receiver, VmArena *arena) {
+GroundFactoryResult* linkedGroundFactory(const VmObject* receiver, VmArena* arena) {
   if (!arena || !arena->gameState || !arena->gameState->resources)
     return nullptr;
-  const auto *state = nativeResourceState(receiver, arena);
+  const auto* state = nativeResourceState(receiver, arena);
   if (!state)
     return nullptr;
   const int32_t handle =
@@ -390,45 +391,45 @@ GroundFactoryResult *linkedGroundFactory(const VmObject *receiver, VmArena *aren
 
 // FUN_00483d00 queries the road manager using FUN_00581a00 and returns
 // the selected crossing's coordinates as a Vector3.
-NativeResult groundGetNearestCross(const std::vector<VmValue> &args,
-                                   const VmObject *receiver, VmArena *arena,
-                                   const std::vector<const TufaClass *> *classes) {
-  if (!arena || args.size() != 2 || !std::holds_alternative<const VmObject *>(args[0]) ||
+NativeResult groundGetNearestCross(const std::vector<VmValue>& args,
+                                   const VmObject* receiver, VmArena* arena,
+                                   const std::vector<const TufaClass*>* classes) {
+  if (!arena || args.size() != 2 || !std::holds_alternative<const VmObject*>(args[0]) ||
       !std::holds_alternative<float>(args[1]))
     return std::string{"GroundRef.getNearestCross: invalid arguments"};
-  const VmObject *position = std::get<const VmObject *>(args[0]);
-  GroundFactoryResult *factory = linkedGroundFactory(receiver, arena);
+  const VmObject* position = std::get<const VmObject*>(args[0]);
+  GroundFactoryResult* factory = linkedGroundFactory(receiver, arena);
   if (!position || !factory || !factory->preparation || !factory->preparation->files.roads)
-    return VmValue{static_cast<const VmObject *>(nullptr)};
+    return VmValue{static_cast<const VmObject*>(nullptr)};
   std::array<float, 3> query{};
   if (!readVector3Components(position, query[0], query[1], query[2]))
     return std::string{"GroundRef.getNearestCross: invalid position"};
-  const auto &roads = *factory->preparation->files.roads;
+  const auto& roads = *factory->preparation->files.roads;
   const auto nearest = roadNearestCrossing(roads, query, std::get<float>(args[1]), false);
   if (!nearest)
     return std::string{"GroundRef.getNearestCross: no supported crossing"};
   const size_t group = nearest->kind == RoadRecordKind::FirstNode ? 0 : 1;
-  const auto &words = roads.nodes[group][nearest->index].words;
+  const auto& words = roads.nodes[group][nearest->index].words;
   std::array<float, 3> coordinates{};
   std::memcpy(coordinates.data(), words.data(), sizeof(coordinates));
   return allocateVector3(arena, classes, coordinates[0], coordinates[1], coordinates[2]);
 }
 
-NativeResult groundAddTrafficN(const std::vector<VmValue> &args, const VmObject *receiver,
-                               VmArena *arena, const std::vector<const TufaClass *> *) {
-  if (!arena || args.size() != 5 || !std::holds_alternative<const VmObject *>(args[0]) ||
+NativeResult groundAddTrafficN(const std::vector<VmValue>& args, const VmObject* receiver,
+                               VmArena* arena, const std::vector<const TufaClass*>*) {
+  if (!arena || args.size() != 5 || !std::holds_alternative<const VmObject*>(args[0]) ||
       !std::holds_alternative<int32_t>(args[1]) || !std::holds_alternative<float>(args[2]) ||
       !std::holds_alternative<float>(args[3]) || !std::holds_alternative<float>(args[4]))
     return std::string{"GroundRef.addTrafficN: invalid arguments"};
   const int32_t count = std::get<int32_t>(args[1]);
   if (count <= 0)
     return VmValue{int32_t{0}};
-  GroundFactoryResult *factory = linkedGroundFactory(receiver, arena);
+  GroundFactoryResult* factory = linkedGroundFactory(receiver, arena);
   if (!factory)
     return VmValue{int32_t{0}};
   uint32_t templateId = 0;
-  if (const auto *car = std::get<const VmObject *>(args[0])) {
-    if (const auto *carState = nativeResourceState(car, arena)) {
+  if (const auto* car = std::get<const VmObject*>(args[0])) {
+    if (const auto* carState = nativeResourceState(car, arena)) {
       templateId = carState->words[2];
       if (arena->gameState) {
         const int32_t handle =
@@ -444,21 +445,21 @@ NativeResult groundAddTrafficN(const std::vector<VmValue> &args, const VmObject 
   return VmValue{int32_t{placed}};
 }
 
-NativeResult groundSetPedestrianDensityN(const std::vector<VmValue> &args,
-                                         const VmObject *receiver, VmArena *arena,
-                                         const std::vector<const TufaClass *> *) {
+NativeResult groundSetPedestrianDensityN(const std::vector<VmValue>& args,
+                                         const VmObject* receiver, VmArena* arena,
+                                         const std::vector<const TufaClass*>*) {
   if (!arena || args.size() != 1 || !std::holds_alternative<float>(args[0]))
     return std::string{"GroundRef.setPedestrianDensityN: invalid arguments"};
-  if (GroundFactoryResult *factory = linkedGroundFactory(receiver, arena))
+  if (GroundFactoryResult* factory = linkedGroundFactory(receiver, arena))
     setGroundPedestrianDensity(*factory, std::get<float>(args[0]));
   return std::monostate{};
 }
 
-static uint32_t gameRefTemplateId(const VmObject *gameRef, VmArena *arena) {
+static uint32_t gameRefTemplateId(const VmObject* gameRef, VmArena* arena) {
   uint32_t templateId = 0;
   if (!gameRef || !arena)
     return templateId;
-  if (const auto *state = nativeResourceState(gameRef, arena)) {
+  if (const auto* state = nativeResourceState(gameRef, arena)) {
     templateId = state->words[2];
     if (arena->gameState) {
       const int32_t handle =
@@ -471,27 +472,27 @@ static uint32_t gameRefTemplateId(const VmObject *gameRef, VmArena *arena) {
   return templateId;
 }
 
-NativeResult groundAddPedestrianType(const std::vector<VmValue> &args,
-                                     const VmObject *receiver, VmArena *arena,
-                                     const std::vector<const TufaClass *> *) {
-  if (!arena || args.size() != 1 || !std::holds_alternative<const VmObject *>(args[0]))
+NativeResult groundAddPedestrianType(const std::vector<VmValue>& args,
+                                     const VmObject* receiver, VmArena* arena,
+                                     const std::vector<const TufaClass*>*) {
+  if (!arena || args.size() != 1 || !std::holds_alternative<const VmObject*>(args[0]))
     return std::string{"GroundRef.addPedestrianType: invalid arguments"};
-  GroundFactoryResult *factory = linkedGroundFactory(receiver, arena);
+  GroundFactoryResult* factory = linkedGroundFactory(receiver, arena);
   if (!factory)
     return std::monostate{};
-  const auto *gameRef = std::get<const VmObject *>(args[0]);
+  const auto* gameRef = std::get<const VmObject*>(args[0]);
   addGroundPedestrianType(*factory, gameRefTemplateId(gameRef, arena));
   return std::monostate{};
 }
 
-NativeResult groundSetWaterVector3(const std::vector<VmValue> &args,
-                                   const VmObject *receiver, VmArena *arena,
-                                   const std::vector<const TufaClass *> *) {
-  if (!arena || args.size() != 4 || !std::holds_alternative<const VmObject *>(args[0]) ||
-      !std::holds_alternative<const VmObject *>(args[1]) ||
+NativeResult groundSetWaterVector3(const std::vector<VmValue>& args,
+                                   const VmObject* receiver, VmArena* arena,
+                                   const std::vector<const TufaClass*>*) {
+  if (!arena || args.size() != 4 || !std::holds_alternative<const VmObject*>(args[0]) ||
+      !std::holds_alternative<const VmObject*>(args[1]) ||
       !std::holds_alternative<float>(args[2]) || !std::holds_alternative<float>(args[3]))
     return std::string{"GroundRef.setWater: invalid arguments"};
-  GroundFactoryResult *factory = linkedGroundFactory(receiver, arena);
+  GroundFactoryResult* factory = linkedGroundFactory(receiver, arena);
   if (!factory)
     return std::monostate{};
   float posX = 0.f;
@@ -500,20 +501,20 @@ NativeResult groundSetWaterVector3(const std::vector<VmValue> &args,
   float dirX = 0.f;
   float dirY = 0.f;
   float dirZ = 0.f;
-  if (!readVector3Components(std::get<const VmObject *>(args[0]), posX, posY, posZ) ||
-      !readVector3Components(std::get<const VmObject *>(args[1]), dirX, dirY, dirZ))
+  if (!readVector3Components(std::get<const VmObject*>(args[0]), posX, posY, posZ) ||
+      !readVector3Components(std::get<const VmObject*>(args[1]), dirX, dirY, dirZ))
     return std::string{"GroundRef.setWater: invalid arguments"};
   setGroundWater(*factory, posX, posY, posZ, dirX, dirY, dirZ, std::get<float>(args[2]),
                  std::get<float>(args[3]));
   return std::monostate{};
 }
 
-NativeResult groundAddWaterLimit(const std::vector<VmValue> &args, const VmObject *receiver,
-                                 VmArena *arena, const std::vector<const TufaClass *> *) {
-  if (!arena || args.size() != 2 || !std::holds_alternative<const VmObject *>(args[0]) ||
-      !std::holds_alternative<const VmObject *>(args[1]))
+NativeResult groundAddWaterLimit(const std::vector<VmValue>& args, const VmObject* receiver,
+                                 VmArena* arena, const std::vector<const TufaClass*>*) {
+  if (!arena || args.size() != 2 || !std::holds_alternative<const VmObject*>(args[0]) ||
+      !std::holds_alternative<const VmObject*>(args[1]))
     return std::string{"GroundRef.addWaterLimit: invalid arguments"};
-  GroundFactoryResult *factory = linkedGroundFactory(receiver, arena);
+  GroundFactoryResult* factory = linkedGroundFactory(receiver, arena);
   if (!factory)
     return std::monostate{};
   float ax = 0.f;
@@ -522,19 +523,19 @@ NativeResult groundAddWaterLimit(const std::vector<VmValue> &args, const VmObjec
   float bx = 0.f;
   float by = 0.f;
   float bz = 0.f;
-  if (!readVector3Components(std::get<const VmObject *>(args[0]), ax, ay, az) ||
-      !readVector3Components(std::get<const VmObject *>(args[1]), bx, by, bz))
+  if (!readVector3Components(std::get<const VmObject*>(args[0]), ax, ay, az) ||
+      !readVector3Components(std::get<const VmObject*>(args[1]), bx, by, bz))
     return std::string{"GroundRef.addWaterLimit: invalid arguments"};
   addGroundWaterLimit(*factory, ax, ay, az, bx, by, bz);
   return std::monostate{};
 }
 
-NativeResult groundSetFog(const std::vector<VmValue> &args, const VmObject *receiver,
-                          VmArena *arena, const std::vector<const TufaClass *> *) {
+NativeResult groundSetFog(const std::vector<VmValue>& args, const VmObject* receiver,
+                          VmArena* arena, const std::vector<const TufaClass*>*) {
   if (!arena || args.size() != 3 || !std::holds_alternative<int32_t>(args[0]) ||
       !std::holds_alternative<float>(args[1]) || !std::holds_alternative<float>(args[2]))
     return std::string{"GroundRef.setFog: invalid arguments"};
-  GroundFactoryResult *factory = linkedGroundFactory(receiver, arena);
+  GroundFactoryResult* factory = linkedGroundFactory(receiver, arena);
   if (!factory)
     return std::monostate{};
   addGroundFog(*factory, std::get<int32_t>(args[0]), std::get<float>(args[1]),
@@ -637,6 +638,13 @@ const std::vector<NativeEntry> entries{
      mouseCursorGetPos},
     {"java.io.Input", "lastKey", "()I", "0047cc10", inputLastKey},
     {"java.io.Input", "getAxis", "(II)F", "0047c990", inputGetAxis},
+    {"java.io.Input", "axisName", "(II)Ljava.lang.String;", "0047cb00", inputAxisName},
+    {"java.io.Input", "activeAxis", "(I)I", "0047cae0", inputActiveAxis},
+    {"java.io.Input", "mapAxis", "(Ljava.util.resource.GameRef;IIIFFFF)V", "0047c9f0", inputMapAxis},
+    {"java.io.Input", "setAxisSmooth", "(Ljava.util.resource.GameRef;IFFFF)V", "0047ca70", inputSetAxisSmooth},
+    {"java.io.Controller", "user_SetAxisSpeed", "(IF)V", "00477970", controllerUserSetAxisSpeed},
+    {"java.io.Controller", "user_GetAxisVal", "(I)F", "0047a800", controllerUserGetAxisVal},
+    {"java.io.Controller", "user_SetAxisForce", "(IFF)V", "0047b200", controllerUserSetAxisForce},
     {"java.io.File", "exists", "(Ljava.lang.String;)I", "00486170", fileExists},
     {"java.io.File", "delete", "(Ljava.lang.String;)I", "00486150", fileDelete},
     {"java.io.File", "copy", "(Ljava.lang.String;Ljava.lang.String;)I",
@@ -1017,6 +1025,13 @@ const std::vector<NativeEntry> entries{
     {"java.game.Vehicle", "getSpeedSquare", "()F", "00480500",
      vehicleGetSpeedSquare},
     {"java.game.Vehicle", "hasCrime", "()F", "00440bf0", vehicleHasCrime},
+    {"java.util.resource.GroundRef", "alignToRoad",
+     "(Ljava.lang.Vector3;)[Ljava.lang.Vector3;", "00483e60", groundAlignToRoad},
+    {"java.util.resource.GroundRef", "getStartDirection",
+     "(Ljava.lang.Vector3;Ljava.lang.Vector3;)Ljava.lang.Vector3;", "00483400",
+     groundGetStartDirection},
+    {"java.util.resource.GroundRef", "haltTrafficPath",
+     "(Ljava.lang.Vector3;Ljava.lang.Vector3;)V", "004835e0", groundHaltTrafficPath},
     {"java.util.resource.GroundRef", "getNearestCross",
      "(Ljava.lang.Vector3;F)Ljava.lang.Vector3;", "00483d00", groundGetNearestCross},
     {"java.util.resource.GroundRef", "addTrafficN",
@@ -1033,14 +1048,14 @@ const std::vector<NativeEntry> entries{
 };
 } // namespace
 
-const std::vector<NativeEntry> &nativeRegistry() { return entries; }
+const std::vector<NativeEntry>& nativeRegistry() { return entries; }
 
 NativeResult invokeNative(std::string_view className, std::string_view method,
                           std::string_view descriptor,
-                          const std::vector<VmValue> &args,
-                          const VmObject *receiver, VmArena *arena,
-                          const std::vector<const TufaClass *> *classes) {
-  for (const auto &entry : nativeRegistry()) {
+                          const std::vector<VmValue>& args,
+                          const VmObject* receiver, VmArena* arena,
+                          const std::vector<const TufaClass*>* classes) {
+  for (const auto& entry : nativeRegistry()) {
     if (entry.className == className && entry.method == method &&
         entry.descriptor == descriptor)
       return entry.handler(args, receiver, arena, classes);

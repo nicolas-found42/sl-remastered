@@ -2,15 +2,16 @@
 #include "file_state.hpp"
 #include "natives/lang_string.hpp"
 #include "natives/game_type.hpp"
+#include "run_log.hpp"
 #include "vm.hpp"
 #include "resource_world.hpp"
 #include <cstring>
 
 namespace {
-VmField *field(const VmObject *receiver, const char *name,
-               const char *descriptor) {
-  VmField *result = nullptr;
-  for (auto &candidate : receiver->fields)
+VmField* field(const VmObject* receiver, const char* name,
+               const char* descriptor) {
+  VmField* result = nullptr;
+  for (auto& candidate : receiver->fields)
     if (candidate.name == name) {
       if (result || candidate.descriptor != descriptor)
         return nullptr;
@@ -19,21 +20,21 @@ VmField *field(const VmObject *receiver, const char *name,
   return result;
 }
 
-VmField *checkedPtr(const VmObject *receiver, VmArena *arena,
-                    const std::vector<const TufaClass *> *classes) {
+VmField* checkedPtr(const VmObject* receiver, VmArena* arena,
+                    const std::vector<const TufaClass*>* classes) {
   if (!receiver || !arena || !arena->fileState || !classes)
     return nullptr;
   bool owned = false, loaded = false;
-  for (const auto &object : arena->objects)
+  for (const auto& object : arena->objects)
     if (object.get() == receiver)
       owned = true;
-  for (const auto *cls : *classes)
+  for (const auto* cls : *classes)
     if (cls == receiver->runtimeClass)
       loaded = true;
   if (!owned || !loaded || !receiver->runtimeClass ||
       receiver->runtimeClass->name != "java.io.File")
     return nullptr;
-  VmField *ptr = field(receiver, "ptr", "I");
+  VmField* ptr = field(receiver, "ptr", "I");
   if (!ptr || !std::holds_alternative<int32_t>(ptr->value))
     return nullptr;
   const auto handle = arena->fileState->handle(receiver);
@@ -43,15 +44,15 @@ VmField *checkedPtr(const VmObject *receiver, VmArena *arena,
 }
 } // namespace
 
-NativeResult fileExists(const std::vector<VmValue> &args, const VmObject *,
-                        VmArena *arena,
-                        const std::vector<const TufaClass *> *) {
+NativeResult fileExists(const std::vector<VmValue>& args, const VmObject*,
+                        VmArena* arena,
+                        const std::vector<const TufaClass*>*) {
   if (!arena || !arena->fileState || args.size() != 1)
     return std::string{"invalid File.exists call"};
-  const auto *object = std::get_if<const VmObject *>(&args[0]);
+  const auto* object = std::get_if<const VmObject*>(&args[0]);
   if (!object || !*object)
     return std::string{"unsupported File.exists name"};
-  for (const auto &entry : arena->strings)
+  for (const auto& entry : arena->strings)
     if (entry.second == *object) {
       bool exists = false;
       std::string error;
@@ -62,20 +63,20 @@ NativeResult fileExists(const std::vector<VmValue> &args, const VmObject *,
   return std::string{"unsupported File.exists name"};
 }
 
-NativeResult fileOpenRead(const std::vector<VmValue> &args,
-                          const VmObject *receiver, VmArena *arena,
-                          const std::vector<const TufaClass *> *classes) {
-  VmField *ptr = checkedPtr(receiver, arena, classes);
+NativeResult fileOpenRead(const std::vector<VmValue>& args,
+                          const VmObject* receiver, VmArena* arena,
+                          const std::vector<const TufaClass*>* classes) {
+  VmField* ptr = checkedPtr(receiver, arena, classes);
   if (!ptr || args.size() != 1 || !std::holds_alternative<int32_t>(args[0]) ||
       (std::get<int32_t>(args[0]) != 0 && std::get<int32_t>(args[0]) != 1))
     return std::string{"unsupported File.open call"};
   const bool writing = std::get<int32_t>(args[0]) == 1;
-  const VmField *name = field(receiver, "name", "Ljava.lang.String;");
-  if (!name || !std::holds_alternative<const VmObject *>(name->value))
+  const VmField* name = field(receiver, "name", "Ljava.lang.String;");
+  if (!name || !std::holds_alternative<const VmObject*>(name->value))
     return std::string{"invalid File name"};
-  const VmObject *string = std::get<const VmObject *>(name->value);
-  const std::string *path = nullptr;
-  for (const auto &entry : arena->strings)
+  const VmObject* string = std::get<const VmObject*>(name->value);
+  const std::string* path = nullptr;
+  for (const auto& entry : arena->strings)
     if (entry.second == string) {
       if (path)
         return std::string{"ambiguous File name"};
@@ -93,9 +94,9 @@ NativeResult fileOpenRead(const std::vector<VmValue> &args,
   return VmValue{int32_t{result == FileOpenResult::opened ? 1 : 0}};
 }
 
-NativeResult fileReadInt(const std::vector<VmValue> &args,
-                         const VmObject *receiver, VmArena *arena,
-                         const std::vector<const TufaClass *> *classes) {
+NativeResult fileReadInt(const std::vector<VmValue>& args,
+                         const VmObject* receiver, VmArena* arena,
+                         const std::vector<const TufaClass*>* classes) {
   if (!checkedPtr(receiver, arena, classes) || !args.empty())
     return std::string{"invalid File.readInt call"};
   int32_t value;
@@ -105,9 +106,9 @@ NativeResult fileReadInt(const std::vector<VmValue> &args,
   return VmValue{value};
 }
 
-NativeResult fileReadFloat(const std::vector<VmValue> &args,
-                           const VmObject *receiver, VmArena *arena,
-                           const std::vector<const TufaClass *> *classes) {
+NativeResult fileReadFloat(const std::vector<VmValue>& args,
+                           const VmObject* receiver, VmArena* arena,
+                           const std::vector<const TufaClass*>* classes) {
   if (!checkedPtr(receiver, arena, classes) || !args.empty())
     return std::string{"invalid File.readFloat call"};
   float value;
@@ -117,64 +118,83 @@ NativeResult fileReadFloat(const std::vector<VmValue> &args,
   return VmValue{value};
 }
 
-NativeResult fileClose(const std::vector<VmValue> &args,
-                       const VmObject *receiver, VmArena *arena,
-                       const std::vector<const TufaClass *> *classes) {
-  VmField *ptr = checkedPtr(receiver, arena, classes);
+NativeResult fileClose(const std::vector<VmValue>& args,
+                       const VmObject* receiver, VmArena* arena,
+                       const std::vector<const TufaClass*>* classes) {
+  VmField* ptr = checkedPtr(receiver, arena, classes);
   if (!ptr || !args.empty())
     return std::string{"invalid File.close call"};
-  arena->fileState->close(receiver);
+  const auto failure = arena->fileState->close(receiver);
   ptr->value = int32_t{0};
+  // Stock FUN_00485870 reports a short write only through its own log line
+  // ("Invalid datafile saved: %s") and returns void, so the script keeps
+  // running. Mirror that control flow and put the diagnostic in the run log
+  // instead of raising a host error that aborts the calling script.
+  if (!failure.empty()) {
+    runlog::event(runlog::EventKind::Error, "Invalid datafile saved: %s",
+                  failure.c_str());
+  }
   return std::monostate{};
 }
 
 namespace {
-bool findFields(const VmObject *receiver, VmArena *arena, const std::vector<const TufaClass *> *classes, VmField *&handle, VmField *&flags) {
+bool findFields(const VmObject* receiver, VmArena* arena, const std::vector<const TufaClass*>* classes, VmField*& handle, VmField*& flags) {
   if (!receiver || !arena || !arena->fileState || !classes || !receiver->runtimeClass || receiver->runtimeClass->name != "java.io.FindFile") return false;
   bool owned = false, loaded = false;
-  for (const auto &object : arena->objects) if (object.get() == receiver) owned = true;
-  for (const auto *cls : *classes) if (cls == receiver->runtimeClass) loaded = true;
-  handle = field(receiver, "handle", "I"); flags = field(receiver, "flags", "I");
+  for (const auto& object : arena->objects)
+    if (object.get() == receiver) owned = true;
+  for (const auto* cls : *classes)
+    if (cls == receiver->runtimeClass) loaded = true;
+  handle = field(receiver, "handle", "I");
+  flags = field(receiver, "flags", "I");
   return owned && loaded && handle && flags && std::holds_alternative<int32_t>(handle->value) && std::holds_alternative<int32_t>(flags->value);
 }
-NativeResult findResult(const std::optional<std::string> &name, VmArena *arena, const std::vector<const TufaClass *> *classes) {
-  return name ? internStringResult(*name, arena, classes) : NativeResult{VmValue{static_cast<const VmObject *>(nullptr)}};
+NativeResult findResult(const std::optional<std::string>& name, VmArena* arena, const std::vector<const TufaClass*>* classes) {
+  return name ? internStringResult(*name, arena, classes) : NativeResult{VmValue{static_cast<const VmObject*>(nullptr)}};
 }
-}
-NativeResult findFileFirst(const std::vector<VmValue> &args, const VmObject *receiver, VmArena *arena, const std::vector<const TufaClass *> *classes) {
+} // namespace
+NativeResult findFileFirst(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena, const std::vector<const TufaClass*>* classes) {
   VmField *handle = nullptr, *flags = nullptr;
-  if (!findFields(receiver, arena, classes, handle, flags) || args.size() != 2 || !std::holds_alternative<const VmObject *>(args[0]) || !std::holds_alternative<int32_t>(args[1])) return std::string{"invalid FindFile.first call"};
-  const auto *object = std::get<const VmObject *>(args[0]);
-  for (const auto &entry : arena->strings) if (entry.second == object) {
-    int32_t h; std::optional<std::string> result; std::string error; const int32_t f = std::get<int32_t>(args[1]);
-    if (!arena->fileState->findFirst(entry.first, f, h, result, error)) return error;
-    handle->value = h; flags->value = f; return findResult(result, arena, classes);
-  }
+  if (!findFields(receiver, arena, classes, handle, flags) || args.size() != 2 || !std::holds_alternative<const VmObject*>(args[0]) || !std::holds_alternative<int32_t>(args[1])) return std::string{"invalid FindFile.first call"};
+  const auto* object = std::get<const VmObject*>(args[0]);
+  for (const auto& entry : arena->strings)
+    if (entry.second == object) {
+      int32_t h;
+      std::optional<std::string> result;
+      std::string error;
+      const int32_t f = std::get<int32_t>(args[1]);
+      if (!arena->fileState->findFirst(entry.first, f, h, result, error)) return error;
+      handle->value = h;
+      flags->value = f;
+      return findResult(result, arena, classes);
+    }
   return std::string{"unsupported FindFile pattern string"};
 }
-NativeResult findFileNext(const std::vector<VmValue> &args, const VmObject *receiver, VmArena *arena, const std::vector<const TufaClass *> *classes) {
+NativeResult findFileNext(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena, const std::vector<const TufaClass*>* classes) {
   VmField *handle = nullptr, *flags = nullptr;
   if (!findFields(receiver, arena, classes, handle, flags) || !args.empty()) return std::string{"invalid FindFile.next call"};
   return findResult(arena->fileState->findNext(std::get<int32_t>(handle->value), std::get<int32_t>(flags->value)), arena, classes);
 }
-NativeResult findFileClose(const std::vector<VmValue> &args, const VmObject *receiver, VmArena *arena, const std::vector<const TufaClass *> *classes) {
+NativeResult findFileClose(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena, const std::vector<const TufaClass*>* classes) {
   VmField *handle = nullptr, *flags = nullptr;
   if (!findFields(receiver, arena, classes, handle, flags) || !args.empty()) return std::string{"invalid FindFile.close call"};
-  arena->fileState->findClose(std::get<int32_t>(handle->value)); handle->value = int32_t{-1}; return std::monostate{};
+  arena->fileState->findClose(std::get<int32_t>(handle->value));
+  handle->value = int32_t{-1};
+  return std::monostate{};
 }
 
 namespace {
-const std::string *stringOf(const VmValue &value, VmArena *arena) {
-  const auto *object = std::get_if<const VmObject *>(&value);
+const std::string* stringOf(const VmValue& value, VmArena* arena) {
+  const auto* object = std::get_if<const VmObject*>(&value);
   if (!object || !*object)
     return nullptr;
-  for (const auto &entry : arena->strings)
+  for (const auto& entry : arena->strings)
     if (entry.second == *object)
       return &entry.first;
   return nullptr;
 }
-NativeResult writeWord(uint32_t word, const VmObject *receiver, VmArena *arena,
-                       const std::vector<const TufaClass *> *classes) {
+NativeResult writeWord(uint32_t word, const VmObject* receiver, VmArena* arena,
+                       const std::vector<const TufaClass*>* classes) {
   if (!checkedPtr(receiver, arena, classes))
     return std::string{"invalid File.write call"};
   if (!arena->fileState->isWriter(receiver))
@@ -186,9 +206,9 @@ NativeResult writeWord(uint32_t word, const VmObject *receiver, VmArena *arena,
 }
 } // namespace
 
-NativeResult fileWriteInt(const std::vector<VmValue> &args,
-                          const VmObject *receiver, VmArena *arena,
-                          const std::vector<const TufaClass *> *classes) {
+NativeResult fileWriteInt(const std::vector<VmValue>& args,
+                          const VmObject* receiver, VmArena* arena,
+                          const std::vector<const TufaClass*>* classes) {
   if (args.size() != 1 || !std::holds_alternative<int32_t>(args[0]))
     return std::string{"invalid File.write(I) call"};
   uint32_t word;
@@ -197,9 +217,9 @@ NativeResult fileWriteInt(const std::vector<VmValue> &args,
   return writeWord(word, receiver, arena, classes);
 }
 
-NativeResult fileWriteFloat(const std::vector<VmValue> &args,
-                            const VmObject *receiver, VmArena *arena,
-                            const std::vector<const TufaClass *> *classes) {
+NativeResult fileWriteFloat(const std::vector<VmValue>& args,
+                            const VmObject* receiver, VmArena* arena,
+                            const std::vector<const TufaClass*>* classes) {
   if (args.size() != 1 || !std::holds_alternative<float>(args[0]))
     return std::string{"invalid File.write(F) call"};
   uint32_t word;
@@ -208,15 +228,15 @@ NativeResult fileWriteFloat(const std::vector<VmValue> &args,
   return writeWord(word, receiver, arena, classes);
 }
 
-NativeResult fileWriteString(const std::vector<VmValue> &args,
-                             const VmObject *receiver, VmArena *arena,
-                             const std::vector<const TufaClass *> *classes) {
+NativeResult fileWriteString(const std::vector<VmValue>& args,
+                             const VmObject* receiver, VmArena* arena,
+                             const std::vector<const TufaClass*>* classes) {
   if (!checkedPtr(receiver, arena, classes) || args.size() != 1)
     return std::string{"invalid File.write(String) call"};
-  const auto *object = std::get_if<const VmObject *>(&args[0]);
+  const auto* object = std::get_if<const VmObject*>(&args[0]);
   if (!object)
     return std::string{"invalid File.write(String) argument"};
-  const std::string *text = nullptr;
+  const std::string* text = nullptr;
   if (*object) {
     text = stringOf(args[0], arena);
     if (!text)
@@ -238,34 +258,34 @@ NativeResult fileWriteString(const std::vector<VmValue> &args,
   return VmValue{static_cast<int32_t>(4 + bytes.size())};
 }
 
-NativeResult fileReadString(const std::vector<VmValue> &args,
-                            const VmObject *receiver, VmArena *arena,
-                            const std::vector<const TufaClass *> *classes) {
+NativeResult fileReadString(const std::vector<VmValue>& args,
+                            const VmObject* receiver, VmArena* arena,
+                            const std::vector<const TufaClass*>* classes) {
   if (!checkedPtr(receiver, arena, classes) || !args.empty())
     return std::string{"invalid File.readString call"};
   std::string value, error;
   if (!arena->fileState->readString(receiver, value, error))
     return error;
   if (value.empty())
-    return VmValue{static_cast<const VmObject *>(nullptr)}; // length 0 -> null
+    return VmValue{static_cast<const VmObject*>(nullptr)}; // length 0 -> null
   return internStringResult(value, arena, classes);
 }
 
-NativeResult fileWriteResource(const std::vector<VmValue> &args,
-                               const VmObject *receiver, VmArena *arena,
-                               const std::vector<const TufaClass *> *classes) {
+NativeResult fileWriteResource(const std::vector<VmValue>& args,
+                               const VmObject* receiver, VmArena* arena,
+                               const std::vector<const TufaClass*>* classes) {
   if (!checkedPtr(receiver, arena, classes) || args.size() != 1)
     return std::string{"invalid File.write(ResourceRef) call"};
-  const auto *object = std::get_if<const VmObject *>(&args[0]);
+  const auto* object = std::get_if<const VmObject*>(&args[0]);
   if (!object)
     return std::string{"invalid File.write(ResourceRef) argument"};
   uint32_t id = 0;
   if (*object) {
-    const VmField *ptr = field(*object, "ptr", "I");
+    const VmField* ptr = field(*object, "ptr", "I");
     if (!ptr || !std::holds_alternative<int32_t>(ptr->value))
       return std::string{"File.write(ResourceRef): argument has no ptr"};
     if (std::get<int32_t>(ptr->value) != 0) {
-      const auto *state = nativeResourceState(*object, arena);
+      const auto* state = nativeResourceState(*object, arena);
       if (!state)
         return std::string{"File.write(ResourceRef): invalid native link"};
       id = state->words[2];
@@ -301,9 +321,9 @@ NativeResult fileWriteResource(const std::vector<VmValue> &args,
   return VmValue{int32_t{4}};
 }
 
-NativeResult fileReadResId(const std::vector<VmValue> &args,
-                           const VmObject *receiver, VmArena *arena,
-                           const std::vector<const TufaClass *> *classes) {
+NativeResult fileReadResId(const std::vector<VmValue>& args,
+                           const VmObject* receiver, VmArena* arena,
+                           const std::vector<const TufaClass*>* classes) {
   if (!checkedPtr(receiver, arena, classes) || !args.empty())
     return std::string{"invalid File.readResID call"};
   int32_t raw;
@@ -317,10 +337,10 @@ NativeResult fileReadResId(const std::vector<VmValue> &args,
   if (high == 0 || high == 0xffff)
     return std::string{"File.readResID: unsaved embedded resource ids are an "
                        "unported gap (FUN_00485ea0)"};
-  const auto *packs = arena->fileState->readPacks(receiver);
+  const auto* packs = arena->fileState->readPacks(receiver);
   if (!packs || !arena->gameState || !arena->gameState->resources)
     return std::string{"File.readResID: no pack table"};
-  for (const auto &pack : *packs)
+  for (const auto& pack : *packs)
     if (pack.first == high) {
       uint16_t slot;
       if (!arena->gameState->resources->packs().registerPackName(pack.second, slot, error))
@@ -333,11 +353,11 @@ NativeResult fileReadResId(const std::vector<VmValue> &args,
   return VmValue{int32_t{0}};
 }
 
-NativeResult fileDelete(const std::vector<VmValue> &args, const VmObject *,
-                        VmArena *arena, const std::vector<const TufaClass *> *) {
+NativeResult fileDelete(const std::vector<VmValue>& args, const VmObject*,
+                        VmArena* arena, const std::vector<const TufaClass*>*) {
   if (!arena || !arena->fileState || args.size() != 1)
     return std::string{"invalid File.delete call"};
-  const auto *name = stringOf(args[0], arena);
+  const auto* name = stringOf(args[0], arena);
   if (!name)
     return std::string{"unsupported File.delete name"};
   int32_t result;
@@ -348,12 +368,12 @@ NativeResult fileDelete(const std::vector<VmValue> &args, const VmObject *,
 }
 
 namespace {
-NativeResult twoPath(const std::vector<VmValue> &args, VmArena *arena,
+NativeResult twoPath(const std::vector<VmValue>& args, VmArena* arena,
                      bool move) {
   if (!arena || !arena->fileState || args.size() != 2)
     return std::string{"invalid File.copy/move call"};
-  const auto *from = stringOf(args[0], arena);
-  const auto *to = stringOf(args[1], arena);
+  const auto* from = stringOf(args[0], arena);
+  const auto* to = stringOf(args[1], arena);
   if (!from || !to)
     return std::string{"unsupported File.copy/move name"};
   int32_t result;
@@ -365,12 +385,12 @@ NativeResult twoPath(const std::vector<VmValue> &args, VmArena *arena,
 }
 } // namespace
 
-NativeResult fileCopy(const std::vector<VmValue> &args, const VmObject *,
-                      VmArena *arena, const std::vector<const TufaClass *> *) {
+NativeResult fileCopy(const std::vector<VmValue>& args, const VmObject*,
+                      VmArena* arena, const std::vector<const TufaClass*>*) {
   return twoPath(args, arena, false);
 }
 
-NativeResult fileMove(const std::vector<VmValue> &args, const VmObject *,
-                      VmArena *arena, const std::vector<const TufaClass *> *) {
+NativeResult fileMove(const std::vector<VmValue>& args, const VmObject*,
+                      VmArena* arena, const std::vector<const TufaClass*>*) {
   return twoPath(args, arena, true);
 }

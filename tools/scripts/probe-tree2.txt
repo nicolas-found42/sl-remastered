@@ -1,0 +1,23 @@
+# Car-body impact: brake to a full stop, neutral gap, then reverse (+x)
+# into the large stepped object (t=6 r=3.05) near (-248.9, 10.5, 1036.5),
+# then separate and renew the impact.
+0 wait splash 30
+0 keydown Escape
+0 wait menu 30
+0 keyup Escape
+0 clickn 0.65625 0.264583333
+0 wait driving 60
+0 shot @run/ready.bmp
+0.1 sdl_keydown Up
+3.0 sdl_keyup Up
+3.5 sdl_keydown Down
+6.5 shot @run/stopping.bmp
+7.0 sdl_keyup Down
+10.0 sdl_keydown Down
+13.0 shot @run/rev1.bmp
+15.5 shot @run/tree-hit.bmp
+17.0 sdl_keyup Down
+19.5 sdl_keydown Up
+21.5 shot @run/separated.bmp
+23.0 sdl_keyup Up
+23.5 quit

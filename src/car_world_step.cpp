@@ -184,7 +184,7 @@ bool CarWorldStepper::step(float seconds, std::string& error) {
     if (seconds >= 0.0001f) {
       const auto& v = state.vel;
       entry.smoothedSpeed = entry.smoothedSpeed * 0.8f +
-          std::sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]) * 0.2f;
+                            std::sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]) * 0.2f;
     }
     entry.sectors = resources_.groundSectorsAt(
         {state.pos[0], state.pos[1], state.pos[2]}, 6.0f);
@@ -544,7 +544,12 @@ bool CarWorldStepper::step(float seconds, std::string& error) {
           context.step = seconds;
           context.drivenWheelSpeed = instance.drivenWheelSpeed;
           context.displayedEngineSpeed = instance.displayedEngineSpeed;
-          context.automatic = instance.transmissionMode != 0;
+          // Stock "transmission N" sets car flags: bit0 enables the automatic
+          // gearbox, bit2 selects semiautomatic (0x20) over automatic (0x10).
+          context.automatic =
+              (instance.transmissionMode & 1) != 0 &&
+              (instance.transmissionMode & 4) == 0;
+          context.semiautomatic = (instance.transmissionMode & 5) == 5;
           context.engineRunning = instance.engineRunning;
           context.positiveMass = car->mass > 0;
           std::string detail;
@@ -666,7 +671,7 @@ bool CarWorldStepper::step(float seconds, std::string& error) {
         for (auto& wheel : part.wheels)
           found.wheels.push_back(std::move(wheel));
       }
-      }
+    }
     for (auto& hit : found.wheels) {
       CarWheelRuntime* runtime = nullptr;
       for (auto* candidate : wheels)
@@ -851,9 +856,20 @@ bool CarWorldStepper::step(float seconds, std::string& error) {
     // can wake a sleeping tree through the registered direct corrector.
     const auto degenerate = [](const physics::Body* body) {
       const auto& s = body->proto->shape;
-      // A mesh body without geometry is a bounding proxy (the port's car
-      // root, an object aggregate root); stock's compound roots carry the
-      // aggregate geometry instead, so these take no body pair.
+      // 0049a050/00498f50 put the aggregate core on the compound root, so a
+      // root is not geometry-less in stock either: the compound path (type
+      // 5/6) ends by building an 8-vertex core with zero features
+      // (004ac2b0 at 0x499f76, this = shape+0x20) and rewriting the shape to
+      // type 6 with radius 0, dims 0, extents from the child box and
+      // boundRadius sqrt(low^2/high^2) -- exactly finalizeCompound. What
+      // makes a compound root take no body pair is the feature count: the
+      // dispatcher returns 0 when shape core 0x28 == 0 (0x49cf58/0x49d10b)
+      // *and* only reaches that check after the child fan-out, so stock's
+      // own contact work for these roots is the children. The port skips the
+      // root pair and pairs the children separately, so the observable
+      // pairing is the same; the mesh vertex/triangle test is used only
+      // because the port stores that featureless core in shape.core rather
+      // than as mesh geometry.
       return (s.type == physics::ShapeType::Mesh ||
               s.type == physics::ShapeType::Hull) &&
              s.vertices.empty() && s.triangles.empty();
@@ -880,176 +896,176 @@ bool CarWorldStepper::step(float seconds, std::string& error) {
         }
       }
       if ((objectRoot->flags & physics::kBodyAsleep) == 0) {
-      const auto& rootState = objectRoot->state[objectRoot->current ^ 1];
-      const float rootRadius = objectRoot->proto->shape.boundRadius;
-      const auto objectSectors =
-          resources_.groundSectorsAt(rootState.pos, rootRadius + 2.0f);
-      if (objectSectors.empty()) {
-        why = "car step: object has no loaded ground sector";
-        return false;
-      }
-      std::array<float, 3> minimum{}, maximum{};
-      for (size_t axis = 0; axis < 3; ++axis) {
-        minimum[axis] = rootState.pos[axis] - rootRadius;
-        maximum[axis] = rootState.pos[axis] + rootRadius;
-      }
-      // Object slots all attach to the compound root (00465bd0), so the tree
-      // is the root plus its direct children in body-table order.
-      std::vector<physics::Body*> leaves;
-      for (auto* body : handle->bodies())
-        if (body && body != objectRoot && body->attachment &&
-            body->attachment->parent == objectRoot)
-          leaves.push_back(body);
-      const bool compound = !leaves.empty();
-      if (!compound)
-        leaves.push_back(objectRoot);
-      for (auto* sector : objectSectors) {
-        auto candidates = queryPassiveSpatialCandidates(resources_, *sector,
-                                                        minimum, maximum);
-        if (!candidates.passiveTraversalComplete) {
-          // A spatial node whose payload needs factory actions the port
-          // cannot prepare (shop triggers and similar) has unknown collision
-          // coverage. Keep returned candidates but log the missing coverage;
-          // do not claim those omitted nodes are collision-free in stock.
-          if (candidates.detail.find("spatial load incomplete") ==
-              std::string::npos) {
-            why = "car step: object ground traversal incomplete: " +
-                  candidates.detail;
-            return false;
-          }
-          static bool objectSkipNoted = false;
-          if (!objectSkipNoted) {
-            objectSkipNoted = true;
-            runlog::event(runlog::EventKind::Note,
-                          "object step: spatial nodes with unpreparable "
-                          "factory actions have unknown object collision coverage "
-                          "(%s)",
-                          candidates.detail.c_str());
-          }
+        const auto& rootState = objectRoot->state[objectRoot->current ^ 1];
+        const float rootRadius = objectRoot->proto->shape.boundRadius;
+        const auto objectSectors =
+            resources_.groundSectorsAt(rootState.pos, rootRadius + 2.0f);
+        if (objectSectors.empty()) {
+          why = "car step: object has no loaded ground sector";
+          return false;
         }
-        for (const auto& spatial : candidates.candidates) {
-          auto& node = *spatial.node;
-          const auto& geometry = *spatial.payload->physics;
-          for (size_t faceIndex = 0; faceIndex < geometry.triangles.size();
-               ++faceIndex) {
-            if (compound) {
-              const auto mask = queryParentFace(geometry, faceIndex,
-                                                *objectRoot, *node.bounds,
-                                                false);
-              if (mask == ParentFaceMask::Rejected)
-                continue;
-              if (mask == ParentFaceMask::Unsupported) {
-                why = "car step: object parent face filter unsupported";
-                return false;
-              }
+        std::array<float, 3> minimum{}, maximum{};
+        for (size_t axis = 0; axis < 3; ++axis) {
+          minimum[axis] = rootState.pos[axis] - rootRadius;
+          maximum[axis] = rootState.pos[axis] + rootRadius;
+        }
+        // Object slots all attach to the compound root (00465bd0), so the tree
+        // is the root plus its direct children in body-table order.
+        std::vector<physics::Body*> leaves;
+        for (auto* body : handle->bodies())
+          if (body && body != objectRoot && body->attachment &&
+              body->attachment->parent == objectRoot)
+            leaves.push_back(body);
+        const bool compound = !leaves.empty();
+        if (!compound)
+          leaves.push_back(objectRoot);
+        for (auto* sector : objectSectors) {
+          auto candidates = queryPassiveSpatialCandidates(resources_, *sector,
+                                                          minimum, maximum);
+          if (!candidates.passiveTraversalComplete) {
+            // A spatial node whose payload needs factory actions the port
+            // cannot prepare (shop triggers and similar) has unknown collision
+            // coverage. Keep returned candidates but log the missing coverage;
+            // do not claim those omitted nodes are collision-free in stock.
+            if (candidates.detail.find("spatial load incomplete") ==
+                std::string::npos) {
+              why = "car step: object ground traversal incomplete: " +
+                    candidates.detail;
+              return false;
             }
-            for (auto* leaf : leaves) {
-              if (leaf->current > 1 ||
-                  !std::isfinite(leaf->proto->shape.boundRadius) ||
-                  leaf->proto->shape.boundRadius < 0) {
-                why = "car step: object spatial bounds unsupported";
-                return false;
+            static bool objectSkipNoted = false;
+            if (!objectSkipNoted) {
+              objectSkipNoted = true;
+              runlog::event(runlog::EventKind::Note,
+                            "object step: spatial nodes with unpreparable "
+                            "factory actions have unknown object collision coverage "
+                            "(%s)",
+                            candidates.detail.c_str());
+            }
+          }
+          for (const auto& spatial : candidates.candidates) {
+            auto& node = *spatial.node;
+            const auto& geometry = *spatial.payload->physics;
+            for (size_t faceIndex = 0; faceIndex < geometry.triangles.size();
+                 ++faceIndex) {
+              if (compound) {
+                const auto mask = queryParentFace(geometry, faceIndex,
+                                                  *objectRoot, *node.bounds,
+                                                  false);
+                if (mask == ParentFaceMask::Rejected)
+                  continue;
+                if (mask == ParentFaceMask::Unsupported) {
+                  why = "car step: object parent face filter unsupported";
+                  return false;
+                }
               }
-              bool outside = false;
-              for (size_t axis = 0; axis < 3; ++axis) {
-                const float coordinate =
-                    leaf->state[leaf->current ^ 1].pos[axis];
-                if (!std::isfinite(coordinate)) {
+              for (auto* leaf : leaves) {
+                if (leaf->current > 1 ||
+                    !std::isfinite(leaf->proto->shape.boundRadius) ||
+                    leaf->proto->shape.boundRadius < 0) {
                   why = "car step: object spatial bounds unsupported";
                   return false;
                 }
-                if (leaf->proto->shape.boundRadius +
-                        node.bounds->values[axis + 3] <
-                    std::fabs(coordinate - node.bounds->values[axis])) {
-                  outside = true;
-                  break;
-                }
-              }
-              if (outside)
-                continue;
-              std::string faceError;
-              auto face = resolveSpatialGroundFace(resources_, node,
-                                                   faceIndex, faceError);
-              if (!face) {
-                why = "car step: object ground face unavailable: " + faceError;
-                return false;
-              }
-              // Two loaded city sectors can carry the same face; a body must
-              // meet each triangle once or its contact is applied twice.
-              const auto& triangle = geometry.triangles[faceIndex];
-              std::array<float, 10> signature{};
-              signature[0] = static_cast<float>(
-                  reinterpret_cast<std::uintptr_t>(leaf) & 0xffffff);
-              bool badVertex = false;
-              for (size_t v = 0; v < 3 && v < triangle.vertices.size(); ++v) {
-                if (triangle.vertices[v] >= geometry.vertices.size()) {
-                  badVertex = true;
-                  break;
-                }
-                for (size_t a = 0; a < 3; ++a)
-                  signature[1 + v * 3 + a] =
-                      geometry.vertices[triangle.vertices[v]][a];
-              }
-              if (badVertex)
-                continue;
-              if (!triangles.insert(signature).second)
-                continue;
-              const PairKey key{leaf, face->leafOwner(), faceIndex};
-              auto entry = objectPairs_.find(key);
-              if (entry == objectPairs_.end()) {
-                auto ground = face->bodyOwner();
-                if (!ground) {
-                  why = "car step: object ground body unavailable";
-                  return false;
-                }
-                std::array<physics::Vec3, 3> vertices{};
-                for (size_t v = 0; v < 3; ++v) {
-                  if (triangle.vertices[v] >= geometry.vertices.size()) {
-                    why = "car step: object ground face vertex unavailable";
+                bool outside = false;
+                for (size_t axis = 0; axis < 3; ++axis) {
+                  const float coordinate =
+                      leaf->state[leaf->current ^ 1].pos[axis];
+                  if (!std::isfinite(coordinate)) {
+                    why = "car step: object spatial bounds unsupported";
                     return false;
                   }
-                  vertices[v] = geometry.vertices[triangle.vertices[v]];
+                  if (leaf->proto->shape.boundRadius +
+                          node.bounds->values[axis + 3] <
+                      std::fabs(coordinate - node.bounds->values[axis])) {
+                    outside = true;
+                    break;
+                  }
                 }
-                auto retained = std::make_unique<ObjectGroundFacePair>();
-                if (!physics::createGroundFacePair(*leaf, ground->body,
-                                                   vertices, triangle.normal,
-                                                   retained->pair, faceError)) {
-                  why = "car step: object ground pair unsupported: " +
-                        faceError;
+                if (outside)
+                  continue;
+                std::string faceError;
+                auto face = resolveSpatialGroundFace(resources_, node,
+                                                     faceIndex, faceError);
+                if (!face) {
+                  why = "car step: object ground face unavailable: " + faceError;
                   return false;
                 }
-                retained->face = std::move(face);
-                retained->prototype = leaf->proto;
-                entry = objectPairs_.emplace(key, std::move(retained)).first;
+                // Two loaded city sectors can carry the same face; a body must
+                // meet each triangle once or its contact is applied twice.
+                const auto& triangle = geometry.triangles[faceIndex];
+                std::array<float, 10> signature{};
+                signature[0] = static_cast<float>(
+                    reinterpret_cast<std::uintptr_t>(leaf) & 0xffffff);
+                bool badVertex = false;
+                for (size_t v = 0; v < 3 && v < triangle.vertices.size(); ++v) {
+                  if (triangle.vertices[v] >= geometry.vertices.size()) {
+                    badVertex = true;
+                    break;
+                  }
+                  for (size_t a = 0; a < 3; ++a)
+                    signature[1 + v * 3 + a] =
+                        geometry.vertices[triangle.vertices[v]][a];
+                }
+                if (badVertex)
+                  continue;
+                if (!triangles.insert(signature).second)
+                  continue;
+                const PairKey key{leaf, face->leafOwner(), faceIndex};
+                auto entry = objectPairs_.find(key);
+                if (entry == objectPairs_.end()) {
+                  auto ground = face->bodyOwner();
+                  if (!ground) {
+                    why = "car step: object ground body unavailable";
+                    return false;
+                  }
+                  std::array<physics::Vec3, 3> vertices{};
+                  for (size_t v = 0; v < 3; ++v) {
+                    if (triangle.vertices[v] >= geometry.vertices.size()) {
+                      why = "car step: object ground face vertex unavailable";
+                      return false;
+                    }
+                    vertices[v] = geometry.vertices[triangle.vertices[v]];
+                  }
+                  auto retained = std::make_unique<ObjectGroundFacePair>();
+                  if (!physics::createGroundFacePair(*leaf, ground->body,
+                                                     vertices, triangle.normal,
+                                                     retained->pair, faceError)) {
+                    why = "car step: object ground pair unsupported: " +
+                          faceError;
+                    return false;
+                  }
+                  retained->face = std::move(face);
+                  retained->prototype = leaf->proto;
+                  entry = objectPairs_.emplace(key, std::move(retained)).first;
+                }
+                ObjectGroundFacePair& pair = *entry->second;
+                if (!pair.valid()) {
+                  pendingObjectErase_.insert(key);
+                  continue;
+                }
+                physics::Vec3 point{};
+                const auto result = physics::updateGroundFacePair(
+                    pair.pair, geometryWorld, point);
+                if (result == physics::ContactGeometryResult::Unsupported) {
+                  why = "car step: object ground pair update unsupported";
+                  return false;
+                }
+                if (result == physics::ContactGeometryResult::Dropped) {
+                  pendingObjectErase_.insert(key);
+                  seenObject.erase(key);
+                  continue;
+                }
+                if (!pair.pair.contact.resting)
+                  pair.correctedOnce = false;
+                pair.pair.contact.resting = pair.correctedOnce;
+                pendingObjectErase_.erase(key);
+                seenObject.insert(key);
+                contacts.push_back(pair.pair.contact);
+                lastOffers_.push_back(OfferedContact{nullptr, &pair, nullptr});
               }
-              ObjectGroundFacePair& pair = *entry->second;
-              if (!pair.valid()) {
-                pendingObjectErase_.insert(key);
-                continue;
-              }
-              physics::Vec3 point{};
-              const auto result = physics::updateGroundFacePair(
-                  pair.pair, geometryWorld, point);
-              if (result == physics::ContactGeometryResult::Unsupported) {
-                why = "car step: object ground pair update unsupported";
-                return false;
-              }
-              if (result == physics::ContactGeometryResult::Dropped) {
-                pendingObjectErase_.insert(key);
-                seenObject.erase(key);
-                continue;
-              }
-              if (!pair.pair.contact.resting)
-                pair.correctedOnce = false;
-              pair.pair.contact.resting = pair.correctedOnce;
-              pendingObjectErase_.erase(key);
-              seenObject.insert(key);
-              contacts.push_back(pair.pair.contact);
-              lastOffers_.push_back(OfferedContact{nullptr, &pair, nullptr});
             }
           }
         }
-      }
       } // Sleeping candidates skip static ground, not awake body pairs.
       // 0049b830 body/body records against the bodies of the stepped cars.
       for (auto* body : handle->bodies()) {
@@ -1136,7 +1152,7 @@ bool CarWorldStepper::step(float seconds, std::string& error) {
     if (!done.empty() && !notedWheelEdgewalk_) {
       notedWheelEdgewalk_ = true;
       runlog::event(runlog::EventKind::Note,
-          "car step: dynamic wheel contact subgap: FUN_0049c540 wheel face crossing uses a convex-face fallback rather than the complete cached feature edgewalk");
+                    "car step: dynamic wheel contact subgap: FUN_0049c540 wheel face crossing uses a convex-face fallback rather than the complete cached feature edgewalk");
     }
     const size_t slot = std::min<size_t>(contactIterations, 7);
     ++contactIterations;
@@ -1431,10 +1447,10 @@ bool CarWorldStepper::step(float seconds, std::string& error) {
     line.add("\"woke_by\":%s,",
              asleepBeforeStep && hooks.wakeCars && stepped ? "\"controls\"" : "null");
     line.add("\"ctl\":{\"src\":%d,\"thr\":%.2f,\"brk\":%.2f,\"clu\":%.2f,"
-             "\"str\":%.2f,\"gear\":%d,\"eng\":%.1f},",
+             "\"str\":%.2f,\"gear\":%d,\"eng\":%.1f,\"mode\":%d},",
              lastControls_ ? 1 : 0, instance.throttleState, instance.brakeState,
              instance.clutchState, instance.steeringState, instance.currentGear,
-             instance.engineAngularSpeed);
+             instance.engineAngularSpeed, instance.transmissionMode);
     line.add("\"wh\":[");
     bool firstWheel = true;
     for (size_t i = 0; i < car->wheels.size() && i < 4; ++i) {
@@ -1532,7 +1548,8 @@ bool CarWorldStepper::step(float seconds, std::string& error) {
       if (!wheel) continue;
       const auto found = witnesses_.find(wheel->suspension.wheelBody);
       const auto* face = found != witnesses_.end() && found->second
-                             ? found->second->groundFace() : nullptr;
+                             ? found->second->groundFace()
+                             : nullptr;
       if (!face || !face->valid()) continue;
       const auto& contact = wheel->suspension;
       road.add("%s{\"i\":%zu,\"leaf\":\"%p\",\"face\":%zu,"

@@ -13,12 +13,66 @@ import sys
 import time
 
 
+REFERENCE = Path(__file__).resolve().parents[2] / 'ref'
+
+
 def sha256(path):
     h = hashlib.sha256()
     with open(path, 'rb') as f:
         for block in iter(lambda: f.read(1 << 20), b''):
             h.update(block)
     return h.hexdigest()
+
+
+def canonical(path):
+    return Path(os.path.realpath(os.fspath(path)))
+
+
+def outside_reference(path):
+    """Canonicalize path, refusing anything that resolves inside ref/.
+
+    ref/ is commonly a symlink to a worktree, so both sides must be compared
+    by resolved location; a lexical check would accept ref/<name> and create
+    the directory inside the real reference tree.
+    """
+    target, protected = canonical(path), canonical(REFERENCE)
+    if target == protected or protected in target.parents:
+        raise ValueError('record directory must be outside ref/')
+    return target
+
+
+def create_record_dir(raw):
+    """Create the evidence directory and re-verify it at the write boundary.
+
+    Each component is checked after creation so a symlink encountered on the
+    way cannot redirect the record into ref/. Directories created here are
+    rolled back if the checks fail, leaving the reference tree untouched.
+    """
+    dest = outside_reference(raw)
+    if dest.exists() or dest.is_symlink():
+        raise FileExistsError(f'record directory already exists: {dest}')
+    created = []
+    try:
+        for index in range(1, len(dest.parts) + 1):
+            current = Path(*dest.parts[:index])
+            try:
+                current.mkdir()
+            except FileExistsError:
+                if not current.is_dir():
+                    raise
+            else:
+                created.append(current)
+            outside_reference(current)
+        if canonical(dest) != dest:
+            raise ValueError('record directory moved during creation')
+    except BaseException:
+        for directory in reversed(created):
+            try:
+                directory.rmdir()
+            except OSError:
+                pass
+        raise
+    return dest
 
 
 def stop_group(process, sig):
@@ -84,11 +138,11 @@ def main():
     cmd = a.command[1:] if a.command[:1] == ['--'] else a.command
     if not cmd or not (0 < a.timeout < 86400):
         p.error('a command and timeout in (0, 86400) are required')
-    dest = Path(a.record_dir).resolve()
-    ref = Path(__file__).resolve().parents[2] / 'ref'
-    if dest == ref or ref in dest.parents:
-        p.error('record directory must be outside ref/')
-    dest.mkdir(parents=True, exist_ok=False)
+    dest = Path(a.record_dir).absolute()
+    try:
+        dest = create_record_dir(dest)
+    except (OSError, ValueError) as e:
+        p.error(str(e))
     hashes = {}
     for name in a.hash_file:
         try:

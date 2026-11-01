@@ -1740,9 +1740,13 @@ int main() {
                                       &classes, nullptr, &arena);
         CHECK(result.ok && std::get<int32_t>(result.value) == 7);
         receiver.fields[0].value = static_cast<const VmObject *>(nullptr);
-        CHECK(!vmExecute(cls, *tree, {&receiver}, nullptr, &classes, nullptr,
-                         &arena)
-                   .ok);
+        // Stock FUN_0041fbc0 tolerates a null receiver: the call is skipped
+        // and the declared return type's default value (0 for I) is returned.
+        const auto nullReceiverResult =
+            vmExecute(cls, *tree, {&receiver}, nullptr, &classes, nullptr,
+                      &arena);
+        CHECK(nullReceiverResult.ok &&
+              std::get<int32_t>(nullReceiverResult.value) == 0);
         receiver.fields[0].value = &receiver;
         CHECK(!vmExecute(cls, *tree, {&receiver}, nullptr, &classes, nullptr,
                          &arena)

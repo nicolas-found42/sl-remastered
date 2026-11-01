@@ -56,6 +56,14 @@ uint32_t sceneType0EntryFlags(uint32_t functionWord);
 // Non-finite or non-legacy inputs are not classified.
 std::optional<uint32_t> sceneScyMaterialType(const ScxMaterial &material);
 
+// FUN_004be950's blend/alpha-test branch. The stock reads +0x28 bit 0 and the
+// diffuse alpha at +0x10 against the float at 005f0d28 (0.99): either selects
+// the transparent branch, where +0x28 bit 0x800 selects the alpha test
+// (reference 0x38) instead of blending. Bit 0x1000 selects the VCA material
+// type and does not affect blending. Non-finite alpha is not classified.
+enum class SceneScyBlend : uint8_t { Opaque, AlphaBlend, AlphaTest };
+std::optional<SceneScyBlend> sceneScyBlendState(const ScxMaterial &material);
+
 class ResourceWorld;
 // FUN_0054b850 classification of a test sphere against a sphere bound.
 // Returns the stock result bits 1, 2, 4 or 8, or zero for invalid host input.

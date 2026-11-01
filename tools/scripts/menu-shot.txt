@@ -1,0 +1,6 @@
+0 wait splash 30
+0 keydown Escape
+0 wait menu 30
+0 keyup Escape
+12 shot @run/menu-12s.bmp
+13 quit

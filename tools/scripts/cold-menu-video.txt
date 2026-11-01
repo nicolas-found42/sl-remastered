@@ -1,0 +1,9 @@
+0 wait splash 30
+0 keydown Escape
+0 wait menu 30
+0 keyup Escape
+0 shot @run/menu-entry.bmp
+10 shot @run/t10.bmp
+20 shot @run/t20.bmp
+30 shot @run/t30.bmp
+35.2 quit

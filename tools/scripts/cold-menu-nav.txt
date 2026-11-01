@@ -1,0 +1,14 @@
+0 wait splash 120
+0 keydown Escape
+0 wait menu 30
+0 keyup Escape
+0 shot @run/skip-menu.bmp
+1.0 shot @run/skip-menu2.bmp
+1.5 clickn 0.59 0.41
+1.5 wait options 10
+1.5 shot @run/skip-options.bmp
+1.6 keydown Escape
+1.6 wait menu 10
+1.6 keyup Escape
+1.7 shot @run/skip-return.bmp
+1.7 quit

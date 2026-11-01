@@ -198,6 +198,44 @@ int main() {
           0.0f);
     CHECK(std::holds_alternative<std::string>(
         inputGetAxis({int32_t{2}, int32_t{7}}, nullptr, &inputArena, &loaded)));
+    // Stock Input.axisName reads the platform name table; invalid slots are
+    // the empty string, never an error.
+    inputWorld.setInputAxisReaders(
+        [](int32_t device, int32_t axis) -> std::optional<std::string> {
+          if (device == 0 && axis == 4) return std::string{"5"};
+          if (device == 0 && axis == 0) return std::string{"?"};
+          return std::nullopt;
+        },
+        [](int32_t device) { return device == 0 ? 256 : (device == 1 ? 7 : 0); });
+    const auto axisName =
+        inputAxisName({int32_t{0}, int32_t{4}}, nullptr, &inputArena, &loaded);
+    const auto *axisNameValue = std::get_if<VmValue>(&axisName);
+    CHECK(axisNameValue && std::get<const VmObject *>(*axisNameValue) &&
+          inputArena.strings.back().first == "5");
+    const auto missingName =
+        inputAxisName({int32_t{0}, int32_t{9}}, nullptr, &inputArena, &loaded);
+    const auto *missingNameValue = std::get_if<VmValue>(&missingName);
+    CHECK(missingNameValue && std::get<const VmObject *>(*missingNameValue) &&
+          inputArena.strings.back().first.empty());
+    // activeAxis promotes exactly one axis past +/-0.25, else -1.
+    inputWorld.setInputReaders(
+        [](int32_t device, int32_t axis) -> std::optional<float> {
+          if (device == 1 && axis == 3) return 1.0f;
+          return std::nullopt;
+        },
+        [](int32_t, int32_t) { return std::optional<int32_t>{7}; });
+    CHECK(std::get<int32_t>(std::get<VmValue>(inputActiveAxis(
+              {int32_t{1}}, nullptr, &inputArena, &loaded))) == 3);
+    inputWorld.setInputReaders(
+        [](int32_t device, int32_t axis) -> std::optional<float> {
+          if (device == 1 && (axis == 3 || axis == 5)) return 1.0f;
+          return std::nullopt;
+        },
+        [](int32_t, int32_t) { return std::optional<int32_t>{7}; });
+    CHECK(std::get<int32_t>(std::get<VmValue>(inputActiveAxis(
+              {int32_t{1}}, nullptr, &inputArena, &loaded))) == -1);
+    CHECK(std::get<int32_t>(std::get<VmValue>(inputActiveAxis(
+              {int32_t{2}}, nullptr, &inputArena, &loaded))) == -1);
     CHECK(std::holds_alternative<std::string>(
         invokeNative("java.lang.System", "isLoading", "()I", {}, nullptr,
                      &inputArena, &loaded)));
@@ -932,6 +970,43 @@ int main() {
   CHECK(deleteValue && std::get<int32_t>(*deleteValue) == 0 &&
         node->playerInput->mappingCount() == 0);
   CHECK(node->playerInput->add(2, 1, 3, 0.5f, {-1.f, 1.f, 0.f, 1.f}, 7) == 1);
+  const auto setSpeed = invokeNative("java.io.Controller", "user_SetAxisSpeed",
+                                     "(IF)V",
+                                     {VmValue{int32_t{2}}, VmValue{0.5f}},
+                                     plain, &arena, &loaded);
+  CHECK(std::holds_alternative<std::monostate>(setSpeed) &&
+        node->playerInput->axes()[2].factors[3] == 0.5f);
+  const auto setForce = invokeNative("java.io.Controller", "user_SetAxisForce",
+                                     "(IFF)V",
+                                     {VmValue{int32_t{2}}, VmValue{1.5f},
+                                      VmValue{-2.0f}},
+                                     plain, &arena, &loaded);
+  CHECK(std::holds_alternative<std::monostate>(setForce));
+  float storedForce[2];
+  std::memcpy(&storedForce[0], &node->playerInput->axes()[2].remaining[0], 4);
+  std::memcpy(&storedForce[1], &node->playerInput->axes()[2].remaining[1], 4);
+  CHECK(storedForce[0] == 1.5f && storedForce[1] == -2.0f);
+  node->playerInput->beginFrame(0.00025f);
+  const auto axisVal = invokeNative("java.io.Controller", "user_GetAxisVal",
+                                    "(I)F", {VmValue{int32_t{2}}}, plain,
+                                    &arena, &loaded);
+  const auto *axisValValue = std::get_if<VmValue>(&axisVal);
+  CHECK(axisValValue && std::isfinite(std::get<float>(*axisValValue)));
+  const auto badMap = invokeNative(
+      "java.io.Input", "mapAxis", "(Ljava.util.resource.GameRef;IIIFFFF)V",
+      {VmValue{unlinked}, VmValue{int32_t{2}}, VmValue{int32_t{1}},
+       VmValue{int32_t{3}}, VmValue{0.f}, VmValue{1.f}, VmValue{0.f},
+       VmValue{1.f}},
+      nullptr, &arena, &loaded);
+  CHECK(errorOf(badMap).find("player device unsupported") !=
+        std::string::npos);
+  const auto badSmooth = invokeNative(
+      "java.io.Input", "setAxisSmooth", "(Ljava.util.resource.GameRef;IFFFF)V",
+      {VmValue{unlinked}, VmValue{int32_t{2}}, VmValue{0.2f}, VmValue{0.3f},
+       VmValue{0.4f}, VmValue{0.5f}},
+      nullptr, &arena, &loaded);
+  CHECK(errorOf(badSmooth).find("player device unsupported") !=
+        std::string::npos);
   CHECK(std::holds_alternative<std::monostate>(reset(plain)));
   CHECK(node->playerInput->mappingCount() == 0 &&
         node->playerInput->axes()[2].deviceType == 0);

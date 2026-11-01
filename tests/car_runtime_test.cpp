@@ -21,7 +21,7 @@ struct InstallFixture {
               "Redline"),
         resources(world, packs) {
     assert(world.addRoot());
-    world.setClassResolver([](const std::string &) { return true; });
+    world.setClassResolver([](const std::string&) { return true; });
     state.packs = &packs;
     state.world = &world;
     state.resources = &resources;
@@ -29,14 +29,14 @@ struct InstallFixture {
   }
   // Pack slots are assigned in first-seen order, so ids must come from
   // resolveLiteral against this fixture's own registry.
-  uint32_t id(const char *packLiteral, uint32_t entry) {
+  uint32_t id(const char* packLiteral, uint32_t entry) {
     uint32_t resolved = 0;
     std::string resolveError;
     assert(packs.resolveLiteral(packLiteral, entry, resolved, resolveError));
     return resolved;
   }
-  WorldNode *add(uint32_t scriptId, const char *scriptClass, const char *config,
-                 const char *device) {
+  WorldNode* add(uint32_t scriptId, const char* scriptClass, const char* config,
+                 const char* device) {
     const auto created = createNativeInstance(
         world,
         GameCreationRequest{scriptId, scriptClass, std::nullopt,
@@ -51,21 +51,21 @@ struct InstallFixture {
     }
     return created.node;
   }
-  static const RuntimeSlotState *slot(const WorldNode *node, int32_t id) {
+  static const RuntimeSlotState* slot(const WorldNode* node, int32_t id) {
     if (!node || !node->carInstance)
       return nullptr;
-    for (const auto &entry : node->carInstance->slots)
+    for (const auto& entry : node->carInstance->slots)
       if (entry && entry->id == id)
         return entry.get();
     return nullptr;
   }
-  const CarPrototype *prototype(const WorldNode *node) {
+  const CarPrototype* prototype(const WorldNode* node) {
     if (!node || !node->carInstance)
       return nullptr;
     const uint32_t id = node->carInstance->prototypeSource.cachedValue
                             ? node->carInstance->prototypeSource.cachedValue
                             : node->scriptLink.cachedValue;
-    auto *script = world.findScript(id);
+    auto* script = world.findScript(id);
     return script ? script->car.get() : nullptr;
   }
 
@@ -77,26 +77,26 @@ struct InstallFixture {
   ReceiverBinding binding;
 };
 
-constexpr const char *kCarClass = "java.game.cars.Baiern_DevilSport";
-constexpr const char *kCarConfig =
+constexpr const char* kCarClass = "java.game.cars.Baiern_DevilSport";
+constexpr const char* kCarConfig =
     "cars\\racers\\Baiern_data\\scripts\\_main_DevilSport.cfg";
-constexpr const char *kDoorClass = "java.game.cars.Baiern_FL_door";
-constexpr const char *kDoorConfig =
+constexpr const char* kDoorClass = "java.game.cars.Baiern_FL_door";
+constexpr const char* kDoorConfig =
     "cars\\racers\\Baiern_data\\scripts\\FL_door.cfg";
-constexpr const char *kMirrorClass = "java.game.cars.Baiern_L_mirror";
-constexpr const char *kMirrorConfig =
+constexpr const char* kMirrorClass = "java.game.cars.Baiern_L_mirror";
+constexpr const char* kMirrorConfig =
     "cars\\racers\\Baiern_data\\scripts\\L_mirror.cfg";
-constexpr const char *kHoodClass = "java.game.cars.Baiern_hood";
-constexpr const char *kHoodConfig =
+constexpr const char* kHoodClass = "java.game.cars.Baiern_hood";
+constexpr const char* kHoodConfig =
     "cars\\racers\\Baiern_data\\scripts\\hood.cfg";
-constexpr const char *kRimClass =
+constexpr const char* kRimClass =
     "java.game.parts.wheels.rims.rim_Baiern_DTM_11_0_19_ET__25";
-constexpr const char *kRimConfig =
+constexpr const char* kRimConfig =
     "parts\\wheels\\rims\\scripts\\rim_Baiern_DTM_11_0_19_ET__25_LOD_"
     "CATALOG_GARAGE.cfg";
-constexpr const char *kTyreClass =
+constexpr const char* kTyreClass =
     "java.game.parts.wheels.tyres.tyre_235_45_19_9_0";
-constexpr const char *kTyreConfig =
+constexpr const char* kTyreConfig =
     "parts\\wheels\\tyres\\scripts\\tyre_235_45_19_9_0_LOD_CATALOG_"
     "GARAGE.cfg";
 } // namespace
@@ -104,8 +104,8 @@ constexpr const char *kTyreConfig =
 int main() {
   {
     GameWorld world;
-    auto *root = world.addRoot();
-    auto *player = world.addChild(*root, "control snapshot player", 0x21);
+    auto* root = world.addRoot();
+    auto* player = world.addChild(*root, "control snapshot player", 0x21);
     assert(player);
     world.markLoaded(*player);
     player->nativeDevice = "player";
@@ -153,8 +153,8 @@ int main() {
     CarRuntimeInstance car;
     car.seats.push_back(std::make_unique<CarSeat>());
     car.seats.push_back(std::make_unique<CarSeat>());
-    auto *first = car.seats[0].get();
-    auto *second = car.seats[1].get();
+    auto* first = car.seats[0].get();
+    auto* second = car.seats[1].get();
     assert(car.selectSeat(1) == first);
     setLinkOwner(first->player, &player);
     setLinkOwner(first->camera, &camera);
@@ -185,7 +185,7 @@ int main() {
   assert(packs.resolveLiteral("cars\\racers\\Baiern.rpk", 0x157, id, error));
   const auto resolved = resources.lookup(id, 8);
   assert(resolved.node.script);
-  auto &source = *resolved.node.script;
+  auto& source = *resolved.node.script;
   PackView view;
   assert(packs.view(static_cast<uint16_t>(id >> 16), view, error) ==
          PackViewStatus::Ok);
@@ -198,7 +198,7 @@ int main() {
   assert(world.nodeCount() == nodesBefore);
   assert(prototype && prototype->source.owner == &source);
   assert(!prototype->resources.empty());
-  for (const auto &resource : prototype->resources)
+  for (const auto& resource : prototype->resources)
     assert(resource->id ? resource->owner.owner &&
                               resource->owner.cachedValue == resource->id
                         : !resource->owner.owner);
@@ -208,17 +208,17 @@ int main() {
       loadCarScriptPrototype(resources, source, path, error, &initialCamera));
   assert(!source.loaded && source.car && world.nodeCount() == nodesBefore);
   assert(source.car->stage == CarPrototypeStage::PhysicsGeometryReady);
-  auto *cached = source.car.get();
+  auto* cached = source.car.get();
   const CarCameraSettings laterCamera{0.9f, 2.0f};
   assert(loadCarScriptPrototype(resources, source, path, error, &laterCamera));
   assert(source.car.get() == cached);
   assert(source.car->cameraSettings &&
          source.car->cameraSettings->distanceScale == 0.4f &&
          source.car->cameraSettings->fieldOfViewScale == 1.25f);
-  world.setClassResolver([](const std::string &) { return true; });
+  world.setClassResolver([](const std::string&) { return true; });
   ReceiverBinding binding;
   bool initialized = false;
-  binding.initializeReceiver = [&](WorldNode &) -> std::optional<std::string> {
+  binding.initializeReceiver = [&](WorldNode&) -> std::optional<std::string> {
     initialized = true;
     return std::nullopt;
   };
@@ -232,8 +232,8 @@ int main() {
   assert(created.node->carInstance->carPhysics &&
          created.node->carInstance->carLink.owner == created.node);
   {
-    auto &car = *created.node->carInstance;
-    const auto &wheels = car.carPhysics->wheels;
+    auto& car = *created.node->carInstance;
+    const auto& wheels = car.carPhysics->wheels;
     assert(wheels.size() >= 2);
     assert(!car.wheelRefs[0] && !car.wheelRefs[1]);
     car.wheelExtras[0].steer = car.wheelExtras[1].steer = 1;
@@ -272,7 +272,7 @@ int main() {
   }
   assert(created.node->carInstance->position[0] == 1.0f &&
          created.node->carInstance->position[1] == 2.0f);
-  auto *physicsRoot =
+  auto* physicsRoot =
       world.nodeFor(created.node->carInstance->physicsRoot.owner);
   assert(physicsRoot && physicsRoot->type == 2 &&
          physicsRoot->name == "car_root");
@@ -288,21 +288,21 @@ int main() {
   arena.gameState = &game;
   auto object = std::make_unique<VmObject>();
   object->fields.push_back({"ptr", int32_t{1}, "I"});
-  auto *carRef = object.get();
+  auto* carRef = object.get();
   arena.objects.push_back(std::move(object));
   arena.resourceStates.push_back({carRef, {}});
   game.bindings[1] = std::make_unique<ReceiverBinding>();
   setLinkOwner(game.bindings[1]->link, created.node);
   const auto info =
       gameRefGetInfoIntInt({int32_t{1}, int32_t{0}}, carRef, &arena, nullptr);
-  const auto *value = std::get_if<VmValue>(&info);
+  const auto* value = std::get_if<VmValue>(&info);
   assert(value && std::get<int32_t>(*value) ==
                       static_cast<int32_t>(physicsRoot->instanceId));
   assert(world.destroy(*created.node));
   assert(body.expired() && world.dynamicBodyCount() == 0 &&
          !game.bindings[1]->link.owner);
   assert(world.nodeCount() == nodesBefore);
-  binding.initializeReceiver = [](WorldNode &) -> std::optional<std::string> {
+  binding.initializeReceiver = [](WorldNode&) -> std::optional<std::string> {
     return std::string{"constructor failure"};
   };
   const auto failed =
@@ -313,7 +313,7 @@ int main() {
   const auto recreated =
       createNativeInstance(world, request, &binding, &resources);
   assert(recreated.status == CreationStatus::Created && recreated.node);
-  auto *recreatedRoot =
+  auto* recreatedRoot =
       world.nodeFor(recreated.node->carInstance->physicsRoot.owner);
   assert(recreatedRoot && world.destroy(*recreatedRoot));
   assert(!recreated.node->carInstance->physicsRoot.owner &&
@@ -324,12 +324,12 @@ int main() {
   // `attach 0x115 24` pairs with the door's slot 24 and nothing else.
   {
     InstallFixture f;
-    auto *door = f.add(f.id("cars\\racers\\Baiern.rpk", 0x115), kDoorClass,
+    auto* door = f.add(f.id("cars\\racers\\Baiern.rpk", 0x115), kDoorClass,
                        kDoorConfig, "part");
-    auto *mirror = f.add(f.id("cars\\racers\\Baiern.rpk", 0x104), kMirrorClass,
+    auto* mirror = f.add(f.id("cars\\racers\\Baiern.rpk", 0x104), kMirrorClass,
                          kMirrorConfig, "part");
-    const auto *doorProto = f.prototype(door);
-    const auto *mirrorProto = f.prototype(mirror);
+    const auto* doorProto = f.prototype(door);
+    const auto* mirrorProto = f.prototype(mirror);
     assert(doorProto && mirrorProto);
     assert(carPartSlotsCompatible(*mirrorProto, 24, *doorProto, 24));
     assert(carPartSlotsCompatible(*doorProto, 24, *mirrorProto, 24));
@@ -342,9 +342,9 @@ int main() {
   // registry (part+0x74/+0x78) and pairs the slot ids on both records.
   {
     InstallFixture f;
-    auto *car = f.add(f.id("cars\\racers\\Baiern.rpk", 0x157), kCarClass,
+    auto* car = f.add(f.id("cars\\racers\\Baiern.rpk", 0x157), kCarClass,
                       kCarConfig, "car");
-    auto *hood = f.add(f.id("cars\\racers\\Baiern.rpk", 0x10d), kHoodClass,
+    auto* hood = f.add(f.id("cars\\racers\\Baiern.rpk", 0x10d), kHoodClass,
                        kHoodConfig, "part");
     assert(car && hood && car->carInstance && hood->carInstance);
     assert(car->carInstance->attachedParts.empty());
@@ -358,10 +358,10 @@ int main() {
     assert(car->carInstance->usedSlots == 1 &&
            hood->carInstance->usedSlots == 1);
     assert(!hood->carInstance->slots.empty());
-    const auto *partSlot = hood->carInstance->slots[0].get();
+    const auto* partSlot = hood->carInstance->slots[0].get();
     assert((partSlot->flags & 1u) != 0 && (partSlot->flags & 4u) == 0);
     assert(partSlot->attachedNode.owner == car);
-    const auto *carSlot = InstallFixture::slot(car, partSlot->attachedSlotId);
+    const auto* carSlot = InstallFixture::slot(car, partSlot->attachedSlotId);
     assert(carSlot && (carSlot->flags & 2u) != 0);
     assert(carSlot->attachedSlotId == partSlot->id);
     assert(carSlot->attachedNode.owner == hood);
@@ -381,17 +381,17 @@ int main() {
   // it.
   {
     InstallFixture f;
-    auto *car = f.add(f.id("cars\\racers\\Baiern.rpk", 0x157), kCarClass,
+    auto* car = f.add(f.id("cars\\racers\\Baiern.rpk", 0x157), kCarClass,
                       kCarConfig, "car");
-    auto *door = f.add(f.id("cars\\racers\\Baiern.rpk", 0x115), kDoorClass,
+    auto* door = f.add(f.id("cars\\racers\\Baiern.rpk", 0x115), kDoorClass,
                        kDoorConfig, "part");
-    auto *mirror = f.add(f.id("cars\\racers\\Baiern.rpk", 0x104), kMirrorClass,
+    auto* mirror = f.add(f.id("cars\\racers\\Baiern.rpk", 0x104), kMirrorClass,
                          kMirrorConfig, "part");
     assert(car && door && mirror && car->carInstance);
     std::string installError;
     assert(carPartInstall(*door, car, 0, f.arena, installError));
     assert(car->carInstance->attachedParts.size() == 1);
-    WorldNode *target = car;
+    WorldNode* target = car;
     int32_t targetSlotId = 0;
     assert(carPartFindCompatibleSlot(*mirror, target, targetSlotId, f.world) ==
            24);
@@ -400,7 +400,7 @@ int main() {
     assert(installError.empty());
     assert(car->carInstance->attachedParts.size() == 2);
     assert(!mirror->carInstance->slots.empty());
-    const auto *mirrorSlot = mirror->carInstance->slots[0].get();
+    const auto* mirrorSlot = mirror->carInstance->slots[0].get();
     assert(mirrorSlot->attachedNode.owner == door);
     assert(InstallFixture::slot(door, mirrorSlot->attachedSlotId) != nullptr);
     assert(door->carInstance->usedSlots == 2);
@@ -413,12 +413,12 @@ int main() {
     // The registry is not the route: with the mirror removed and the registry
     // cleared, the slot records alone still offer the door's slot 24.
     assert(carPartRemove(*mirror, 0, f.arena, installError));
-    for (auto &link : car->carInstance->attachedParts)
+    for (auto& link : car->carInstance->attachedParts)
       setLinkOwner(*link, nullptr);
     car->carInstance->attachedParts.clear();
     target = car;
     targetSlotId = 0;
-    auto *otherMirror = f.add(f.id("cars\\racers\\Baiern.rpk", 0x104),
+    auto* otherMirror = f.add(f.id("cars\\racers\\Baiern.rpk", 0x104),
                               kMirrorClass, kMirrorConfig, "part");
     assert(carPartFindCompatibleSlot(*otherMirror, target, targetSlotId,
                                      f.world) == 24);
@@ -429,12 +429,12 @@ int main() {
   // `compatible 0x20200 2`, so only the rim takes the tyre.
   {
     InstallFixture f;
-    auto *rim =
+    auto* rim =
         f.add(f.id("parts\\wheels.rpk", 0x2de), kRimClass, kRimConfig, "part");
-    auto *tyre = f.add(f.id("parts\\wheels.rpk", 0x3e5), kTyreClass,
+    auto* tyre = f.add(f.id("parts\\wheels.rpk", 0x3e5), kTyreClass,
                        kTyreConfig, "part");
     assert(rim && tyre);
-    WorldNode *target = rim;
+    WorldNode* target = rim;
     int32_t targetSlotId = 0;
     assert(carPartFindCompatibleSlot(*tyre, target, targetSlotId, f.world) ==
            1);
@@ -608,6 +608,56 @@ int main() {
     assert(car.advanceControls(controls, config, controlStep, error));
     assert(car.currentGear == 2 && car.clutchState == 1 &&
            car.throttleState == 0);
+  }
+  {
+    // Semiautomatic (stock flag 0x20, FUN_0044dc30): up/downshifts between
+    // forward gears while moving, but never launches from neutral or engages
+    // reverse by itself.
+    CarRuntimeInstance car;
+    CarConfig config;
+    car.carPhysics = std::make_shared<CarPhysics>();
+    auto wheel = std::make_unique<CarWheelRuntime>();
+    wheel->suspensionBody = std::make_unique<physics::Body>();
+    wheel->suspension.force = 1;
+    wheel->config.wheelParameters[1] = 1;
+    wheel->longitudinalSlip = 0;
+    car.carPhysics->wheels.push_back(std::move(wheel));
+    car.wheelExtras[0].drive = 1;
+    car.currentGear = 1;
+    car.currentGearRatio = config.gearRatios[0];
+    CarControlSnapshot controls;
+    controls.continuous[1] = 1;
+    CarControlStepContext step;
+    step.time = 40;
+    step.step = 0.1f;
+    step.semiautomatic = true;
+    step.engineRunning = true;
+    step.drivenWheelSpeed = 70;
+    step.displayedEngineSpeed = 840;
+    std::string error;
+    assert(car.advanceControls(controls, config, step, error));
+    assert(car.currentGear == 2 && car.clutchState == 1 &&
+           car.throttleState == 0);
+    // Stationary in neutral with throttle: semiautomatic must not launch.
+    CarRuntimeInstance car2;
+    car2.carPhysics = std::make_shared<CarPhysics>();
+    car2.currentGear = 0;
+    CarControlStepContext step2;
+    step2.time = 50;
+    step2.step = 0.1f;
+    step2.semiautomatic = true;
+    step2.engineRunning = true;
+    step2.drivenWheelSpeed = 0;
+    step2.displayedEngineSpeed = 840;
+    CarControlSnapshot controls2;
+    controls2.continuous[1] = 1;
+    assert(car2.advanceControls(controls2, config, step2, error));
+    assert(car2.currentGear == 0);
+    // Manual shift input still works in semiautomatic mode.
+    controls2.digital[2] = 127;
+    step2.time = 50.1f;
+    assert(car2.advanceControls(controls2, config, step2, error));
+    assert(car2.currentGear == 1);
   }
   {
     CarRuntimeInstance car;

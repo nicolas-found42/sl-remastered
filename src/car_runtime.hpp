@@ -30,7 +30,8 @@ struct CarResourceBinding {
   ~CarResourceBinding();
 };
 
-enum class CarPrototypeStage { Initializing, PhysicsGeometryReady };
+enum class CarPrototypeStage { Initializing,
+                               PhysicsGeometryReady };
 
 struct CarCameraSettings {
   float distanceScale;
@@ -54,8 +55,8 @@ struct CarPrototype {
 
 struct RuntimeSlotState {
   RuntimeSlotState() = default;
-  RuntimeSlotState(const RuntimeSlotState &) = delete;
-  RuntimeSlotState &operator=(const RuntimeSlotState &) = delete;
+  RuntimeSlotState(const RuntimeSlotState&) = delete;
+  RuntimeSlotState& operator=(const RuntimeSlotState&) = delete;
   int32_t id = 0;
   PartSlotState transform{};
   CarVec3 orientation{};
@@ -101,7 +102,8 @@ struct CarWheelExtraState {
   std::string damage;
 };
 struct CarFailureSoundEvent {
-  enum class Kind { Engine, Brake };
+  enum class Kind { Engine,
+                    Brake };
   Kind kind;
   int wheel; // -1 for engine
   std::array<float, 3> position;
@@ -151,6 +153,7 @@ struct CarControlStepContext {
   float drivenWheelSpeed = 0;      // stock car +0x1e14, radians/second
   float displayedEngineSpeed = 0;  // +0x1e1c, radians/second
   bool automatic = false;          // stock flag 0x10
+  bool semiautomatic = false;      // stock flag 0x20
   bool engineRunning = false;      // stock flag 0x4000
   bool automaticInhibited = false; // stock flags 0x40004
   bool positiveMass = true;
@@ -172,8 +175,8 @@ struct CarDrivetrainStepContext {
   bool intermittentCut = false, nitrous = false;
 };
 
-std::optional<CarControlSnapshot> sampleCarControls(GameWorld &world,
-                                                    const CarSeat &seat);
+std::optional<CarControlSnapshot> sampleCarControls(GameWorld& world,
+                                                    const CarSeat& seat);
 
 struct CarRuntimeInstance {
   bool isCar = false;
@@ -195,9 +198,9 @@ struct CarRuntimeInstance {
   // Stock car +0x13cc. FUN_0048ce30 writes this id into the look and move
   // commands.
   uint32_t cameraPoseTarget = 0;
-  CarSeat *findSeat(uint32_t playerId) const;
-  CarSeat *selectSeat(uint32_t playerId) const;
-  const VmObject *chassisObject = nullptr;
+  CarSeat* findSeat(uint32_t playerId) const;
+  CarSeat* selectSeat(uint32_t playerId) const;
+  const VmObject* chassisObject = nullptr;
   int32_t stateMode = 3;
   int32_t wheelId = -1;
   uint32_t partFlags = 0;
@@ -288,18 +291,18 @@ struct CarRuntimeInstance {
   bool damageEnabled = true;       // inverse of car +0x70 bit 0x400
   bool drivetrainSleeping = false; // car +0x70 bit 1
   bool forcedBrake = false;        // car +0x70 bit 0x40000
-  CarDrivetrainStepContext drivetrainContext(const CarConfig &config,
+  CarDrivetrainStepContext drivetrainContext(const CarConfig& config,
                                              float step) const;
   // Advances player controls and transmission transactionally. Returns false
   // without modifying this car when an unimplemented stock branch is needed.
-  bool advanceControls(const CarControlSnapshot &input, const CarConfig &config,
-                       const CarControlStepContext &context,
-                       std::string &error);
+  bool advanceControls(const CarControlSnapshot& input, const CarConfig& config,
+                       const CarControlStepContext& context,
+                       std::string& error);
   // Applies the supported 00454500 engine, clutch and brake branches to the
   // actual persistent wheel objects. Failure leaves the car unchanged.
-  bool advanceDrivetrain(const CarConfig &config,
-                         const CarDrivetrainStepContext &context,
-                         std::string &error);
+  bool advanceDrivetrain(const CarConfig& config,
+                         const CarDrivetrainStepContext& context,
+                         std::string& error);
   // 004493c0 copies wheel prototype controls into the live car instance.
   void initializeWheelDrivetrain();
   float engineRpm = 0.0f;
@@ -308,7 +311,7 @@ struct CarRuntimeInstance {
   int32_t headlightsOn = 0;
   int32_t flareState = 0;
   CarSfxTable sfxEngineUp, sfxEngineDown, sfxExhaust;
-  std::array<const VmObject *, 16> wheelRefs{};
+  std::array<const VmObject*, 16> wheelRefs{};
   std::array<CarWheel, 16> wheelStates{};
   std::array<CarWheelExtraState, 16> wheelExtras{};
   std::array<float, 16> wheelSteeringAngles{};
@@ -320,17 +323,17 @@ struct CarRuntimeInstance {
 // suspension objects preserve the previous angle. No bodies are rotated or
 // woken by this isolated calculation.
 std::optional<std::array<float, 16>>
-calculateCarSteeringAngles(const CarRuntimeInstance &car,
-                           const CarConfig &chassis);
+calculateCarSteeringAngles(const CarRuntimeInstance& car,
+                           const CarConfig& chassis);
 
 // Keeps successfully linked requests in result even when a later request is
 // unsupported. A false return never represents a usable complete car.
-bool loadCarPrototype(ResourceWorld &world, ScriptNode &source,
-                      const ResourceIdMapping &mapping, std::string_view text,
-                      std::unique_ptr<CarPrototype> &result, std::string &error,
+bool loadCarPrototype(ResourceWorld& world, ScriptNode& source,
+                      const ResourceIdMapping& mapping, std::string_view text,
+                      std::unique_ptr<CarPrototype>& result, std::string& error,
                       bool isCar = true);
 
 // Reads the loaded chassis tank_nitro and the installed slot-401 engine's
 // dynodata. No installed system is distinct from an installed empty system.
-CarHudOptionalValues carHudOptionalValues(GameWorld &world,
-                                         const CarRuntimeInstance &car);
+CarHudOptionalValues carHudOptionalValues(GameWorld& world,
+                                          const CarRuntimeInstance& car);

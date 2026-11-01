@@ -153,6 +153,10 @@ public:
                              int32_t deviceType);
   void remove(int32_t axis, int32_t device, int32_t physicalAxis);
   bool setSmooth(int32_t axis, const std::array<float, 5> &values);
+  // FUN_0054d810 writes the axis record's speed word (factors[3]); FUN_0054d7f0
+  // writes the two force words (remaining[0..1]) as raw float bits.
+  bool setSpeed(int32_t axis, float value);
+  bool setForce(int32_t axis, float first, float second);
   void reset();
   // Stock input frame counter and keyboard/button sampling; unsupported analog
   // or advanced smoothing paths return nullopt.
@@ -553,6 +557,19 @@ public:
     inputSample_ = std::move(sample);
     inputType_ = std::move(type);
   }
+  // Stock FUN_005579f0 (axis display names) and FUN_00557aa0 (activeAxis)
+  // need per-device axis names and axis counts; null readers report unknown.
+  using InputAxisName = std::function<std::optional<std::string>(int32_t, int32_t)>;
+  using InputAxisCount = std::function<int32_t(int32_t)>;
+  void setInputAxisReaders(InputAxisName names, InputAxisCount counts) {
+    inputAxisName_ = std::move(names);
+    inputAxisCount_ = std::move(counts);
+  }
+  const InputAxisName &inputAxisNameReader() const { return inputAxisName_; }
+  const InputAxisCount &inputAxisCountReader() const { return inputAxisCount_; }
+  const std::function<std::optional<float>(int32_t, int32_t)> &inputSampleReader() const {
+    return inputSample_;
+  }
   void configurePlayerInput(PlayerInputState &input) const {
     input.sampleInput = inputSample_;
     input.inputType = inputType_;
@@ -727,6 +744,8 @@ private:
   std::optional<std::vector<std::string>> inputDevices_;
   std::function<std::optional<float>(int32_t, int32_t)> inputSample_;
   std::function<std::optional<int32_t>(int32_t, int32_t)> inputType_;
+  InputAxisName inputAxisName_;
+  InputAxisCount inputAxisCount_;
   std::map<uint64_t, std::function<void(LinkOwner &)>> nodeDestroyObservers_;
   uint64_t nextNodeDestroyObserver_ = 1;
   uint32_t createdInstances_ = 0;

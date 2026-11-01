@@ -1,9 +1,14 @@
 #include "file_state.hpp"
 
+#include "run_log.hpp"
+
 #include <algorithm>
 #include <climits>
+#include <cerrno>
+#include <fcntl.h>
 #include <fstream>
 #include <system_error>
+#include <unistd.h>
 #include <utility>
 
 FileState::FileState(std::filesystem::path dataRoot,
@@ -12,8 +17,8 @@ FileState::FileState(std::filesystem::path dataRoot,
     : gameRoot_(std::move(gameRoot)), dataRoot_(std::move(dataRoot)), referenceRoot_(std::move(referenceRoot)) {
 }
 
-bool FileState::exists(const std::string &name, bool &result,
-                       std::string &error) const {
+bool FileState::exists(const std::string& name, bool& result,
+                       std::string& error) const {
   result = false;
   error.clear();
   if (name.empty() || name.size() >= 256 || name.front() == '/' ||
@@ -30,13 +35,14 @@ bool FileState::exists(const std::string &name, bool &result,
     error = "File.exists path is not beneath save";
     return false;
   }
-  for (const auto &component : relative)
-    if (component == "." || component == ".." || component.empty()) {
-      error = "unsupported File.exists path";
-      return false;
-    }
-  auto within = [](const std::filesystem::path &root,
-                   const std::filesystem::path &path) {
+  // Stock File.exists (FUN_00486170 -> FUN_0054c170) performs no dot-segment
+  // validation; the OS resolves "." / "..". Resolve through weakly_canonical
+  // below and keep the save-root containment check. Note: containment compares
+  // components byte-exactly, so on case-insensitive volumes a name whose
+  // canonical spelling differs only by case from the root can be refused;
+  // this fails closed and only affects contrived names.
+  auto within = [](const std::filesystem::path& root,
+                   const std::filesystem::path& path) {
     auto a = root.begin(), b = path.begin();
     for (; a != root.end() && b != path.end(); ++a, ++b)
       if (*a != *b)
@@ -83,9 +89,9 @@ bool FileState::exists(const std::string &name, bool &result,
   return true;
 }
 
-FileOpenResult FileState::openRead(const VmObject *owner,
-                                   const std::string &name,
-                                   std::string &error) {
+FileOpenResult FileState::openRead(const VmObject* owner,
+                                   const std::string& name,
+                                   std::string& error) {
   error.clear();
   if (!owner) {
     error = "missing file owner";
@@ -105,8 +111,8 @@ FileOpenResult FileState::openRead(const VmObject *owner,
   return FileOpenResult::opened;
 }
 
-bool FileState::readInt(const VmObject *owner, int32_t &value,
-                        std::string &error) {
+bool FileState::readInt(const VmObject* owner, int32_t& value,
+                        std::string& error) {
   error.clear();
   const auto file = files_.find(owner);
   if (file == files_.end()) {
@@ -122,8 +128,8 @@ bool FileState::readInt(const VmObject *owner, int32_t &value,
   return true;
 }
 
-bool FileState::readFloat(const VmObject *owner, float &value,
-                          std::string &error) {
+bool FileState::readFloat(const VmObject* owner, float& value,
+                          std::string& error) {
   error.clear();
   const auto file = files_.find(owner);
   if (file == files_.end()) {
@@ -139,9 +145,9 @@ bool FileState::readFloat(const VmObject *owner, float &value,
   return true;
 }
 
-bool FileState::resolveSavePath(const std::string &name,
-                                std::filesystem::path &out,
-                                std::string &error) const {
+bool FileState::resolveSavePath(const std::string& name,
+                                std::filesystem::path& out,
+                                std::string& error) const {
   error.clear();
   if (name.empty() || name.size() >= 256 || name.front() == '/' ||
       name.front() == '\\' || name.find(':') != std::string::npos ||
@@ -157,13 +163,13 @@ bool FileState::resolveSavePath(const std::string &name,
     error = "path is not beneath save: " + name;
     return false;
   }
-  for (const auto &component : relative)
-    if (component == "." || component == ".." || component.empty()) {
-      error = "invalid save path";
-      return false;
-    }
-  auto within = [](const std::filesystem::path &root,
-                   const std::filesystem::path &path) {
+  // [INFERENCE] Stock File delete/copy/move are expected to perform no
+  // dot-segment validation (handlers FUN_00486150/004860f0/00486120 are
+  // unread in the census ledger); treat them like the evidenced File.open and
+  // FindFile natives. Resolve through weakly_canonical below and keep the
+  // save-root containment check.
+  auto within = [](const std::filesystem::path& root,
+                   const std::filesystem::path& path) {
     auto a = root.begin(), b = path.begin();
     for (; a != root.end() && b != path.end(); ++a, ++b)
       if (*a != *b)
@@ -194,8 +200,8 @@ bool FileState::resolveSavePath(const std::string &name,
   return true;
 }
 
-bool FileState::deletePath(const std::string &name, int32_t &result,
-                           std::string &error) {
+bool FileState::deletePath(const std::string& name, int32_t& result,
+                           std::string& error) {
   std::filesystem::path path;
   if (!resolveSavePath(name, path, error))
     return false;
@@ -205,8 +211,8 @@ bool FileState::deletePath(const std::string &name, int32_t &result,
   return true;
 }
 
-bool FileState::copyPath(const std::string &from, const std::string &to,
-                         int32_t &result, std::string &error) {
+bool FileState::copyPath(const std::string& from, const std::string& to,
+                         int32_t& result, std::string& error) {
   std::filesystem::path source, target;
   if (!resolveSavePath(from, source, error) ||
       !resolveSavePath(to, target, error))
@@ -220,8 +226,8 @@ bool FileState::copyPath(const std::string &from, const std::string &to,
   return true;
 }
 
-bool FileState::movePath(const std::string &from, const std::string &to,
-                         int32_t &result, std::string &error) {
+bool FileState::movePath(const std::string& from, const std::string& to,
+                         int32_t& result, std::string& error) {
   std::filesystem::path source, target;
   if (!resolveSavePath(from, source, error) ||
       !resolveSavePath(to, target, error))
@@ -233,15 +239,22 @@ bool FileState::movePath(const std::string &from, const std::string &to,
   return true;
 }
 
-FileOpenResult FileState::openWrite(const VmObject *owner,
-                                    const std::string &name,
-                                    std::string &error) {
+FileOpenResult FileState::openWrite(const VmObject* owner,
+                                    const std::string& name,
+                                    std::string& error) {
   error.clear();
   if (!owner) {
     error = "missing file owner";
     return FileOpenResult::error;
   }
-  close(owner);
+  // Stock File.open (FUN_00485440) retires a previous handle with
+  // FUN_0054cca0, which closes it and returns void: no failure is reported and
+  // the reopen continues. Match the continuation, but keep the diagnostic in
+  // the run log rather than dropping it, a deliberate addition beyond stock,
+  // since the port's flush can fail where stock's close cannot report.
+  if (const std::string previous = close(owner); !previous.empty())
+    runlog::event(runlog::EventKind::Error, "Invalid datafile saved: %s",
+                  previous.c_str());
   if (name.empty() || name.size() >= 256 || name.front() == '/' ||
       name.front() == '\\' || name.find(':') != std::string::npos ||
       name.find('\0') != std::string::npos) {
@@ -256,13 +269,11 @@ FileOpenResult FileState::openWrite(const VmObject *owner,
     error = "File.open(write) path is not beneath save";
     return FileOpenResult::error;
   }
-  for (const auto &component : relative)
-    if (component == "." || component == ".." || component.empty()) {
-      error = "invalid save path";
-      return FileOpenResult::error;
-    }
-  auto within = [](const std::filesystem::path &root,
-                   const std::filesystem::path &path) {
+  // Stock File.open write mode (FUN_00485440 -> FUN_0054caf0) performs no
+  // dot-segment validation; the OS resolves "." / "..". Resolve through
+  // weakly_canonical below and keep the save-root containment check.
+  auto within = [](const std::filesystem::path& root,
+                   const std::filesystem::path& path) {
     auto a = root.begin(), b = path.begin();
     for (; a != root.end() && b != path.end(); ++a, ++b)
       if (*a != *b)
@@ -290,48 +301,61 @@ FileOpenResult FileState::openWrite(const VmObject *owner,
     error = "File.open(write) path escapes data root";
     return FileOpenResult::error;
   }
+  if (nextHandle_ > INT32_MAX) {
+    error = "file handle table exhausted";
+    return FileOpenResult::error;
+  }
   std::filesystem::create_directories(path.parent_path(), ec);
   if (ec) {
     error = "cannot create save directory: " + ec.message();
     return FileOpenResult::error;
   }
-  std::ofstream truncate(path, std::ios::binary | std::ios::trunc);
-  if (!truncate) {
-    // Stock logs a Save error and File.open reports failure (returns 0).
-    return FileOpenResult::missing;
-  }
-  truncate.close();
-  if (nextHandle_ > INT32_MAX) {
-    error = "file handle table exhausted";
-    return FileOpenResult::error;
-  }
+  // Build everything that can throw before the descriptor exists, then let the
+  // Writer take ownership of it: nothing after a successful ::open can strand
+  // the descriptor, even if the map insertion throws.
   Writer writer;
   writer.path = path;
-  writer.handle = static_cast<int32_t>(nextHandle_++);
   // DAT_00612c70: "SDAT", version 0x0100, type 2, flags 0.
   static const uint8_t header[8] = {'S', 'D', 'A', 'T', 0x00, 0x01, 0x02, 0x00};
   writer.payload.assign(header, header + 8);
+  // Stock holds its CreateFileA handle from open to close; mirror that by
+  // keeping the descriptor so a symlink swapped in after this point cannot
+  // redirect the deferred write. O_NOFOLLOW is deliberately stricter than
+  // stock, which follows a final symlink component. weakly_canonical resolves
+  // only components that exist, so a *dangling* leaf symlink survives as its
+  // own name and passes containment; CreateFileA would then create the link's
+  // target, which may lie outside the save root. Here that open fails and
+  // File.open reports failure. A leaf symlink whose target exists is resolved
+  // by weakly_canonical first, so in-root ones still open normally.
+  writer.fd =
+      ::open(path.c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC | O_NOFOLLOW,
+             0666);
+  if (writer.fd < 0) {
+    // Stock logs a Save error and File.open reports failure (returns 0).
+    return FileOpenResult::missing;
+  }
+  writer.handle = static_cast<int32_t>(nextHandle_++);
   writers_.emplace(owner, std::move(writer));
   return FileOpenResult::opened;
 }
 
-bool FileState::writeBytes(const VmObject *owner, const void *data,
-                           size_t size, std::string &error) {
+bool FileState::writeBytes(const VmObject* owner, const void* data,
+                           size_t size, std::string& error) {
   error.clear();
   const auto writer = writers_.find(owner);
   if (writer == writers_.end()) {
     error = "file is not open for writing";
     return false;
   }
-  const auto *bytes = static_cast<const uint8_t *>(data);
+  const auto* bytes = static_cast<const uint8_t*>(data);
   writer->second.payload.insert(writer->second.payload.end(), bytes,
                                 bytes + size);
   return true;
 }
 
-uint32_t FileState::packOrdinal(const VmObject *owner,
-                                const std::string &packPath) {
-  auto &packs = writers_.at(owner).packs;
+uint32_t FileState::packOrdinal(const VmObject* owner,
+                                const std::string& packPath) {
+  auto& packs = writers_.at(owner).packs;
   for (size_t i = 0; i < packs.size(); ++i)
     if (packs[i] == packPath)
       return static_cast<uint32_t>(i + 1);
@@ -339,8 +363,8 @@ uint32_t FileState::packOrdinal(const VmObject *owner,
   return static_cast<uint32_t>(packs.size());
 }
 
-bool FileState::readString(const VmObject *owner, std::string &value,
-                           std::string &error) {
+bool FileState::readString(const VmObject* owner, std::string& value,
+                           std::string& error) {
   error.clear();
   const auto file = files_.find(owner);
   if (file == files_.end()) {
@@ -356,17 +380,21 @@ bool FileState::readString(const VmObject *owner, std::string &value,
   return true;
 }
 
-const std::vector<std::pair<uint32_t, std::string>> *
-FileState::readPacks(const VmObject *owner) const {
+const std::vector<std::pair<uint32_t, std::string>>*
+FileState::readPacks(const VmObject* owner) const {
   const auto file = files_.find(owner);
   return file == files_.end() ? nullptr : &file->second.file.packs();
 }
 
-void FileState::close(const VmObject *owner) {
+// Writer closes any descriptor it still owns, so a writer that was never closed
+// is released here without a hand-written loop.
+FileState::~FileState() = default;
+
+std::string FileState::close(const VmObject* owner) {
   files_.erase(owner);
   const auto found = writers_.find(owner);
   if (found == writers_.end())
-    return;
+    return {};
   // FUN_00485870 type 2: unsaved-resource count (0: unsaved resources are an
   // explicit gap and refused at write time), pack count, pack records, then
   // the trailer size excluding the size field itself.
@@ -380,7 +408,7 @@ void FileState::close(const VmObject *owner) {
   put32(0);
   put32(static_cast<uint32_t>(writer.packs.size()));
   for (size_t i = 0; i < writer.packs.size(); ++i) {
-    const auto &path = writer.packs[i];
+    const auto& path = writer.packs[i];
     const uint32_t length = static_cast<uint32_t>(path.size() + 1);
     put32(static_cast<uint32_t>(i + 1));
     put32(length);
@@ -389,12 +417,40 @@ void FileState::close(const VmObject *owner) {
     trailer += 8 + length;
   }
   put32(trailer);
-  std::ofstream out(writer.path, std::ios::binary | std::ios::trunc);
-  out.write(reinterpret_cast<const char *>(writer.payload.data()),
-            static_cast<std::streamsize>(writer.payload.size()));
+  // The descriptor was opened non-following at openWrite time and is immune
+  // to symlink swaps made after that open (stock holds its CreateFileA handle
+  // the same way); the intermediate resolve->open window in openWrite is not
+  // covered, and stock has that same window at its CreateFileA. A failed
+  // close-time write is reported instead of silently producing a truncated
+  // save. Every writers_ entry was inserted by openWrite only after a
+  // successful ::open and nothing else clears a Writer's fd, so fd is valid
+  // here; Writer's destructor releases it on any escape.
+  std::string failure;
+  if (::lseek(writer.fd, 0, SEEK_SET) < 0)
+    failure = "cannot rewind save file";
+  size_t written = 0;
+  while (failure.empty() && written < writer.payload.size()) {
+    const ssize_t n = ::write(writer.fd, writer.payload.data() + written,
+                              writer.payload.size() - written);
+    if (n < 0 && errno == EINTR) continue;
+    if (n <= 0) {
+      failure = "cannot write save file";
+      break;
+    }
+    written += static_cast<size_t>(n);
+  }
+  const int closeResult = ::close(writer.fd);
+  writer.fd = -1;
+  if (failure.empty() && closeResult < 0)
+    failure = "cannot close save file";
+  // Stock's log line is "Invalid datafile saved: <name>" (piVar3 + 0x13 at
+  // FUN_00485870), so the caller needs the path that failed.
+  if (!failure.empty())
+    failure += ": " + writer.path.string();
+  return failure;
 }
 
-std::optional<int32_t> FileState::handle(const VmObject *owner) const {
+std::optional<int32_t> FileState::handle(const VmObject* owner) const {
   const auto writer = writers_.find(owner);
   if (writer != writers_.end())
     return writer->second.handle;
@@ -406,7 +462,7 @@ std::optional<int32_t> FileState::handle(const VmObject *owner) const {
 
 namespace {
 char searchFold(char c) { return c >= 'A' && c <= 'Z' ? static_cast<char>(c + ('a' - 'A')) : c; }
-bool searchMatch(const std::string &pattern, const std::string &name) {
+bool searchMatch(const std::string& pattern, const std::string& name) {
   if (pattern == "*.*") return true;
   // Win32 FindFirstFile: a trailing ".*" also matches names with no extension.
   if (pattern.size() > 2 && pattern.compare(pattern.size() - 2, 2, ".*") == 0 &&
@@ -415,67 +471,119 @@ bool searchMatch(const std::string &pattern, const std::string &name) {
     return true;
   size_t p = 0, n = 0, star = std::string::npos, retry = 0;
   while (n < name.size()) {
-    if (p < pattern.size() && (pattern[p] == '?' || searchFold(pattern[p]) == searchFold(name[n]))) { ++p; ++n; }
-    else if (p < pattern.size() && pattern[p] == '*') { star = p++; retry = n; }
-    else if (star != std::string::npos) { p = star + 1; n = ++retry; }
-    else return false;
+    if (p < pattern.size() && (pattern[p] == '?' || searchFold(pattern[p]) == searchFold(name[n]))) {
+      ++p;
+      ++n;
+    } else if (p < pattern.size() && pattern[p] == '*') {
+      star = p++;
+      retry = n;
+    } else if (star != std::string::npos) {
+      p = star + 1;
+      n = ++retry;
+    } else
+      return false;
   }
   while (p < pattern.size() && pattern[p] == '*') ++p;
   return p == pattern.size();
 }
-bool searchWithin(const std::filesystem::path &root, const std::filesystem::path &path) {
+bool searchWithin(const std::filesystem::path& root, const std::filesystem::path& path) {
   auto a = root.begin(), b = path.begin();
-  for (; a != root.end() && b != path.end(); ++a, ++b) if (*a != *b) return false;
+  for (; a != root.end() && b != path.end(); ++a, ++b)
+    if (*a != *b) return false;
   return a == root.end();
 }
-}
-bool FileState::findFirst(const std::string &pattern, int32_t flags, int32_t &handle,
-                          std::optional<std::string> &result, std::string &error) {
-  error.clear(); handle = -1; result.reset();
+} // namespace
+bool FileState::findFirst(const std::string& pattern, int32_t flags, int32_t& handle,
+                          std::optional<std::string>& result, std::string& error) {
+  error.clear();
+  handle = -1;
+  result.reset();
   if (pattern.empty() || pattern.size() >= 256 || pattern.front() == '/' || pattern.front() == '\\' ||
-      pattern.find(':') != std::string::npos || pattern.find('\0') != std::string::npos) { error = "unsupported FindFile pattern"; return false; }
-  std::string normalized = pattern; std::replace(normalized.begin(), normalized.end(), '\\', '/');
+      pattern.find(':') != std::string::npos || pattern.find('\0') != std::string::npos) {
+    error = "unsupported FindFile pattern";
+    return false;
+  }
+  std::string normalized = pattern;
+  std::replace(normalized.begin(), normalized.end(), '\\', '/');
   const std::filesystem::path rel(normalized);
-  for (const auto &part : rel) if (part == "." || part == ".." || part.empty()) { error = "unsupported FindFile pattern"; return false; }
+  // Stock FindFile.first (FUN_00487cb0 -> FUN_0054cf50) performs no pattern
+  // validation beyond '/'->'\\' conversion: the OS resolves "." / ".." in the
+  // directory portion, and first/next skip "." and ".." result entries.
+  // Resolve through weakly_canonical below and keep the root containment
+  // check; a pattern whose directory escapes the root is still refused.
   const std::string leaf = rel.filename().string();
   const auto base = *rel.begin() == "save" ? dataRoot_ : gameRoot_;
-  if (base.empty()) { error = "FindFile game root unavailable: " + pattern; return false; }
-  for (const auto &part : rel.parent_path()) if (part.string().find_first_of("*?") != std::string::npos) { error = "unsupported FindFile directory wildcard"; return false; }
-  std::error_code ec; const auto root = std::filesystem::canonical(base, ec);
-  if (ec) { error = "invalid FindFile root"; return false; }
+  if (base.empty()) {
+    error = "FindFile game root unavailable: " + pattern;
+    return false;
+  }
+  for (const auto& part : rel.parent_path())
+    if (part.string().find_first_of("*?") != std::string::npos) {
+      error = "unsupported FindFile directory wildcard";
+      return false;
+    }
+  std::error_code ec;
+  const auto root = std::filesystem::canonical(base, ec);
+  if (ec) {
+    error = "invalid FindFile root";
+    return false;
+  }
   const auto dir = std::filesystem::weakly_canonical(root / rel.parent_path(), ec);
-  if (ec || !searchWithin(root, dir)) { error = "FindFile path escapes root"; return false; }
+  if (ec || !searchWithin(root, dir)) {
+    error = "FindFile path escapes root";
+    return false;
+  }
   if (!std::filesystem::exists(dir, ec)) return !ec;
   Search search;
   std::filesystem::directory_iterator it(dir, ec), end;
-  if (ec) { error = "FindFile directory error: " + ec.message(); return false; }
+  if (ec) {
+    error = "FindFile directory error: " + ec.message();
+    return false;
+  }
   for (; it != end; it.increment(ec)) {
-    if (ec) { error = "FindFile iteration error: " + ec.message(); return false; }
+    if (ec) {
+      error = "FindFile iteration error: " + ec.message();
+      return false;
+    }
     const auto name = it->path().filename().string();
     if (!searchMatch(leaf, name)) continue;
     if (std::any_of(name.begin(), name.end(), [](unsigned char c) { return c >= 128; })) {
-      error = "unsupported FindFile non-ASCII name"; return false;
+      error = "unsupported FindFile non-ASCII name";
+      return false;
     }
-    if (it->is_symlink(ec)) { error = "FindFile symlinks unsupported"; return false; }
+    if (it->is_symlink(ec)) {
+      error = "FindFile symlinks unsupported";
+      return false;
+    }
     const bool directory = it->is_directory(ec);
-    if (ec) { error = "FindFile entry error: " + ec.message(); return false; }
+    if (ec) {
+      error = "FindFile entry error: " + ec.message();
+      return false;
+    }
     search.entries.push_back({name, directory});
   }
-  if (ec) { error = "FindFile iteration error: " + ec.message(); return false; }
+  if (ec) {
+    error = "FindFile iteration error: " + ec.message();
+    return false;
+  }
   if (search.entries.empty()) return true;
-  std::sort(search.entries.begin(), search.entries.end(), [](const SearchEntry &a, const SearchEntry &b) {
+  std::sort(search.entries.begin(), search.entries.end(), [](const SearchEntry& a, const SearchEntry& b) {
     return std::lexicographical_compare(a.name.begin(), a.name.end(), b.name.begin(), b.name.end(), [](char x, char y) { return searchFold(x) < searchFold(y); });
   });
-  for (size_t i = 0; i < searches_.size(); ++i) if (!searches_[i]) {
-    searches_[i] = std::move(search); handle = static_cast<int32_t>(i); result = findNext(handle, flags); return true;
-  }
+  for (size_t i = 0; i < searches_.size(); ++i)
+    if (!searches_[i]) {
+      searches_[i] = std::move(search);
+      handle = static_cast<int32_t>(i);
+      result = findNext(handle, flags);
+      return true;
+    }
   return true;
 }
 std::optional<std::string> FileState::findNext(int32_t handle, int32_t flags) {
   if (handle < 0 || handle >= static_cast<int32_t>(searches_.size()) || !searches_[static_cast<size_t>(handle)]) return {};
-  auto &search = *searches_[static_cast<size_t>(handle)];
+  auto& search = *searches_[static_cast<size_t>(handle)];
   while (search.next < search.entries.size()) {
-    const auto &entry = search.entries[search.next++];
+    const auto& entry = search.entries[search.next++];
     if (entry.directory ? flags != 1 : flags < 2) return entry.name;
   }
   return {};

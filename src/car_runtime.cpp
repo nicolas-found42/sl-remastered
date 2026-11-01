@@ -18,10 +18,10 @@ void CarRuntimeInstance::initializeWheelDrivetrain() {
     return;
   const size_t count = std::min(carPhysics->wheels.size(), wheelExtras.size());
   for (size_t i = 0; i < count; ++i) {
-    const auto &wheel = carPhysics->wheels[i];
+    const auto& wheel = carPhysics->wheels[i];
     if (!wheel)
       continue;
-    auto &extra = wheelExtras[i];
+    auto& extra = wheelExtras[i];
     extra.steer = wheel->config.wheelParameters[0];
     extra.drive = wheel->config.wheelParameters[1];
     extra.brake = wheel->config.wheelParameters[2];
@@ -32,10 +32,10 @@ void CarRuntimeInstance::initializeWheelDrivetrain() {
   }
 }
 
-bool CarRuntimeInstance::advanceControls(const CarControlSnapshot &input,
-                                         const CarConfig &config,
-                                         const CarControlStepContext &context,
-                                         std::string &error) {
+bool CarRuntimeInstance::advanceControls(const CarControlSnapshot& input,
+                                         const CarConfig& config,
+                                         const CarControlStepContext& context,
+                                         std::string& error) {
   const float values[] = {context.time,
                           context.step,
                           context.drivenWheelSpeed,
@@ -124,8 +124,12 @@ bool CarRuntimeInstance::advanceControls(const CarControlSnapshot &input,
     if (shift.downUntil < context.time)
       shift.downUntil = -1;
   }
-  if (context.automatic && context.positiveMass && context.engineRunning &&
-      !context.automaticInhibited && !forcedBrake && shift.clutchUntil <= 0) {
+  // Stock flag 0x10 (FUN_0044d720) does launch/reverse/neutral transitions;
+  // flag 0x20 (FUN_0044dc30) only up/downshifts between forward gears while
+  // moving. Both share the moving-branch shift logic below.
+  if ((context.automatic || context.semiautomatic) && context.positiveMass &&
+      context.engineRunning && !context.automaticInhibited && !forcedBrake &&
+      shift.clutchUntil <= 0) {
     if (std::fabs(context.drivenWheelSpeed) > 1.0f) {
       if (!carPhysics || carPhysics->wheels.size() > wheelExtras.size()) {
         error = "car controls: driven-wheel state unavailable";
@@ -134,7 +138,7 @@ bool CarRuntimeInstance::advanceControls(const CarControlSnapshot &input,
       float slip = 0;
       unsigned contacts = 0;
       for (size_t i = 0; i < carPhysics->wheels.size(); ++i) {
-        const auto &wheel = carPhysics->wheels[i];
+        const auto& wheel = carPhysics->wheels[i];
         if (wheel && wheel->suspensionBody &&
             wheel->config.wheelParameters[1] != 0 &&
             wheel->suspension.force > 0) {
@@ -174,23 +178,23 @@ bool CarRuntimeInstance::advanceControls(const CarControlSnapshot &input,
           shifted(false);
         }
       };
-      if (demand < 0 && gear != 0 && gear != 7) {
+      if (context.automatic && demand < 0 && gear != 0 && gear != 7) {
         shift.reversing = true;
         downshift();
-      } else if (demand > 0.1f && gear == 0) {
+      } else if (context.automatic && demand > 0.1f && gear == 0) {
         if (config.gearCount && shift.upUntil <= 0 &&
             context.displayedEngineSpeed > idle) {
           gear = 1;
           shifted(true);
         }
-      } else if (demand > 0.1f && gear == 7) {
+      } else if (context.automatic && demand > 0.1f && gear == 7) {
         if (shift.downUntil <= 0) {
           gear = 0;
           shifted(true);
         } else {
           std::swap(throttle, brake);
         }
-      } else if (demand < -0.1f) {
+      } else if (context.automatic && demand < -0.1f) {
         if (config.gearCount) {
           std::swap(throttle, brake);
           if (gear != 7 && shift.upUntil <= 0 &&
@@ -202,7 +206,7 @@ bool CarRuntimeInstance::advanceControls(const CarControlSnapshot &input,
       } else if (gear >= 1 && gear != 7 &&
                  (demand > 0.1f ? std::fabs(slip) < 0.2f
                                 : gear > 1 && shift.downUntil <= 0)) {
-        if (rpm < 0) {
+        if (context.automatic && rpm < 0) {
           gear = 0;
           shift.clutchUntil = context.time + 0.2f;
           shifted(false);
@@ -223,7 +227,7 @@ bool CarRuntimeInstance::advanceControls(const CarControlSnapshot &input,
           downshift();
         }
       }
-    } else {
+    } else if (context.automatic) {
       const float demand = throttle - brake;
       const float idleSpeed = config.rpmIdle * 0.10471975803375244f;
       if (!shift.reversing) {
@@ -305,7 +309,7 @@ bool CarRuntimeInstance::advanceControls(const CarControlSnapshot &input,
     if (!(predictive > 0))
       return false;
     const float factor = std::max(0.0f, 1.0f - predictive /
-        (threshold * (braking ? 0.40000003576278687f : 0.30000001192092896f)));
+                                                   (threshold * (braking ? 0.40000003576278687f : 0.30000001192092896f)));
     pedal *= factor;
     if (!braking)
       clutchState = 1.0f - (1.0f - clutchState) * factor;
@@ -318,7 +322,7 @@ bool CarRuntimeInstance::advanceControls(const CarControlSnapshot &input,
 }
 
 CarDrivetrainStepContext
-CarRuntimeInstance::drivetrainContext(const CarConfig &config,
+CarRuntimeInstance::drivetrainContext(const CarConfig& config,
                                       float step) const {
   CarDrivetrainStepContext context;
   context.step = step;
@@ -337,8 +341,8 @@ CarRuntimeInstance::drivetrainContext(const CarConfig &config,
 }
 
 bool CarRuntimeInstance::advanceDrivetrain(
-    const CarConfig &config, const CarDrivetrainStepContext &context,
-    std::string &error) {
+    const CarConfig& config, const CarDrivetrainStepContext& context,
+    std::string& error) {
   if (!carPhysics || carPhysics->wheels.size() > wheelExtras.size() ||
       context.sleeping || !std::isfinite(context.step) ||
       context.step < 0.0001f || !std::isfinite(context.maximumRpm) ||
@@ -354,7 +358,7 @@ bool CarRuntimeInstance::advanceDrivetrain(
   {
     char detail[320];
     detail[0] = 0;
-    const auto bad = [&](const char *name, bool failed) {
+    const auto bad = [&](const char* name, bool failed) {
       if (!failed)
         return;
       const size_t used = std::strlen(detail);
@@ -450,8 +454,8 @@ bool CarRuntimeInstance::advanceDrivetrain(
   wheels.reserve(carPhysics->wheels.size());
   float weightSum = 0;
   for (size_t i = 0; i < carPhysics->wheels.size(); ++i) {
-    const auto &wheel = carPhysics->wheels[i];
-    const auto &extra = wheelExtras[i];
+    const auto& wheel = carPhysics->wheels[i];
+    const auto& extra = wheelExtras[i];
     if (!wheel) {
       wheels.push_back({});
       continue;
@@ -494,7 +498,7 @@ bool CarRuntimeInstance::advanceDrivetrain(
   for (size_t i = 0; i < wheels.size(); ++i) {
     if (!wheels[i].suspensionPresent)
       continue;
-    const auto &extra = wheelExtras[i];
+    const auto& extra = wheelExtras[i];
     float inertia = config.enginePower[5];
     if (weightSum > 0.0001f && extra.drive > 0.0001f && ratio != 0)
       inertia += (extra.drive / weightSum) * (1.0f - clutchState) *
@@ -573,7 +577,7 @@ bool CarRuntimeInstance::advanceDrivetrain(
       if (nextTemperature <= 90.0f || nextCoolingWear >= 1.0f) {
         nextCooling = engineCoolingParameters[0] / engineHeatCapacity;
       } else {
-        const auto &velocity =
+        const auto& velocity =
             carPhysics->root
                 ? carPhysics->root->state[carPhysics->root->current].vel
                 : linearVelocity;
@@ -653,22 +657,22 @@ bool CarRuntimeInstance::advanceDrivetrain(
     error = "car drivetrain: non-finite result";
     return false;
   }
-  const auto &soundPosition =
+  const auto& soundPosition =
       carPhysics->root ? carPhysics->root->state[carPhysics->root->current].pos
                        : position;
   if (engineFailure)
     failureSounds.push_back({CarFailureSoundEvent::Kind::Engine, -1,
                              soundPosition, engineFailureSoundEnabled});
   for (size_t i = 0; i < wheels.size(); ++i) {
-    auto &wheel = carPhysics->wheels[i];
+    auto& wheel = carPhysics->wheels[i];
     if (!wheel || !wheels[i].suspensionPresent)
       continue;
     wheel->angularSpeed = wheels[i].angularSpeed;
     wheel->longitudinalVelocity = wheels[i].longitudinal;
     wheel->effectiveInverseInertia = inverseInertias[i];
     if (brakeResults[i] && context.damageEnabled) {
-      auto &extra = wheelExtras[i];
-      const auto &result = *brakeResults[i];
+      auto& extra = wheelExtras[i];
+      const auto& result = *brakeResults[i];
       extra.brake = result.wheelBrake;
       extra.handBrake = result.wheelHandbrake;
       extra.bearing = result.bearing;
@@ -711,13 +715,13 @@ CarSeat::~CarSeat() {
   setLinkOwner(camera, nullptr);
   setLinkOwner(renderInstance, nullptr);
   setLinkOwner(osd, nullptr);
-  for (OwnerLink &link : links)
+  for (OwnerLink& link : links)
     setLinkOwner(link, nullptr);
 }
 
 std::optional<std::array<float, 16>>
-calculateCarSteeringAngles(const CarRuntimeInstance &car,
-                           const CarConfig &chassis) {
+calculateCarSteeringAngles(const CarRuntimeInstance& car,
+                           const CarConfig& chassis) {
   if (!car.carPhysics ||
       car.carPhysics->wheels.size() > car.wheelExtras.size() ||
       !std::isfinite(car.steeringState) ||
@@ -730,7 +734,7 @@ calculateCarSteeringAngles(const CarRuntimeInstance &car,
   if (!std::isfinite(requested))
     return std::nullopt;
   for (size_t i = 0; i < car.carPhysics->wheels.size(); ++i) {
-    const auto &wheel = car.carPhysics->wheels[i];
+    const auto& wheel = car.carPhysics->wheels[i];
     if (!wheel)
       continue;
     const float factor = car.wheelExtras[i].steer;
@@ -754,9 +758,9 @@ calculateCarSteeringAngles(const CarRuntimeInstance &car,
   return result;
 }
 
-std::optional<CarControlSnapshot> sampleCarControls(GameWorld &world,
-                                                    const CarSeat &seat) {
-  auto *player = world.nodeFor(seat.player.owner);
+std::optional<CarControlSnapshot> sampleCarControls(GameWorld& world,
+                                                    const CarSeat& seat) {
+  auto* player = world.nodeFor(seat.player.owner);
   if (!player || !player->loaded || player->nativeDevice != "player" ||
       !player->player || !player->playerInput ||
       player->player->scriptedControlOverride)
@@ -788,15 +792,15 @@ std::optional<CarControlSnapshot> sampleCarControls(GameWorld &world,
   return result;
 }
 
-CarSeat *CarRuntimeInstance::findSeat(uint32_t playerId) const {
-  for (const auto &seat : seats)
+CarSeat* CarRuntimeInstance::findSeat(uint32_t playerId) const {
+  for (const auto& seat : seats)
     if (seat && seat->player.cachedValue == playerId)
       return seat.get();
   return nullptr;
 }
 
-CarSeat *CarRuntimeInstance::selectSeat(uint32_t playerId) const {
-  if (auto *existing = findSeat(playerId))
+CarSeat* CarRuntimeInstance::selectSeat(uint32_t playerId) const {
+  if (auto* existing = findSeat(playerId))
     return existing;
   return findSeat(0);
 }
@@ -806,47 +810,32 @@ CarRuntimeInstance::~CarRuntimeInstance() {
   setLinkOwner(carLink, nullptr);
   setLinkOwner(physicsRoot, nullptr);
   setLinkOwner(installParentLink, nullptr);
-  for (auto &slot : slots)
+  for (auto& slot : slots)
     if (slot)
       setLinkOwner(slot->attachedNode, nullptr);
-  for (auto &part : attachedParts)
+  for (auto& part : attachedParts)
     if (part)
       setLinkOwner(*part, nullptr);
 }
 
-bool loadCarPrototype(ResourceWorld &world, ScriptNode &source,
-                      const ResourceIdMapping &mapping, std::string_view text,
-                      std::unique_ptr<CarPrototype> &result, std::string &error,
+bool loadCarPrototype(ResourceWorld& world, ScriptNode& source,
+                      const ResourceIdMapping& mapping, std::string_view text,
+                      std::unique_ptr<CarPrototype>& result, std::string& error,
                       bool isCar) {
   result = std::make_unique<CarPrototype>();
   result->isCar = isCar;
   setLinkOwner(result->source, &source);
   struct DefaultRequest {
-    const char *pack;
+    const char* pack;
     uint16_t local;
     int type;
   };
   static const DefaultRequest carDefaults[] = {
-      {"decals.rpk", 0x0b, 7}, {"frontend.rpk", 0x23, 14},
-      {"cars.rpk", 0x55, 14},  {"cars.rpk", 0x57, 14},
-      {"cars.rpk", 0x56, 14},  {"cars.rpk", 0x58, 14},
-      {"cars.rpk", 0x58, 14},  {"cars.rpk", 0x5c, 14},
-      {"cars.rpk", 0x5c, 14},  {"cars.rpk", 0x58, 14},
-      {"cars.rpk", 0x61, 14},  {"cars.rpk", 0x62, 14},
-      {"cars.rpk", 0x63, 14},  {"cars.rpk", 0x64, 14},
-      {"sound.rpk", 0x0d, 6},  {"sound.rpk", 0x0d, 6},
-      {"sound.rpk", 0x0d, 6},  {"sound.rpk", 0x0d, 6},
-      {"sound.rpk", 0x19, 6},  {"sound.rpk", 0x1a, 6},
-      {"sound.rpk", 7, 6},     {"sound.rpk", 9, 6},
-      {"sound.rpk", 10, 6},    {"sound.rpk", 0x17, 6},
-      {"sound.rpk", 0x18, 6},  {"sound.rpk", 0x15, 6},
-      {"sound.rpk", 8, 6},     {"sound.rpk", 6, 6},
-      {"sound.rpk", 0x25, 6},  {"particles.rpk", 2, 14},
-      {"particles.rpk", 2, 14}};
+      {"decals.rpk", 0x0b, 7}, {"frontend.rpk", 0x23, 14}, {"cars.rpk", 0x55, 14}, {"cars.rpk", 0x57, 14}, {"cars.rpk", 0x56, 14}, {"cars.rpk", 0x58, 14}, {"cars.rpk", 0x58, 14}, {"cars.rpk", 0x5c, 14}, {"cars.rpk", 0x5c, 14}, {"cars.rpk", 0x58, 14}, {"cars.rpk", 0x61, 14}, {"cars.rpk", 0x62, 14}, {"cars.rpk", 0x63, 14}, {"cars.rpk", 0x64, 14}, {"sound.rpk", 0x0d, 6}, {"sound.rpk", 0x0d, 6}, {"sound.rpk", 0x0d, 6}, {"sound.rpk", 0x0d, 6}, {"sound.rpk", 0x19, 6}, {"sound.rpk", 0x1a, 6}, {"sound.rpk", 7, 6}, {"sound.rpk", 9, 6}, {"sound.rpk", 10, 6}, {"sound.rpk", 0x17, 6}, {"sound.rpk", 0x18, 6}, {"sound.rpk", 0x15, 6}, {"sound.rpk", 8, 6}, {"sound.rpk", 6, 6}, {"sound.rpk", 0x25, 6}, {"particles.rpk", 2, 14}, {"particles.rpk", 2, 14}};
   static const DefaultRequest partDefaults[] = {{"decals.rpk", 0x0b, 7},
                                                 {"sound.rpk", 0x0b, 6}};
-  auto load = [&](const CarResourceRequest &request, uint32_t id) {
-    const auto fail = [&](const std::string &why) {
+  auto load = [&](const CarResourceRequest& request, uint32_t id) {
+    const auto fail = [&](const std::string& why) {
       error = "car " + request.directive + " line " +
               std::to_string(request.line) + " resource " + std::to_string(id) +
               ": " + why;
@@ -871,11 +860,11 @@ bool loadCarPrototype(ResourceWorld &world, ScriptNode &source,
     result->resources.push_back(std::move(loaded));
     return true;
   };
-  const DefaultRequest *defaults = isCar ? carDefaults : partDefaults;
+  const DefaultRequest* defaults = isCar ? carDefaults : partDefaults;
   const size_t defaultCount =
       isCar ? std::size(carDefaults) : std::size(partDefaults);
   for (size_t i = 0; i < defaultCount; ++i) {
-    const auto &item = defaults[i];
+    const auto& item = defaults[i];
     uint32_t id = 0;
     if (!world.packs().resolveLiteral(item.pack, item.local, id, error))
       return false;
@@ -884,24 +873,24 @@ bool loadCarPrototype(ResourceWorld &world, ScriptNode &source,
   }
   if (!text.empty() && !parseCarConfig(text, result->config, error))
     return false;
-  for (auto &slot : result->config.slots) {
-    for (auto &attach : slot.attachments)
+  for (auto& slot : result->config.slots) {
+    for (auto& attach : slot.attachments)
       attach.resourceId = remapResourceId(attach.resourceId, mapping);
-    for (auto &comp : slot.compatible)
+    for (auto& comp : slot.compatible)
       comp.resource = remapResourceId(comp.resource, mapping);
-    for (auto &bolt : slot.bolts)
+    for (auto& bolt : slot.bolts)
       if (bolt.resource)
         bolt.resource = remapResourceId(bolt.resource, mapping);
     if (slot.hasFlapSounds) {
-      for (auto &sfx : slot.flapSounds)
+      for (auto& sfx : slot.flapSounds)
         if (sfx)
           sfx = remapResourceId(sfx, mapping);
     }
   }
-  for (auto &stockPart : result->config.stockParts)
+  for (auto& stockPart : result->config.stockParts)
     stockPart = remapResourceId(stockPart, mapping);
   size_t up = 0, down = 0, exhaust = 0;
-  for (const auto &request : result->config.resources) {
+  for (const auto& request : result->config.resources) {
     uint32_t id = request.runtimeId
                       ? request.resource
                       : remapResourceId(request.resource, mapping);
@@ -911,8 +900,8 @@ bool loadCarPrototype(ResourceWorld &world, ScriptNode &source,
       return false;
     if (!load(request, id))
       return false;
-    CarSfxTable *table = nullptr;
-    const CarEngineSound *sound = nullptr;
+    CarSfxTable* table = nullptr;
+    const CarEngineSound* sound = nullptr;
     if (request.directive == "sfx_engine_up") {
       table = &result->engineUp;
       sound = &result->config.engineUp[up++];
@@ -932,8 +921,8 @@ bool loadCarPrototype(ResourceWorld &world, ScriptNode &source,
     }
   }
   if (isCar) {
-    for (const auto &fallback :
-         {std::pair<CarSfxTable *, uint16_t>{&result->engineUp, 3},
+    for (const auto& fallback :
+         {std::pair<CarSfxTable*, uint16_t>{&result->engineUp, 3},
           {&result->engineDown, 2}}) {
       if (fallback.first->size())
         continue;
@@ -948,13 +937,13 @@ bool loadCarPrototype(ResourceWorld &world, ScriptNode &source,
                               1000000.0f, 1.0f, 1.0f);
     }
   }
-  const auto collisionLoader = [&](const std::string &path, ScxModel &model,
-                                   std::string &detail) {
+  const auto collisionLoader = [&](const std::string& path, ScxModel& model,
+                                   std::string& detail) {
     std::string bytes;
     if (!readNativeDataFile(world.packs(), path, INT32_MAX, bytes, detail))
       return false;
     auto mesh =
-        scxParse(reinterpret_cast<const uint8_t *>(bytes.data()), bytes.size());
+        scxParse(reinterpret_cast<const uint8_t*>(bytes.data()), bytes.size());
     if (!mesh.ok) {
       detail = mesh.error;
       return false;
@@ -963,8 +952,8 @@ bool loadCarPrototype(ResourceWorld &world, ScriptNode &source,
     return true;
   };
   const auto geometryResourceLoader = [&](uint32_t serialized, float mass,
-                                          CarGeometryPrototype &out,
-                                          std::string &detail) {
+                                          CarGeometryPrototype& out,
+                                          std::string& detail) {
     const auto id = remapResourceId(serialized, mapping);
     const auto found = world.lookup(id, 9);
     PackResource resource;
@@ -974,7 +963,7 @@ bool loadCarPrototype(ResourceWorld &world, ScriptNode &source,
         detail = "physics geometry resource unavailable";
       return false;
     }
-    const auto &bytes = *resource.packBytes;
+    const auto& bytes = *resource.packBytes;
     const size_t offset = resource.entry.payloadOffset,
                  size = resource.entry.payloadSize;
     if (offset > bytes.size() || size > bytes.size() - offset) {
@@ -984,7 +973,7 @@ bool loadCarPrototype(ResourceWorld &world, ScriptNode &source,
     CarGeometryPrototype prototype;
     if (!loadCarGeometryResource(
             std::string_view(
-                reinterpret_cast<const char *>(bytes.data() + offset), size),
+                reinterpret_cast<const char*>(bytes.data() + offset), size),
             collisionLoader, prototype, detail))
       return false;
     out = cloneGeometryResource(prototype, mass);
@@ -998,7 +987,7 @@ bool loadCarPrototype(ResourceWorld &world, ScriptNode &source,
     return false;
   if (result->config.click) {
     CarGeometryPrototype click;
-    const auto &definition = *result->config.click;
+    const auto& definition = *result->config.click;
     if (definition.resource) {
       if (!geometryResourceLoader(*definition.resource, 0, click, error))
         return false;
@@ -1025,21 +1014,21 @@ bool loadCarPrototype(ResourceWorld &world, ScriptNode &source,
   return true;
 }
 
-CarHudOptionalValues carHudOptionalValues(GameWorld &world,
-                                         const CarRuntimeInstance &car) {
-  const auto objectField = [](const VmObject *object, std::string_view name) -> const VmObject * {
+CarHudOptionalValues carHudOptionalValues(GameWorld& world,
+                                          const CarRuntimeInstance& car) {
+  const auto objectField = [](const VmObject* object, std::string_view name) -> const VmObject* {
     if (object)
-      for (const auto &field : object->fields)
+      for (const auto& field : object->fields)
         if (field.name == name)
-          if (const auto *value = std::get_if<const VmObject *>(&field.value))
+          if (const auto* value = std::get_if<const VmObject*>(&field.value))
             return *value;
     return nullptr;
   };
-  const auto floatField = [](const VmObject *object, std::string_view name) {
+  const auto floatField = [](const VmObject* object, std::string_view name) {
     if (object)
-      for (const auto &field : object->fields)
+      for (const auto& field : object->fields)
         if (field.name == name)
-          if (const auto *value = std::get_if<float>(&field.value))
+          if (const auto* value = std::get_if<float>(&field.value))
             return *value;
     return 0.0f;
   };
@@ -1047,13 +1036,13 @@ CarHudOptionalValues carHudOptionalValues(GameWorld &world,
   // FUN_00448430 copies tank_nitro from the chassis after updatevariables.
   // Read the same live loaded script field without inventing a tank capacity.
   values.nitro = carHudNitro(car.nitrous, floatField(car.chassisObject, "tank_nitro"));
-  auto *chassis = car.chassisObject ? world.findByReceiver(car.chassisObject) : nullptr;
-  const auto *runtime = chassis && chassis->carInstance ? chassis->carInstance.get() : &car;
+  auto* chassis = car.chassisObject ? world.findByReceiver(car.chassisObject) : nullptr;
+  const auto* runtime = chassis && chassis->carInstance ? chassis->carInstance.get() : &car;
   // FUN_00447b30 obtains dynodata from the engine installed in chassis slot 0x191.
-  const VmObject *dyno = nullptr;
-  for (const auto &slot : runtime->slots)
+  const VmObject* dyno = nullptr;
+  for (const auto& slot : runtime->slots)
     if (slot && slot->id == 0x191) {
-      if (auto *engine = world.nodeFor(slot->attachedNode.owner))
+      if (auto* engine = world.nodeFor(slot->attachedNode.owner))
         dyno = objectField(engine->scriptReceiver, "dynodata");
       break;
     }
@@ -1065,15 +1054,14 @@ CarHudOptionalValues carHudOptionalValues(GameWorld &world,
     turbo.range = floatField(dyno, "rpm_turbo_range");
     turbo.maximumPressure = floatField(dyno, "P_turbo_max");
     turbo.wastePressure = turbo.maximumPressure;
-    for (const auto &field : dyno->fields)
+    for (const auto& field : dyno->fields)
       if (field.name == "P_turbo_waste")
-        if (const auto *value = std::get_if<float>(&field.value))
+        if (const auto* value = std::get_if<float>(&field.value))
           turbo.wastePressure = *value;
     values.turbo = carHudTurboValue(turbo, std::fabs(car.displayedEngineSpeed * 9.549296379089355f));
   }
   return values;
 }
-
 
 bool carHudModel(ResourceWorld& resources, GameWorld& world, CarSeat& seat,
                  size_t index, uint32_t materialId, const std::array<float, 3>& position,

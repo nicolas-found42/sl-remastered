@@ -1,0 +1,19 @@
+0 wait splash 30
+0 keydown Escape
+0 wait menu 30
+0 keyup Escape
+0 clickn 0.656 0.265
+0 wait driving 60
+0 shot @run/ready.bmp
+0.1 keydown Up
+3 shot @run/straight-3s.bmp
+3.1 keydown Left
+3.8 shot @run/turn-3.8s.bmp
+4.1 keyup Left
+4.2 keyup Up
+4.3 keydown Down
+7 shot @run/braking-7s.bmp
+10 shot @run/stopping-10s.bmp
+10.1 keyup Down
+12 shot @run/stopped-12s.bmp
+12.1 quit

@@ -1,0 +1,24 @@
+# Car-body impact: reverse straight (+x) from spawn into the large stepped
+# object (t=6 r=3.05) at (-248.9, 10.5, 1036.5), then renewed impact.
+# Automatic gearbox: all-pedals release ~2.5 s drops gear to 0, then held
+# brake selects reverse (stock FUN_0044d720 automatic).
+0 wait splash 30
+0 keydown Escape
+0 wait menu 30
+0 keyup Escape
+0 clickn 0.65625 0.264583333
+0 wait driving 60
+0 shot @run/ready.bmp
+0.1 sdl_keydown Up
+2.0 sdl_keyup Up
+2.3 shot @run/forward.bmp
+5.0 sdl_keydown Down
+9.0 shot @run/rev1.bmp
+11.0 shot @run/rev2.bmp
+12.5 shot @run/tree-hit.bmp
+14.0 sdl_keyup Down
+16.0 shot @run/separated.bmp
+18.5 sdl_keydown Down
+21.5 shot @run/tree-hit2.bmp
+23.0 sdl_keyup Down
+23.5 quit

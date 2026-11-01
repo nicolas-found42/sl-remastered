@@ -1,0 +1,20 @@
+# Car-body impact: brief Right (z-) steer to ram the stepped prop near
+# (-318.2, 10.1, 1026.2), then continue into the x~-344 wall.
+0 wait splash 30
+0 keydown Escape
+0 wait menu 30
+0 keyup Escape
+0 clickn 0.65625 0.264583333
+0 wait driving 60
+0 shot @run/ready.bmp
+0.1 sdl_keydown Up
+3.3 sdl_keydown Right
+4.05 sdl_keyup Right
+4.8 shot @run/prop-approach.bmp
+5.4 shot @run/prop-hit.bmp
+6.3 shot @run/after-prop.bmp
+9 shot @run/mid.bmp
+12 shot @run/wall-approach.bmp
+15 sdl_keyup Up
+15.5 shot @run/end.bmp
+16.5 quit

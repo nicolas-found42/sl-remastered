@@ -989,6 +989,42 @@ findMethod(const TufaClass *&owner, const std::string &name,
   return nullptr;
 }
 
+// Declared type of a field-reference node (0x1b operand), e.g.
+// "Ljava.io.Hotkey;". Empty when the node is not a field reference.
+static std::string fieldDescriptorOf(const TufaClass *cls,
+                                     const TufaNode &node) {
+  if (!cls || !node.wide || node.operand >= cls->constants.size())
+    return {};
+  const auto &ref = cls->constants[node.operand];
+  if (ref.kind != 5 || ref.a >= cls->constants.size() ||
+      ref.b >= cls->constants.size())
+    return {};
+  const auto &pair = cls->constants[ref.b];
+  if (pair.kind != 7 || pair.b >= cls->constants.size() ||
+      cls->constants[pair.b].kind != 0)
+    return {};
+  return cls->constants[pair.b].text;
+}
+
+// Resolve the class named by a reference descriptor ("Lpkg.Class;"). Used to
+// give a null call receiver the static type of its local slot or field so the
+// method can still be looked up, as stock's evalName path does.
+static const TufaClass *
+classFromDescriptor(const std::string &descriptor,
+                    const std::vector<const TufaClass *> *classes,
+                    const std::vector<VmStaticFields> *staticFields,
+                    VmArena *arena, unsigned depth, const TufaClass *fallback) {
+  if (descriptor.size() >= 3 && descriptor.front() == 'L' &&
+      descriptor.back() == ';') {
+    std::string error;
+    if (const TufaClass *resolved = resolveClass(
+            descriptor.substr(1, descriptor.size() - 2), classes, staticFields,
+            arena, depth, error))
+      return resolved;
+  }
+  return fallback;
+}
+
 // The one native call path. The stack holds the arguments in descriptor order
 // with the argument count on top. Like stock's resolved-name path, the count
 // value is discarded and the descriptor decides how many arguments are taken.
@@ -2970,6 +3006,11 @@ static VmResult executeTree(VmExecutionState &execution, VmFrame &frame) {
       const TufaClass *target = cls;
       bool explicitClass = false;
       const VmObject *fieldReceiver = nullptr;
+      // Stock FUN_0041fbc0 tolerates a null receiver for a non-static method:
+      // it logs "instance method called with no instance", skips the body,
+      // and the caller keeps running. nullReceiver marks that case so the
+      // call is skipped after the method is resolved below.
+      bool nullReceiver = false;
       if (superCall) {
         if (!classes || locals.empty())
           return {false, int32_t{0}, "invalid superclass call"};
@@ -2983,18 +3024,25 @@ static VmResult executeTree(VmExecutionState &execution, VmFrame &frame) {
           return {false, int32_t{0}, "invalid stack receiver call"};
         const auto *value =
             std::get_if<const VmObject *>(&readValue(stack.back()));
-        if (!value || !*value || !(*value)->runtimeClass)
+        if (!value)
           return {false, int32_t{0}, "null stack receiver"};
-        fieldReceiver = *value;
-        target = fieldReceiver->runtimeClass;
-        bool owned = false;
-        for (const auto &object : arena->objects)
-          if (object.get() == fieldReceiver)
-            owned = true;
-        if (!owned || std::find(classes->begin(), classes->end(), target) ==
-                          classes->end())
-          return {false, int32_t{0}, "unsupported stack receiver"};
         stack.pop_back();
+        if (!*value || !(*value)->runtimeClass) {
+          // Null receiver: stock logs and skips the call (FUN_00420ff0 0x4025
+          // / FUN_0041fbc0); resolve the method against the current class.
+          nullReceiver = true;
+          target = cls;
+        } else {
+          fieldReceiver = *value;
+          target = fieldReceiver->runtimeClass;
+          bool owned = false;
+          for (const auto &object : arena->objects)
+            if (object.get() == fieldReceiver)
+              owned = true;
+          if (!owned || std::find(classes->begin(), classes->end(), target) ==
+                            classes->end())
+            return {false, int32_t{0}, "unsupported stack receiver"};
+        }
       } else if (tree[refPc].op == 0x11) {
         if (!tree[refPc].wide ||
             tree[refPc].operand < 1 || tree[refPc].operand > 8 ||
@@ -3036,12 +3084,25 @@ static VmResult executeTree(VmExecutionState &execution, VmFrame &frame) {
           if (!field.ok)
             return field;
           const auto *value = std::get_if<const VmObject *>(&field.value);
-          if (!value || !*value || !(*value)->runtimeClass)
+          if (!value)
             return {false, int32_t{0},
                     "null qualified receiver: node " + std::to_string(pc) +
                         " reference " + std::to_string(refPc)};
-          fieldReceiver = *value;
-          target = fieldReceiver->runtimeClass;
+          if (!*value || !(*value)->runtimeClass) {
+            nullReceiver = true;
+            const TufaNode &lastStep = tree[refPc + chain];
+            std::string declared;
+            if (lastStep.op == 0x1b)
+              declared = fieldDescriptorOf(cls, lastStep);
+            else if (lastStep.op == 0x01 &&
+                     lastStep.operand < localTypes.size())
+              declared = localTypes[lastStep.operand];
+            target = classFromDescriptor(declared, classes, staticFields,
+                                         arena, depth, cls);
+          } else {
+            fieldReceiver = *value;
+            target = fieldReceiver->runtimeClass;
+          }
           refPc += chain - 1;
         } else if (tree[refPc + 1].op == 0x19) {
           const auto &classRef = cls->constants[tree[refPc + 1].operand];
@@ -3065,23 +3126,31 @@ static VmResult executeTree(VmExecutionState &execution, VmFrame &frame) {
           if (index >= locals.size())
             return {false, int32_t{0}, "invalid qualified local"};
           const auto *value = std::get_if<const VmObject *>(&locals[index]);
-          if (!value || !*value || !(*value)->runtimeClass || !arena)
+          if (!value || !arena)
             return {false, int32_t{0}, "null or invalid qualified receiver"};
-          bool owned = false;
-          for (const auto &object : arena->objects)
-            if (object.get() == *value)
-              owned = true;
-          if (!owned)
-            return {false, int32_t{0}, "unowned qualified receiver"};
-          fieldReceiver = *value;
-          target = fieldReceiver->runtimeClass;
-          bool loaded = false;
-          for (const auto *candidate : *classes)
-            if (candidate == target)
-              loaded = true;
-          if (!loaded)
-            return {false, int32_t{0},
-                    "qualified receiver class not registered"};
+          if (!*value || !(*value)->runtimeClass) {
+            nullReceiver = true;
+            const std::string declared =
+                index < localTypes.size() ? localTypes[index] : "";
+            target = classFromDescriptor(declared, classes, staticFields,
+                                         arena, depth, cls);
+          } else {
+            bool owned = false;
+            for (const auto &object : arena->objects)
+              if (object.get() == *value)
+                owned = true;
+            if (!owned)
+              return {false, int32_t{0}, "unowned qualified receiver"};
+            fieldReceiver = *value;
+            target = fieldReceiver->runtimeClass;
+            bool loaded = false;
+            for (const auto *candidate : *classes)
+              if (candidate == target)
+                loaded = true;
+            if (!loaded)
+              return {false, int32_t{0},
+                      "qualified receiver class not registered"};
+          }
         } else if (tree[refPc + 1].op == 0x1b) {
           const std::vector<TufaNode> fieldTree{tree[refPc + 1],
                                                 {0x2b, 0, false, 0}};
@@ -3090,12 +3159,19 @@ static VmResult executeTree(VmExecutionState &execution, VmFrame &frame) {
           if (!field.ok)
             return field;
           const auto *value = std::get_if<const VmObject *>(&field.value);
-          if (!value || !*value)
+          if (!value)
             return {false, int32_t{0},
                     "null qualified receiver: node " + std::to_string(pc) +
                         " reference " + std::to_string(refPc)};
-          fieldReceiver = *value;
-          target = fieldReceiver->runtimeClass;
+          if (!*value) {
+            nullReceiver = true;
+            target = classFromDescriptor(
+                fieldDescriptorOf(cls, tree[refPc + 1]), classes,
+                staticFields, arena, depth, cls);
+          } else {
+            fieldReceiver = *value;
+            target = fieldReceiver->runtimeClass;
+          }
         } else
           return {false, int32_t{0}, "unsupported qualified call"};
         refPc += 2;
@@ -3338,8 +3414,8 @@ static VmResult executeTree(VmExecutionState &execution, VmFrame &frame) {
                       std::to_string(pc)};
         // FUN_004208e0 resolves an instance method again on the actual
         // receiver when it differs from the declaring class.
-        if (!explicitClass && !superCall && !(method->words[0] & 8) &&
-            classes) {
+        if (!nullReceiver && !explicitClass && !superCall &&
+            !(method->words[0] & 8) && classes) {
           const VmObject *receiver = fieldReceiver;
           if (!receiver && !locals.empty()) {
             if (const auto *self = std::get_if<const VmObject *>(&locals[0]))
@@ -3363,6 +3439,34 @@ static VmResult executeTree(VmExecutionState &execution, VmFrame &frame) {
       }
       if (explicitClass && !(method->words[0] & 8))
         return {false, int32_t{0}, "unsupported qualified instance method"};
+      if (nullReceiver && !(method->words[0] & 8)) {
+        // Stock FUN_0041fbc0: a null receiver for a non-static method only
+        // logs "Thread::callMethod: instance method called with no instance"
+        // and returns without running the body; the caller keeps running.
+        // Mirror that: drop the arguments and push the declared return type's
+        // default value.
+        std::vector<std::string> skipParams;
+        std::string skipReturn;
+        if (!nativeSignature(descriptor, skipParams, skipReturn))
+          return {false, int32_t{0},
+                  "unsupported call signature: " + target->name + "." + name +
+                      descriptor};
+        runlog::event(runlog::EventKind::Note,
+                      "vm: instance method called with no instance: %s.%s%s",
+                      target->name.c_str(), name.c_str(), descriptor.c_str());
+        if (stack.size() < skipParams.size() + 1)
+          return {false, int32_t{0}, "missing call arguments"};
+        stack.pop_back();
+        for (size_t i = 0; i < skipParams.size(); ++i)
+          stack.pop_back();
+        stack.emplace_back(skipReturn == "I"   ? VmValue{int32_t{0}}
+                           : skipReturn == "F" ? VmValue{0.0f}
+                           : skipReturn == "V" ? VmValue{std::monostate{}}
+                                               : VmValue{static_cast<const VmObject *>(
+                                                     nullptr)});
+        pc = refPc;
+        break;
+      }
       if (method->words[0] & 0x40) {
         const bool isStatic = (method->words[0] & 8) != 0;
         const VmObject *receiver = fieldReceiver;

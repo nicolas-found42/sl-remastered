@@ -7,22 +7,22 @@
 
 namespace physics {
 namespace {
-bool validate(const std::vector<BodyTree> &roots, std::string &error) {
-  std::vector<const Body *> seen;
-  for (const auto &tree : roots) {
+bool validate(const std::vector<BodyTree>& roots, std::string& error) {
+  std::vector<const Body*> seen;
+  for (const auto& tree : roots) {
     if (tree.empty()) {
       error = "multi-root: empty tree";
       return false;
     }
     for (size_t i = 0; i < tree.size(); ++i) {
-      const auto *b = tree[i];
+      const auto* b = tree[i];
       if (!b || !b->proto || b->current > 1 || (b->flags & kBodyBit10) ||
           std::find(seen.begin(), seen.end(), b) != seen.end()) {
         error = "multi-root: unsupported or duplicate body";
         return false;
       }
       if (i == 0) {
-        const char *why = nullptr;
+        const char* why = nullptr;
         if (!(b->flags & kBodyActive))
           why = "inactive";
         else if (b->proto->flags & kProtoStatic)
@@ -39,7 +39,8 @@ bool validate(const std::vector<BodyTree> &roots, std::string &error) {
                     char buffer[16];
                     std::snprintf(buffer, sizeof buffer, "%x", b->flags);
                     return std::string(buffer);
-                  }() + ", tree size " + std::to_string(tree.size()) + ")";
+                  }() +
+                  ", tree size " + std::to_string(tree.size()) + ")";
           return false;
         }
       } else if (!(b->flags & kBodyChild) || !b->attachment ||
@@ -62,11 +63,11 @@ bool validate(const std::vector<BodyTree> &roots, std::string &error) {
   return true;
 }
 struct Snapshot {
-  std::vector<Body *> pointers;
+  std::vector<Body*> pointers;
   std::vector<Body> bodies;
-  explicit Snapshot(const std::vector<BodyTree> &roots) {
-    for (const auto &tree : roots)
-      for (auto *body : tree) {
+  explicit Snapshot(const std::vector<BodyTree>& roots) {
+    for (const auto& tree : roots)
+      for (auto* body : tree) {
         pointers.push_back(body);
         bodies.push_back(*body);
       }
@@ -77,10 +78,10 @@ struct Snapshot {
   }
 };
 } // namespace
-bool discoverDynamicRootPairs(const World &world,
-                              const std::vector<BodyTree> &roots,
-                              std::vector<DynamicRootPair> &pairs,
-                              std::string &error) {
+bool discoverDynamicRootPairs(const World& world,
+                              const std::vector<BodyTree>& roots,
+                              std::vector<DynamicRootPair>& pairs,
+                              std::string& error) {
   if (roots.size() != world.bodies.size()) {
     error = "dynamic pairs: registration mismatch";
     return false;
@@ -95,18 +96,18 @@ bool discoverDynamicRootPairs(const World &world,
       return false;
     }
   }
-  const auto eligible = [](const Body &body) {
+  const auto eligible = [](const Body& body) {
     return !(body.flags & 0x20u) &&
            body.proto->shape.type != ShapeType::Empty &&
            !(body.state[body.current ^ 1].stepFlags & 2u);
   };
   std::vector<DynamicRootPair> found;
   for (size_t i = 0; i < roots.size(); ++i) {
-    Body *first = roots[i][0];
+    Body* first = roots[i][0];
     if (!eligible(*first))
       continue;
     for (size_t j = i + 1; j < roots.size(); ++j) {
-      Body *second = roots[j][0];
+      Body* second = roots[j][0];
       if (eligible(*second))
         found.push_back({first, second});
     }
@@ -115,21 +116,21 @@ bool discoverDynamicRootPairs(const World &world,
   error.clear();
   return true;
 }
-bool discoverDynamicLeafPairs(const BodyTree &first, const BodyTree &second,
-                              std::vector<DynamicRootPair> &pairs,
-                              std::string &error) {
+bool discoverDynamicLeafPairs(const BodyTree& first, const BodyTree& second,
+                              std::vector<DynamicRootPair>& pairs,
+                              std::string& error) {
   const std::vector<BodyTree> trees{first, second};
   if (!validate(trees, error))
     return false;
   std::vector<DynamicRootPair> found;
-  const auto usable = [](const Body &body) {
+  const auto usable = [](const Body& body) {
     return !(body.flags & 0x20u) &&
            body.proto->shape.type != ShapeType::Empty &&
            body.proto->shape.type != ShapeType::Hull;
   };
-  const auto validBounds = [](const Body &body) {
-    const auto &shape = body.proto->shape;
-    const auto &state = body.state[body.current ^ 1];
+  const auto validBounds = [](const Body& body) {
+    const auto& shape = body.proto->shape;
+    const auto& state = body.state[body.current ^ 1];
     if (!std::isfinite(shape.boundRadius) || shape.boundRadius < 0)
       return false;
     for (size_t i = 0; i < 3; ++i)
@@ -149,7 +150,7 @@ bool discoverDynamicLeafPairs(const BodyTree &first, const BodyTree &second,
       }
     return true;
   };
-  std::function<bool(Body *, Body *)> visit = [&](Body *a, Body *b) {
+  std::function<bool(Body*, Body*)> visit = [&](Body* a, Body* b) {
     if (!usable(*a) || !usable(*b))
       return true;
     if ((a->flags | b->flags) & 0x800u) {
@@ -160,10 +161,10 @@ bool discoverDynamicLeafPairs(const BodyTree &first, const BodyTree &second,
       error = "dynamic pairs: invalid predicted bounds";
       return false;
     }
-    const auto &as = a->state[a->current ^ 1];
-    const auto &bs = b->state[b->current ^ 1];
-    const auto &ap = a->proto->shape;
-    const auto &bp = b->proto->shape;
+    const auto& as = a->state[a->current ^ 1];
+    const auto& bs = b->state[b->current ^ 1];
+    const auto& ap = a->proto->shape;
+    const auto& bp = b->proto->shape;
     const Vec3 delta{as.pos[0] - bs.pos[0], as.pos[1] - bs.pos[1],
                      as.pos[2] - bs.pos[2]};
     const float radius = ap.boundRadius + bp.boundRadius + k::skin;
@@ -193,19 +194,19 @@ bool discoverDynamicLeafPairs(const BodyTree &first, const BodyTree &second,
       return false;
     }
     bool childrenA = false, childrenB = false;
-    for (Body *child : first)
+    for (Body* child : first)
       if (child->attachment && child->attachment->parent == a)
         childrenA = true;
-    for (Body *child : second)
+    for (Body* child : second)
       if (child->attachment && child->attachment->parent == b)
         childrenB = true;
     if (childrenA) {
-      for (Body *child : first)
+      for (Body* child : first)
         if (child->attachment && child->attachment->parent == a &&
             !visit(child, b))
           return false;
     } else if (childrenB) {
-      for (Body *child : second)
+      for (Body* child : second)
         if (child->attachment && child->attachment->parent == b &&
             !visit(a, child))
           return false;
@@ -219,8 +220,8 @@ bool discoverDynamicLeafPairs(const BodyTree &first, const BodyTree &second,
   error.clear();
   return true;
 }
-bool predictRootSet(const std::vector<BodyTree> &roots, float dt,
-                    std::string &error) {
+bool predictRootSet(const std::vector<BodyTree>& roots, float dt,
+                    std::string& error) {
   error.clear();
   if (!std::isfinite(dt) || dt <= 0 || !validate(roots, error)) {
     if (error.empty())
@@ -228,7 +229,7 @@ bool predictRootSet(const std::vector<BodyTree> &roots, float dt,
     return false;
   }
   Snapshot snapshot(roots);
-  for (const auto &tree : roots) {
+  for (const auto& tree : roots) {
     if (tree[0]->flags & kBodyAsleep)
       continue;
     const bool ok =
@@ -241,12 +242,12 @@ bool predictRootSet(const std::vector<BodyTree> &roots, float dt,
   }
   return true;
 }
-FreeBodyStepResult stepMultiRootWorld(World &world,
-                                      const std::vector<BodyTree> &roots,
-                                      float dt, const MultiRootWork &work,
-                                      std::string &error) {
+FreeBodyStepResult stepMultiRootWorld(World& world,
+                                      const std::vector<BodyTree>& roots,
+                                      float dt, const MultiRootWork& work,
+                                      std::string& error) {
   error.clear();
-  const auto fail = [&](const char *why) {
+  const auto fail = [&](const char* why) {
     error = why;
     return FreeBodyStepResult::Unsupported;
   };
@@ -270,25 +271,25 @@ FreeBodyStepResult stepMultiRootWorld(World &world,
   for (size_t i = 0; i < roots.size(); ++i)
     if (roots[i][0] != world.bodies[i])
       return fail("multi-root: registration mismatch");
-  const auto isRoot = [&](const Body *body) {
+  const auto isRoot = [&](const Body* body) {
     return body &&
            std::any_of(roots.begin(), roots.end(),
-                       [&](const BodyTree &tree) { return tree[0] == body; });
+                       [&](const BodyTree& tree) { return tree[0] == body; });
   };
-  const auto isRegistered = [&](const Body *body) {
-    for (const auto &tree : roots)
+  const auto isRegistered = [&](const Body* body) {
+    for (const auto& tree : roots)
       if (std::find(tree.begin(), tree.end(), body) != tree.end())
         return true;
     return false;
   };
-  const auto usableContactBody = [&](const Body *body) {
+  const auto usableContactBody = [&](const Body* body) {
     return body && body->proto &&
            (isRegistered(body) ||
             (!body->attachment && !(body->flags & kBodyChild) &&
              (body->proto->flags & kProtoStatic)));
   };
   for (size_t i = 0; i < work.suspensions.size(); ++i) {
-    const auto *s = work.suspensions[i];
+    const auto* s = work.suspensions[i];
     if (!s || !isRegistered(s->wheelBody) ||
         (s->contactBody && !usableContactBody(s->contactBody)) ||
         std::find(work.suspensions.begin(), work.suspensions.begin() + i, s) !=
@@ -300,10 +301,10 @@ FreeBodyStepResult stepMultiRootWorld(World &world,
   // skips sleeping trees in every pass, reading their resting pose. A
   // follow may therefore target an asleep body that is not a root -- e.g.
   // the chase camera of a sleeping car beside awake scene objects.
-  const auto followTargetUsable = [&](const Body *body) {
+  const auto followTargetUsable = [&](const Body* body) {
     return isRoot(body) || (body && (body->flags & kBodyAsleep) != 0);
   };
-  for (const auto &cb : work.cameraCallbacks) {
+  for (const auto& cb : work.cameraCallbacks) {
     if (!isRoot(cb.camera) || !followTargetUsable(cb.look) ||
         !followTargetUsable(cb.move) || !cb.smoothing ||
         !cb.input.otherBranchesInactive)
@@ -319,10 +320,10 @@ FreeBodyStepResult stepMultiRootWorld(World &world,
   Snapshot snapshot(roots);
   const World saved = world;
   std::vector<CameraFollowSmoothing> smoothing;
-  for (const auto &cb : work.cameraCallbacks)
+  for (const auto& cb : work.cameraCallbacks)
     smoothing.push_back(*cb.smoothing);
   std::vector<SuspensionUpdate> suspensions;
-  for (const auto *s : work.suspensions)
+  for (const auto* s : work.suspensions)
     suspensions.push_back(*s);
   const auto rollback = [&] {
     snapshot.restore();
@@ -334,11 +335,11 @@ FreeBodyStepResult stepMultiRootWorld(World &world,
   };
   world.pending = 0;
   world.lastStep = total;
-  for (const auto &tree : roots)
-    for (auto *body : tree) {
+  for (const auto& tree : roots)
+    for (auto* body : tree) {
       // 004a3f90 stops at any inactive, asleep or static ancestor.
       bool reachable = true;
-      for (const Body *p = body; p;
+      for (const Body* p = body; p;
            p = p->attachment ? p->attachment->parent : nullptr)
         if (!(p->flags & kBodyActive) || (p->flags & kBodyAsleep) ||
             (p->proto->flags & kProtoStatic)) {
@@ -350,7 +351,7 @@ FreeBodyStepResult stepMultiRootWorld(World &world,
         return fail("multi-root: force pass unsupported");
       }
     }
-  for (const auto &cb : work.cameraCallbacks) {
+  for (const auto& cb : work.cameraCallbacks) {
     auto input = cb.input;
     input.camera = cb.camera->state[cb.camera->current];
     input.lookTarget = cb.look->state[cb.look->current];
@@ -362,7 +363,7 @@ FreeBodyStepResult stepMultiRootWorld(World &world,
     }
     *cb.smoothing = follow->smoothing;
     addForce(*cb.camera, follow->force, nullptr);
-    auto &state = cb.camera->state[cb.camera->current];
+    auto& state = cb.camera->state[cb.camera->current];
     for (size_t i = 0; i < 3; ++i)
       state.torque[i] += follow->torque[i];
   }
@@ -378,7 +379,7 @@ FreeBodyStepResult stepMultiRootWorld(World &world,
   }
   // 004a5190 updates constraint objects after the first prediction and before
   // collision traversal. Newly selected wheel contacts feed the next step.
-  for (auto *s : work.suspensions) {
+  for (auto* s : work.suspensions) {
     s->timeStep = total;
     // 004a5190 runs the constraint update (00491100) only while the world is
     // unsettled; with no contact object and no joint nothing clears that flag.
@@ -396,13 +397,33 @@ FreeBodyStepResult stepMultiRootWorld(World &world,
     DirectContactWorld contactWorld{0, total};
     for (unsigned iteration = 0; iteration < 20; ++iteration) {
       std::vector<DirectContact> contacts;
+      // 004a5190 pass order: FUN_004a3900 solves the +0xb8 rows BEFORE
+      // 004a2d10 wakes bodies (all.c 121076-121087). The collector's update
+      // (the 004a2d10 port) clears the predicted-state flag inside
+      // gatherContacts, so remember the pre-gather flags here and restore
+      // them for the row solve; the wakes are re-applied below, before the
+      // +0x10 direct corrections that gate on the predicted flags.
+      std::vector<std::pair<Body*, uint32_t>> predictionFlags;
+      for (const auto& tree : roots)
+        for (auto* body : tree)
+          predictionFlags.push_back(
+              {body, body->state[body->current ^ 1].stepFlags});
       if (!work.gatherContacts(contacts, error)) {
         rollback();
         if (error.empty())
           error = "multi-root: incomplete collision traversal";
         return FreeBodyStepResult::Unsupported;
       }
-      for (const auto *s : work.suspensions) {
+      std::vector<Body*> woken;
+      for (const auto& entry : predictionFlags) {
+        Body* body = entry.first;
+        if ((entry.second & 1u) != 0 &&
+            (body->state[body->current ^ 1].stepFlags & 1u) == 0) {
+          woken.push_back(body);
+          body->state[body->current ^ 1].stepFlags = entry.second;
+        }
+      }
+      for (const auto* s : work.suspensions) {
         if (!isRegistered(s->wheelBody) ||
             (s->contactBody && !usableContactBody(s->contactBody))) {
           rollback();
@@ -414,10 +435,14 @@ FreeBodyStepResult stepMultiRootWorld(World &world,
         contact.correctionResult = 0;
       }
       bool corrected = false;
+      // Stock FUN_004a5190 repeats the outer loop only while FUN_004a2540/
+      // FUN_004a35d0 admit new pending impacts; retained resting rows that
+      // keep correcting do not extend it.
+      bool admittedNew = false;
       // Contacts that may be corrected in this pass (indexes into `contacts`).
       std::vector<bool> allowed(contacts.size(), true);
       if (work.onePendingContactPerRoot) {
-        const auto rootOf = [](const Body *body) {
+        const auto rootOf = [](const Body* body) {
           while (body && body->attachment && body->attachment->parent)
             body = body->attachment->parent;
           return body;
@@ -434,20 +459,23 @@ FreeBodyStepResult stepMultiRootWorld(World &world,
         std::stable_sort(order.begin(), order.end(), [&](size_t l, size_t r) {
           return contacts[l].separation < contacts[r].separation;
         });
-        std::set<const Body *> used;
+        std::set<const Body*> used;
         for (const size_t i : order) {
           // State 7 resting constraints do not own the one-pending-impact
           // mark (FUN_004a35d0 only consumes state 6).
-          if (contacts[i].resting) { allowed[i] = true; continue; }
+          if (contacts[i].resting) {
+            allowed[i] = true;
+            continue;
+          }
           // Static roots (the ground) never hold a pending mark: 0049b830
           // checks the dynamic body's root only.
-          const auto dynamicRoot = [&](const Body *body) -> const Body * {
-            const Body *r = rootOf(body);
+          const auto dynamicRoot = [&](const Body* body) -> const Body* {
+            const Body* r = rootOf(body);
             return r && r->proto && !(r->proto->flags & kProtoStatic) ? r
-                                                                        : nullptr;
+                                                                      : nullptr;
           };
-          const Body *first = dynamicRoot(contacts[i].a);
-          const Body *second = dynamicRoot(contacts[i].b);
+          const Body* first = dynamicRoot(contacts[i].a);
+          const Body* second = dynamicRoot(contacts[i].b);
           if ((first && used.count(first)) || (second && used.count(second)))
             continue;
           if (first)
@@ -461,22 +489,64 @@ FreeBodyStepResult stepMultiRootWorld(World &world,
       // applying any force. Pending impacts (004a35d0) follow this batch.
       for (const auto& contact : contacts) {
         if (!usableContactBody(contact.a) || !usableContactBody(contact.b)) {
-          rollback(); return fail("multi-root: unsupported contact body");
+          rollback();
+          return fail("multi-root: unsupported contact body");
         }
       }
       if (solveRestingContacts(contacts, contactWorld) < 0) {
-        rollback(); return fail("multi-root: resting contact unsupported");
+        rollback();
+        return fail("multi-root: resting contact unsupported");
       }
-      // FUN_004a5190 (121102-121136): retained direct contacts settle
-      // before 004a2540/004a35d0 admit and correct new pending impacts.
-      for (unsigned stage = 0; stage < 2; ++stage) {
+      // 004a2d10 wake band, applied after the row solve as in 004a5190: the
+      // predicted-state flags drop here, not before FUN_004a3900.
+      for (Body* body : woken)
+        body->state[body->current ^ 1].stepFlags &= ~1u;
+      // 004a5190 (all.c 121090-121110): when 004a2d10 cleared the settled
+      // flag, the +0x10 slot (00496fe0 -> 00496050) sweeps every retained
+      // record (5 < state < 8). Resting records receive the drive support
+      // ((0.03-sep)*10 force when the pair is not both predicted) and the
+      // positional shift; impact records are left to the 004a35d0 stage
+      // below. Stock contact records never enter the world+0xb8 row list,
+      // so FUN_004a3900 applies nothing for them: this sweep (or the
+      // 004a2540 stage when nothing was woken) is their single support
+      // application per step.
+      bool swept = false;
+      if (!woken.empty()) {
+        for (auto& contact : contacts) {
+          if (!contact.resting)
+            continue;
+          if (!usableContactBody(contact.a) || !usableContactBody(contact.b)) {
+            rollback();
+            return fail("multi-root: unsupported contact body");
+          }
+          const int result = correctDirectContact(contact, contactWorld);
+          if (result < 0) {
+            rollback();
+            return fail("multi-root: contact correction unsupported");
+          }
+          contact.processed = true;
+          contact.correctionResult = result;
+          swept |= result != 0;
+        }
+      }
+      // FUN_004a5190 (LAB_004a53cb, all.c 121096-121147): the pending stage
+      // (004a2540 for state 7, 004a35d0 for state 6) runs only while the
+      // settled flag is still set -- 004a2d10 woke nothing, or it woke
+      // bodies but the +0x10 sweep re-settled (sum == 0). When the sweep
+      // corrected something the pass jumps straight to re-prediction; the
+      // count-19 escape (004a53c5) forces the pending stage on the last
+      // pass. 004a35d0 admitting a new impact is the only result that
+      // clears the flag and extends the loop.
+      const bool runPending =
+          woken.empty() || !swept || iteration == 18;
+      for (unsigned stage = 0; stage < 2 && runPending; ++stage) {
         // The shipped count-19 escape (004a53c5 -> 004a53cb) still
         // discovers new impacts even when retained rows keep correcting.
         if (stage != 0 && corrected && iteration != 18)
           break;
         for (size_t contactIndex = 0; contactIndex < contacts.size();
              ++contactIndex) {
-          auto &contact = contacts[contactIndex];
+          auto& contact = contacts[contactIndex];
           if (contact.resting != (stage == 0) || contact.constraintRow ||
               !allowed[contactIndex])
             continue;
@@ -492,6 +562,8 @@ FreeBodyStepResult stepMultiRootWorld(World &world,
           }
           contact.correctionResult = result;
           corrected |= result != 0;
+          if (stage != 0)
+            admittedNew |= result != 0;
           contact.resting = true;
         }
       }
@@ -499,10 +571,10 @@ FreeBodyStepResult stepMultiRootWorld(World &world,
         work.finishContacts(contacts);
       // 004a3bc0 predicts only invalidated roots after each solve pass.
       size_t snapshotIndex = 0;
-      for (const auto &tree : roots) {
+      for (const auto& tree : roots) {
         const bool rootWasAsleep = snapshot.bodies[snapshotIndex].flags & kBodyAsleep;
         snapshotIndex += tree.size();
-        Body &root = *tree[0];
+        Body& root = *tree[0];
         if (root.flags & kBodyAsleep)
           continue;
         // FUN_004a7990 recursively wakes descendants. The direct corrector
@@ -518,13 +590,17 @@ FreeBodyStepResult stepMultiRootWorld(World &world,
           return fail("multi-root: repeat prediction unsupported");
         }
       }
-      if (!corrected)
+      // 004a5190 leaves the loop when the settled flag is set at pass end:
+      // 004a2d10 woke nothing this pass, or it woke bodies but the +0x10
+      // sweep corrected nothing (all.c 121090-121098, 121141-121147).
+      // 004a2540/004a35d0 admitting new pending impacts clears the flag.
+      if ((woken.empty() || !swept) && !admittedNew)
         break;
     }
   } else {
     // Suspension forces can invalidate prediction even without contact work.
-    for (const auto &tree : roots) {
-      Body &root = *tree[0];
+    for (const auto& tree : roots) {
+      Body& root = *tree[0];
       if (root.flags & kBodyAsleep)
         continue;
       if (root.state[root.current ^ 1].stepFlags & 1u)
@@ -538,8 +614,8 @@ FreeBodyStepResult stepMultiRootWorld(World &world,
     }
   }
   world.stepsDone += static_cast<uint32_t>(std::count_if(roots.begin(), roots.end(),
-      [](const BodyTree& tree) { return !(tree[0]->flags & kBodyAsleep); }));
-  for (const auto &tree : roots) {
+                                                         [](const BodyTree& tree) { return !(tree[0]->flags & kBodyAsleep); }));
+  for (const auto& tree : roots) {
     if (tree[0]->flags & kBodyAsleep)
       continue;
     if (tree.size() == 1) {

@@ -1,3 +1,4 @@
+#include <cstring>
 #include "world_model.hpp"
 #include "camera_device_factory.hpp"
 #include "camera_follow_force.hpp"
@@ -541,6 +542,23 @@ bool PlayerInputState::setSmooth(int32_t axis,
   target.factors[1] = values[2];
   target.factors[2] = values[3];
   target.factors[4] = values[4];
+  return true;
+}
+
+bool PlayerInputState::setSpeed(int32_t axis, float value) {
+  if (axis < 0 || static_cast<size_t>(axis) >= axes_.size())
+    return false;
+  axes_[static_cast<size_t>(axis)].factors[3] = value;
+  return true;
+}
+
+bool PlayerInputState::setForce(int32_t axis, float first, float second) {
+  if (axis < 0 || static_cast<size_t>(axis) >= axes_.size())
+    return false;
+  auto &target = axes_[static_cast<size_t>(axis)];
+  static_assert(sizeof(float) == sizeof(uint32_t));
+  std::memcpy(&target.remaining[0], &first, sizeof(float));
+  std::memcpy(&target.remaining[1], &second, sizeof(float));
   return true;
 }
 

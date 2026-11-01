@@ -482,7 +482,10 @@ int main() {
           seenReceiver == self);
     const auto noSelf = f.run(join({{literal(4), count(1)}, byLocal, {ret()}}),
                               {static_cast<const VmObject *>(nullptr)});
-    CHECK(!noSelf.ok && callCount == 0);
+    // Stock policy: null receiver skips the body; the native handler is not
+    // called and the declared return default (0 for I) is pushed.
+    CHECK(noSelf.ok && callCount == 0 &&
+          std::get<int32_t>(noSelf.value) == 0);
     const auto instanceViaClass =
         f.run(join({{literal(4), count(1)}, byClass(openName), {ret()}}));
     CHECK(!instanceViaClass.ok &&

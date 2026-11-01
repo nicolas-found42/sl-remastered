@@ -422,6 +422,7 @@ void testStackReceiverCall() {
   World w;
   auto &value = w.cls("test.Value");
   value.constructor().method("echo", "(I)I", 1, {node(0x01, true, 1), ret});
+  w.main.method("echo", "(I)I", 1, {literal(5), ret});
   w.start();
   const auto allocated = w.alloc("test.Value");
   const auto *receiver = asObject(allocated.value);
@@ -431,7 +432,42 @@ void testStackReceiverCall() {
       node(0x25, true, w.main.t("echo")), ret};
   const auto result = w.run(call, {receiver});
   CHECK(result.ok && std::get_if<int32_t>(&result.value) && std::get<int32_t>(result.value) == 37);
-  CHECK(!w.run(call, {static_cast<const VmObject *>(nullptr)}).ok);
+  // Stock FUN_0041fbc0 tolerates a null receiver: the call body is skipped
+  // and the declared return type's default value (0 for I) is pushed.
+  const auto nullResult = w.run(call, {static_cast<const VmObject *>(nullptr)});
+  CHECK(nullResult.ok && std::get_if<int32_t>(&nullResult.value) &&
+        std::get<int32_t>(nullResult.value) == 0);
+  if (!nullResult.ok) std::printf("null stack receiver: %s\n", nullResult.error.c_str());
+}
+
+void testNullReceiverSkipsBody() {
+  // Stock FUN_0041fbc0: a non-static method invoked with a null receiver only
+  // logs "Thread::callMethod: instance method called with no instance" and
+  // returns without running the body. Stock MultiChoice.unfocus relies on
+  // this (hkl.inactivate() with hkl == null on the options Back/cancel path).
+  World w;
+  w.main.method("ping", "()I", 1, {literal(7), ret});
+  const auto pingName = w.main.t("ping");
+  w.start();
+  const VmValue nullObject{static_cast<const VmObject *>(nullptr)};
+  // Qualified call whose receiver is a null local (Vector.indexOf's
+  // search.equals(...) shape): skipped, default I value 0 pushed.
+  const std::vector<TufaNode> localCall{
+      literal(0), node(0x24), node(0x11, true, 2), node(0x01, true, 1),
+      node(0x12, true, pingName), node(0x07, true, 27), ret};
+  const auto localResult = w.run(localCall, {nullObject, nullObject});
+  CHECK(localResult.ok && std::get_if<int32_t>(&localResult.value) &&
+        std::get<int32_t>(localResult.value) == 0);
+  if (!localResult.ok)
+    std::printf("null local receiver: %s\n", localResult.error.c_str());
+  // Stack receiver (op 0x25) holding null: same stock policy.
+  const std::vector<TufaNode> stackCall{
+      literal(0), node(0x01, true, 0), node(0x25, true, pingName), ret};
+  const auto stackResult = w.run(stackCall, {nullObject});
+  CHECK(stackResult.ok && std::get_if<int32_t>(&stackResult.value) &&
+        std::get<int32_t>(stackResult.value) == 0);
+  if (!stackResult.ok)
+    std::printf("null stack receiver: %s\n", stackResult.error.c_str());
 }
 
 void testLocalFieldMethodCall() {
@@ -464,7 +500,11 @@ void testLocalFieldMethodCall() {
   const auto staticResult = w.run(staticCall, {holderObject});
   CHECK(staticResult.ok && std::get<int32_t>(staticResult.value) == 91);
   fieldOf(holderObject, "value")->value = static_cast<const VmObject *>(nullptr);
-  CHECK(!w.run(call, {holderObject}).ok);
+  // Null field receiver: stock skips the call and pushes the default (0).
+  const auto nullField = w.run(call, {holderObject});
+  CHECK(nullField.ok && std::get_if<int32_t>(&nullField.value) &&
+        std::get<int32_t>(nullField.value) == 0);
+  if (!nullField.ok) std::printf("null field receiver: %s\n", nullField.error.c_str());
 }
 
 // Qualified-call receiver chain, deepest supported operands (case 0x24,
@@ -702,6 +742,7 @@ int main() {
   testNativeAllocation();
   testLocalArrayLength();
   testStackReceiverCall();
+  testNullReceiverSkipsBody();
   testLocalFieldMethodCall();
   testDeepQualifiedReceiverChain();
   testChainedStore();
