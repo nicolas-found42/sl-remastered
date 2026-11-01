@@ -43,10 +43,8 @@ int main() {
   assert(std::fabs(w.springForce - 5000) < 0.001f);
   assert(w.suspension.wheelBody == w.suspensionBody.get());
   assert(w.suspension.settings.force == w.springForce);
-  // FUN_0049f4d0 measures anchor -> contact point with the anchor taken from
-  // the wheel's predicted world state (the hub origin), so the anchor is not
-  // a wheel-local offset: it must be the wheel body origin.
-  assert(w.suspension.anchor == physics::Vec3({0, 0, 0}));
+  // FUN_00490dc0 stores half the probe length as the local anchor offset.
+  assert(w.suspension.anchor == physics::Vec3({0, 0.5f, 0}));
   auto transferred = std::move(wheels);
   assert(transferred[0]->suspension.wheelBody ==
          transferred[0]->suspensionBody.get());

@@ -367,6 +367,21 @@ FreeBodyStepResult stepMultiRootWorld(World& world,
     for (size_t i = 0; i < 3; ++i)
       state.torque[i] += follow->torque[i];
   }
+  // FUN_004a5190 calls the +0xc slot on world+0x9c before driving
+  // callbacks and prediction. The suspension table at 005f0fcc maps that
+  // slot to FUN_00491100; world+0xb8 contains different constraint objects.
+  // Newly selected wheel contacts feed the next step.
+  for (auto* s : work.suspensions) {
+    s->timeStep = total;
+    // Preserve the adapter's existing first-contact gate. Stock registration
+    // and initially airborne suspension lifecycle still need corroboration.
+    if (!s->contactBody)
+      continue;
+    if (updateSuspension(*s) == SuspensionUpdateResult::Unsupported) {
+      rollback();
+      return fail("multi-root: suspension update unsupported");
+    }
+  }
   if (work.beforePrediction && !work.beforePrediction(error)) {
     rollback();
     if (error.empty())
@@ -376,22 +391,6 @@ FreeBodyStepResult stepMultiRootWorld(World& world,
   if (!predictRootSet(roots, total, error)) {
     rollback();
     return FreeBodyStepResult::Unsupported;
-  }
-  // 004a5190 updates constraint objects after the first prediction and before
-  // collision traversal. Newly selected wheel contacts feed the next step.
-  for (auto* s : work.suspensions) {
-    s->timeStep = total;
-    // 004a5190 runs the constraint update (00491100) only while the world is
-    // unsettled; with no contact object and no joint nothing clears that flag.
-    // A suspension that has never selected a contact keeps the length it was
-    // built with, so its first collision pass sees that length rather than the
-    // extended one (the extension happens only after a contact was held).
-    if (!s->contactBody)
-      continue;
-    if (updateSuspension(*s) == SuspensionUpdateResult::Unsupported) {
-      rollback();
-      return fail("multi-root: suspension update unsupported");
-    }
   }
   if (work.gatherContacts) {
     DirectContactWorld contactWorld{0, total};
@@ -507,9 +506,7 @@ FreeBodyStepResult stepMultiRootWorld(World& world,
       // ((0.03-sep)*10 force when the pair is not both predicted) and the
       // positional shift; impact records are left to the 004a35d0 stage
       // below. Stock contact records never enter the world+0xb8 row list,
-      // so FUN_004a3900 applies nothing for them: this sweep (or the
-      // 004a2540 stage when nothing was woken) is their single support
-      // application per step.
+      // so FUN_004a3900 applies nothing for them in this adapter.
       bool swept = false;
       if (!woken.empty()) {
         for (auto& contact : contacts) {
@@ -530,7 +527,7 @@ FreeBodyStepResult stepMultiRootWorld(World& world,
         }
       }
       // FUN_004a5190 (LAB_004a53cb, all.c 121096-121147): the pending stage
-      // (004a2540 for state 7, 004a35d0 for state 6) runs only while the
+      // (004a2540 discovery, 004a35d0 state-6 correction) runs only while the
       // settled flag is still set -- 004a2d10 woke nothing, or it woke
       // bodies but the +0x10 sweep re-settled (sum == 0). When the sweep
       // corrected something the pass jumps straight to re-prediction; the
@@ -539,7 +536,7 @@ FreeBodyStepResult stepMultiRootWorld(World& world,
       // clears the flag and extends the loop.
       const bool runPending =
           woken.empty() || !swept || iteration == 18;
-      for (unsigned stage = 0; stage < 2 && runPending; ++stage) {
+      for (unsigned stage = 1; stage < 2 && runPending; ++stage) {
         // The shipped count-19 escape (004a53c5 -> 004a53cb) still
         // discovers new impacts even when retained rows keep correcting.
         if (stage != 0 && corrected && iteration != 18)

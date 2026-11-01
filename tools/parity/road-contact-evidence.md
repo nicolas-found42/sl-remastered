@@ -168,3 +168,48 @@ behind the awake-player caps and post-braking creep, with comparable stock
 application evidence. The existence of stock's count-20 escape alone does not
 prove the Port's frequency or response correct. Issue #16 cannot be closed
 from these Runs.
+
+
+## Unfinished continuation saved for merge (2026-11-01)
+
+This continuation is **not acceptance of issue #16**. It adds contact-correction,
+feature-transition, force/torque and suspension-input diagnostics. Stock
+FUN_00490dc0 (all.c 107172-107208) supports the positive half-probe local
+suspension anchor; FUN_004a5190 (121048-121071), with the suspension vtable
+at 005f0fcc, runs its +0xc update before driving callbacks and prediction.
+The pending-stage experiment omits the extra state-7 correction stage:
+FUN_004a2540 is discovery/queue processing (119236-119325), while
+FUN_004a35d0 explicitly corrects state 6. Its integrated behavior remains
+unfinished; the single-stage loop scaffolding is retained as diagnostic work.
+
+The latest `continuation/suspension-anchor` hidden native Run exits normally
+and preserves the source save, but reaches only 0.29 m/s and never reaches
+full processed brake input. It does not establish acceleration or braking.
+The corrected anchor exposes unloaded wheel probes while rim bodies hold the
+chassis high; the physical wheel mounting/reference chain needs investigation.
+`continuation/wheel-mount-observe` records the mount inputs. Do not replace a
+physical reference pose with the optional visual bone transform: stock
+getInfo(0x2f) returns both, and FUN_00472e80 uses the returned resource body
+for physical mounting (85639-85657), with the separate transform used for
+visual bones (85785-85789).
+
+Two rejected experiments are retained only in local analysis artifacts:
+rounded-cylinder road reach made the car settle, but special wheel road
+traversal uses FUN_004a0aa0 -> FUN_0049fa60 segment intersection rather than
+the generic FUN_0049f4d0 core query. That adapter/test change was reverted.
+The broad dynamic-feature reset was also reverted: FUN_004af970 can change
+features within a retained pair, so feature identity alone does not establish
+retirement. Its new regression was removed with the unsupported behavior.
+
+Earlier long Runs still show player-related solver caps and post-braking
+motion. Counts vary with wall-clock input scheduling and actual physics-time
+coverage; a zero-cap short Run does not prove resolution. All continuation
+Runs use hidden background presentation and skip intro loading. The latest
+long Run reached the menu at 0.603 s and driving at 3.586 s from process start.
+
+Final `tools/check.sh`: build succeeds; 122/123 CTests pass. The existing
+`object_world_step_unit` sleep assertion at line 220 remains red (speed
+0.251 m/s, seven pairs). The gate stops there. Focused wheel runtime, world
+step, contact geometry and game native tests pass. No parity rung is promoted.
+Local evidence is preserved outside the removed checkout under
+`/Users/nicolas/Documents/github/sl-remastered/local/issue-16-c202/`.
