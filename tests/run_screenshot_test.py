@@ -33,6 +33,12 @@ with tempfile.TemporaryDirectory(prefix='sl-shot-') as temp:
     assert len(dirs) == 1 and (dirs[0] / 'frame.bmp').read_bytes()[:2] == b'BM'
     assert str(dirs[0] / 'frame.bmp') in (dirs[0] / 'run.log').read_text()
 
+    # An overdue quit in the same frame must still honor the earlier shot.
+    result, base = run('shot-quit', '0 shot @run/final.bmp\n0 quit\n')
+    assert result.returncode == 0, result.stderr
+    dirs = [p for p in base.iterdir() if p.is_dir() and not p.is_symlink()]
+    assert len(dirs) == 1 and (dirs[0] / 'final.bmp').read_bytes()[:2] == b'BM'
+
     explicit = root / 'explicit.bmp'
     result, _ = run('explicit', f'0.5 shot {explicit}\n2 quit\n', no_log=True)
     assert result.returncode == 0 and explicit.read_bytes()[:2] == b'BM', result.stderr

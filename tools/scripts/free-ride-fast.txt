@@ -1,12 +1,13 @@
 # Rapid Free Ride uses normal UI input, not a synthetic scene or VM snapshot.
 # Waits pause the script clock only; simulation and loading keep running.
+0 wait splash 30
+0 keydown Escape
 0 wait menu 30
-0 move 420 127
-0.05 down
-0.1 up
-0.1 wait driving 60
-0.1 shot @run/driving-ready.bmp
-0.2 keydown Up
-2.2 keyup Up
-2.3 shot @run/driving-throttle.bmp
-2.4 quit
+0 keyup Escape
+0 click 420 127
+0 wait driving 60
+0 shot @run/driving-ready.bmp
+0.1 keydown Up
+2.1 keyup Up
+2.2 shot @run/driving-throttle.bmp
+2.3 quit

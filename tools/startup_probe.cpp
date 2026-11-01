@@ -1082,6 +1082,23 @@ static int probeMain(int argc, char** argv, const std::string& runDir) {
                 staticField("java.render.Frontend", "loadingScreen"));
             if (!section || !section->runtimeClass)
               return "no GameLogic.actualState";
+            if (condition == "splash") {
+              if (section->runtimeClass->name != "java.game.SplashScreen")
+                return "active state is not java.game.SplashScreen";
+              const auto* osd = fieldObject(objectField(section, "osd"));
+              const auto* value = staticField("java.io.Input", "AXIS_CANCEL");
+              const auto* cancel = value ? std::get_if<int32_t>(value) : nullptr;
+              if (!cancel || !osd)
+                return "no splash Osd/cancel axis";
+              // Stock SplashScreen.enter registers AXIS_CANCEL. Its first
+              // sample initializes the hotkey without firing: wait for a real
+              // neutral sample before issuing the normal Escape transition.
+              for (const auto& entry : hotkeys.entries)
+                if (entry.osd == osd && entry.key == *cancel &&
+                    (entry.flags & 1) && entry.initialized && entry.state == 0)
+                  return nullptr;
+              return "splash cancel hotkey not initialized neutral";
+            }
             if (!loading)
               return "no Frontend.loadingScreen";
             if (resources.isLoading())
@@ -1432,7 +1449,14 @@ static int probeMain(int argc, char** argv, const std::string& runDir) {
                               "startup probe: script quit at %.1fs", action.at);
                 return 0;
               }
-              if (action.verb == "move") {
+              if (action.verb == "click" && platformInput) {
+                const float x = std::stof(action.a), y = std::stof(action.b);
+                updateCursorPosition(x, y);
+                // Preserve both edges and their position across animation
+                // passes, just as captured platform mouse input does.
+                platformInput->captureMouseButton(SDL_BUTTON_LEFT, true, x, y);
+                platformInput->captureMouseButton(SDL_BUTTON_LEFT, false, x, y);
+              } else if (action.verb == "move") {
                 int width = 0, height = 0;
                 SDL_GetWindowSize(diagnosticWindow.get(), &width, &height);
                 const auto point = normalizeCursorPosition(
@@ -1574,6 +1598,9 @@ static int probeMain(int argc, char** argv, const std::string& runDir) {
                     return 2;
                   }
                 }
+                // Complete the requested render/capture before consuming
+                // another action, including an already-due quit or shot.
+                break;
               } else {
                 std::fprintf(stderr,
                              "startup probe: script: cannot perform %s\n",
