@@ -132,3 +132,7 @@ and normal throttle input completed. The final throttle screenshot was not emitt
 before the queued quit, so it is not claimed as evidence here. This verifies
 continued normal entry with the boundary checks, and makes no new Parity or
 Native-status claim.
+
+The repeated rapid/cold comparison and remaining acceptance limits are recorded
+in [rapid-benchmark-evidence.md](rapid-benchmark-evidence.md). This supersedes no
+Native or Parity status from the isolated-path evidence above.

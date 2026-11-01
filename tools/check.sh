@@ -27,6 +27,7 @@ python3 -I tests/stock_run_layout_test.py
 python3 -I tools/parity/test_compare_frames.py
 python3 -I tools/parity/test_save_snapshot.py
 python3 -I tools/parity/test_run_native.py
+python3 -I tools/parity/test_summarize_native_runs.py
 python3 -I tools/parity/test_diagnostic_data.py
 python3 -I tests/wine_disc_test.py
 python3 -I tools/startup_trace.py
