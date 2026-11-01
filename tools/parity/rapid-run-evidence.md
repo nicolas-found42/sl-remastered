@@ -136,3 +136,13 @@ Native-status claim.
 The repeated rapid/cold comparison and remaining acceptance limits are recorded
 in [rapid-benchmark-evidence.md](rapid-benchmark-evidence.md). This supersedes no
 Native or Parity status from the isolated-path evidence above.
+
+After merging integration `0751819`, the same positive scenario was repeated at
+`/tmp/sl-issue-2-review-merged-positive`: exit 0, no timeout, and an unchanged
+source fixture. Its process milestones were menu 3.462 seconds and driving
+6.035 seconds. These are compatibility observations, not benchmark samples.
+The full build completed; CTest passed 119 of 120 with the known
+`object_world_step_unit` failure, recorded in
+`/tmp/sl-issue-1/review-fix-ctest-fixtures.log`. The first gate attempt had nine
+additional missing-fixture failures before the worktree's read-only Installed
+Game link was supplied. The original integrated gate remains the final check.
