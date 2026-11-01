@@ -385,9 +385,27 @@ void SceneRaster3D::draw(ResourceWorld& resources, Render2D& renderer,
       const auto id = material.scyV3->textureIndices[0];
       if (id >= 0)
         mapped.baseTextureIndex = static_cast<uint32_t>(id);
-      if ((material.flags & 0x1000u)) {
+      // FUN_004be950 blends or alpha-tests from +0x28 bit 0 and the diffuse
+      // alpha; the VCA flag 0x1000 is a material type, not a transparency
+      // switch. Blend keeps depth testing but not depth writes (stock's
+      // transparent pass), the alpha test keeps the depth write.
+      const auto blend = sceneScyBlendState(material);
+      if (!blend) {
+        char message[96];
+        std::snprintf(message, sizeof message,
+                      "ground material flags=0x%x: non-finite diffuse alpha, "
+                      "draw skipped",
+                      material.flags);
+        note(message);
+        ++layerStats.skipped;
+        return;
+      }
+      if (*blend == SceneScyBlend::AlphaBlend) {
         mapped.state.blend = Raster3DBlend::AlphaBlend;
         mapped.state.depthWrite = false;
+      } else if (*blend == SceneScyBlend::AlphaTest) {
+        mapped.state.blend = Raster3DBlend::AlphaTest;
+        mapped.state.alphaRef = 0x38; // 004e6b50 writes reference 0x38
       }
     } else if (!raster3dScxMaterial(material, {true, true}, mapped, error)) {
       note(error);

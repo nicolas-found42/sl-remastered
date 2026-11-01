@@ -48,6 +48,35 @@ int main() {
     CHECK(sceneScyMaterialType(material) == 0x32u);
   }
   {
+    // FUN_004be950's blend/test branch, read from the stock executable at
+    // 004be950: +0x28 bit 0 or diffuse alpha < 0.99 selects the transparent
+    // branch; inside it +0x28 bit 0x800 selects the alpha test (reference 0x38)
+    // instead of blending. Bit 0x1000 selects the VCA material type and does
+    // not affect blending.
+    ScxMaterial material;
+    material.scyV3.emplace();
+    material.diffuse = {1, 1, 1, 1};
+    material.flags = 0x1840;
+    CHECK(sceneScyBlendState(material) == SceneScyBlend::Opaque);
+    material.flags = 0x1800;
+    CHECK(sceneScyBlendState(material) == SceneScyBlend::Opaque);
+    material.diffuse[3] = 0.5f;
+    CHECK(sceneScyBlendState(material) == SceneScyBlend::AlphaTest);
+    material.diffuse[3] = 1.0f;
+    material.flags = 0x1000;
+    CHECK(sceneScyBlendState(material) == SceneScyBlend::Opaque);
+    material.flags = 0x1001;
+    CHECK(sceneScyBlendState(material) == SceneScyBlend::AlphaBlend);
+    material.flags = 0;
+    material.diffuse[3] = 0.0f;
+    CHECK(sceneScyBlendState(material) == SceneScyBlend::AlphaBlend);
+    material.diffuse[3] = std::numeric_limits<float>::quiet_NaN();
+    CHECK(!sceneScyBlendState(material));
+    material.diffuse[3] = 1.0f;
+    material.scyV3.reset();
+    CHECK(!sceneScyBlendState(material));
+  }
+  {
     const std::array<CameraClipVertex, 3> triangle{{{{0, 0, 0, 1}, {0, 0}},
                                                     {{0, 0, 0, 2}, {1, 0}},
                                                     {{0, 0, 0, 3}, {0, 1}}}};
