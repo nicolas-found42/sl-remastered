@@ -1,0 +1,25 @@
+# Cold Rung 2: play intros, retain timed menu entry, then normal Career dialogs.
+# Script times start after startup video playback. Use a 120-second process timeout.
+13 wait menu 30
+13 clickn 0.390625 0.2
+13.5 sdl_type C
+13.7 sdl_type a
+13.9 sdl_type r
+14.1 sdl_type e
+14.3 sdl_type e
+14.5 sdl_type r
+14.7 sdl_type S
+14.9 sdl_type i
+15.1 sdl_type x
+15.4 shot @run/r2-name-typed.bmp
+15.6 clickn 0.4 0.7875
+16 shot @run/r2-character.bmp
+16.2 clickn 0.68 0.62
+16.7 shot @run/r2-character-changed.bmp
+16.9 clickn 0.5 0.783333
+19 shot @run/r2-garage-welcome.bmp
+19.1 clickn 0.5 0.7875
+21 shot @run/r2-garage.bmp
+21.1 clickn 0.234375 0.079167
+24 shot @run/r2-carlot.bmp
+25 quit

@@ -1,0 +1,17 @@
+# Source fixture must contain exactly the Career to select in the first row.
+# Normal LOAD CAREER entry; a copied save does not restore an in-memory scene.
+0 wait splash 30
+0 keydown Escape
+0 wait menu 30
+0 keyup Escape
+0 clickn 0.35 0.26
+1 shot @run/r2-load-list.bmp
+1.2 clickn 0.5 0.335
+2 shot @run/r2-load-selected.bmp
+2.2 clickn 0.4 0.7875
+6 shot @run/r2-loaded-welcome.bmp
+6.2 clickn 0.5 0.7875
+8 shot @run/r2-loaded-garage.bmp
+8.2 clickn 0.234375 0.079167
+11 shot @run/r2-loaded-carlot.bmp
+12 quit

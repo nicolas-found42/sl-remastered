@@ -213,6 +213,18 @@ int main() {
                                 finalState.vel[2] * finalState.vel[2]);
   std::printf("box: lowestY=%.3f finalY=%.3f vel=%.3f pairs=%zu\n", lowestY,
               finalState.pos[1], speed, maxObjectPairs);
+  const float invMass = boxRoot->proto->invMass;
+  const auto squaredLength = [](const physics::Vec3& value) {
+    return value[0] * value[0] + value[1] * value[1] + value[2] * value[2];
+  };
+  std::printf("box rest gate: omegaSq=%g scaledTorqueSq=%g scaledActivitySq=%g flags=0x%x\n",
+              squaredLength(finalState.omega), invMass * invMass * squaredLength(finalState.torque),
+              invMass * invMass * squaredLength(boxRoot->activity), boxRoot->flags);
+  const auto& previousState = boxRoot->state[boxRoot->current ^ 1];
+  std::printf("box support: lastForce=(%g,%g,%g) omega=(%g,%g,%g) activity=(%g,%g,%g)\n",
+              previousState.force[0], previousState.force[1], previousState.force[2],
+              finalState.omega[0], finalState.omega[1], finalState.omega[2],
+              boxRoot->activity[0], boxRoot->activity[1], boxRoot->activity[2]);
   assert(lowestY < spawnY - 1.0f);
   assert(finalState.pos[1] > 0.0f && finalState.pos[1] < 1.0f);
   assert(speed < 0.3f);

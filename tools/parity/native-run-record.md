@@ -14,7 +14,12 @@ The recorder defaults to a hidden, non-focusable native window and skips native
 intro movies. `--background` selects this explicitly; `--visible` opts into
 desktop presentation and the stock fullscreen setting. Background Runs do not
 prove desktop/fullscreen behavior. The visible normal cold route is
-`--cold-start --visible`.
+`--cold-start --visible` when the background environment override is unset.
+`SLRR_PROBE_BACKGROUND=1` forces background mode for the recorder and direct
+probe invocations, including when `--visible` is supplied. Background mode also
+suppresses host cursor changes. `tools/check.sh` defaults to this mode. Rapid
+scripts send Escape as soon as the splash hotkey is ready; rendering, captures,
+stock Script initialization and simulation continue.
 
 The default rapid script waits for the actual Main Menu, enters Free Ride through
 normal input, waits for the player's physical Car and presented camera, then

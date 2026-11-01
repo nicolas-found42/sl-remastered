@@ -1,0 +1,12 @@
+{
+  "artifact": "vm",
+  "path": "tests/vm_test.cpp",
+  "old_sha256": "0e7b0bc9f5d6de27d4c69566815ae47a7a7f9abf2df0fe31941852ce04a09b2d",
+  "new_sha256": "7953dc334b0448f0c2e52547afacad25633edff88c78a56f406d2137be793712",
+  "old_source_commit": "f090ebb",
+  "change_commit": "8c1c3f3",
+  "change": "Null-receiver regression now expects the stock default-zero result; native cases remain.",
+  "origin": "project-source",
+  "verification": "local/issue-6/resolution/vm-validation.log; vm_unit/native_vm_audit_unit/native_vm_dispatch_unit pass 3/3",
+  "native_status_changes": []
+}

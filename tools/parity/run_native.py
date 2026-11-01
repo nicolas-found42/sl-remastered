@@ -11,6 +11,9 @@ Modes:
   --cold-start -- same driving wait and post-ready throttle burst, but the
       menu is entered with the legacy fixed-timed click (10/13/13.5 s).
   --script FILE -- caller-supplied script instead of a bundled one.
+  --background -- render to a hidden window without desktop fullscreen/focus,
+      startup movies, or host cursor changes. Rapid scripts skip the splash
+      using Escape. SLRR_PROBE_BACKGROUND=1 also enables this for direct probes.
 
 Every run snapshots the --save fixture into a fresh data root (the fixture is
 never modified), copies the exact script that ran into the output directory,
@@ -130,17 +133,18 @@ def main():
             script.write_text(COLD_SCRIPT_TEXT)
         run_dir = out / 'run'
         run_dir.mkdir()
+        background = args.background or os.environ.get('SLRR_PROBE_BACKGROUND') == '1'
         cmd = [str(probe), '--init', '--renderer', '--loop',
-               '--background' if args.background else '--visible',
+               '--background' if background else '--visible',
                '--script', str(script), '--data-root', str(data),
                '--reference-root', str(reference), str(game)]
-        if args.background or not args.cold_start:
+        if background or not args.cold_start:
             cmd.append('--no-intro')
         metadata = {'probe': str(probe), 'probe_sha256': digest(probe), 'game': str(game),
                     'game_data': data_identity,
                     'reference_root': str(reference),
                     'mode': mode, 'script_source': script_label,
-                    'presentation': 'background' if args.background else 'visible',
+                    'presentation': 'background' if background else 'visible',
                     'script_path': str(script), 'script_sha256': digest(script),
                     'run_dir': str(run_dir),
                     'command': cmd, 'timeout_seconds': timeout,

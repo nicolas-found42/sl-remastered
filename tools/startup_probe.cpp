@@ -56,6 +56,9 @@ static int probeMain(int argc, char** argv, const std::string& runDir) {
        noInput = false, useRenderer = false;
   bool renderFrame = false, visibleWindow = false, backgroundWindow = false, runLoop = false,
        holdFrame = false, captureOnError = false, noIntro = false;
+  bool backgroundRequested = false;
+  const char* backgroundEnvironment = SDL_getenv("SLRR_PROBE_BACKGROUND");
+  const bool environmentBackground = backgroundEnvironment && std::string_view(backgroundEnvironment) == "1";
   std::vector<std::string> extraNames;
   for (int i = 1; i < argc; ++i) {
     const std::string arg = argv[i];
@@ -72,8 +75,10 @@ static int probeMain(int argc, char** argv, const std::string& runDir) {
       runLoop = true;
     else if (arg == "--visible" && !visibleWindow)
       visibleWindow = true;
-    else if (arg == "--background" && !backgroundWindow)
+    else if (arg == "--background" && !backgroundRequested) {
+      backgroundRequested = true;
       backgroundWindow = true;
+    }
     else if (arg == "--hold-frame" && !holdFrame)
       holdFrame = true;
     // Harness route switch, not a game behavior: the stock executable plays
@@ -130,10 +135,16 @@ static int probeMain(int argc, char** argv, const std::string& runDir) {
     std::fprintf(stderr, "startup probe: --background and --visible are mutually exclusive\n");
     return 2;
   }
+  if (environmentBackground) {
+    backgroundWindow = true;
+    visibleWindow = false;
+  }
   // Cocoa's SDL initialization can activate the process before any window
   // exists. The hidden/non-focusable window flags alone do not prevent it.
   if (backgroundWindow &&
-      !SDL_SetHintWithPriority(SDL_HINT_MAC_BACKGROUND_APP, "1", SDL_HINT_OVERRIDE)) {
+      (!SDL_SetHintWithPriority(SDL_HINT_MAC_BACKGROUND_APP, "1", SDL_HINT_OVERRIDE) ||
+       !SDL_SetHintWithPriority(SDL_HINT_WINDOW_ACTIVATE_WHEN_SHOWN, "0", SDL_HINT_OVERRIDE) ||
+       !SDL_SetHintWithPriority(SDL_HINT_WINDOW_ACTIVATE_WHEN_RAISED, "0", SDL_HINT_OVERRIDE))) {
     std::fprintf(stderr, "startup probe: cannot disable macOS foreground activation: %s\n", SDL_GetError());
     return 1;
   }
@@ -343,6 +354,10 @@ static int probeMain(int argc, char** argv, const std::string& runDir) {
         [&](int32_t device) { return platformInput->axisCount(device); });
     world.setCursorSelector([&](int32_t index, bool visible,
                                 std::string& cursorError) {
+      if (backgroundWindow) {
+        cursorError.clear();
+        return true;
+      }
       return platformInput->selectStockCursor(
           (std::filesystem::path(referenceRoot) / "raw/StreetLegal_Redline.bak.exe").string(),
           index, visible, cursorError);
@@ -439,7 +454,9 @@ static int probeMain(int argc, char** argv, const std::string& runDir) {
     gameState.video = videoPlayer.get();
     std::puts("renderer: awaiting stock Config display settings");
   }
-  if ((renderFrame || visibleWindow || backgroundWindow || runLoop) && !diagnosticRenderer) {
+  // An environment isolation policy also applies to probes without a window.
+  // It does not request rendering; explicit presentation still requires it.
+  if ((renderFrame || visibleWindow || backgroundRequested || runLoop) && !diagnosticRenderer) {
     std::fprintf(
         stderr,
         "startup probe: --frame, --loop, --visible and --background require --renderer\n");
@@ -955,6 +972,12 @@ static int probeMain(int argc, char** argv, const std::string& runDir) {
                           (SDL_GetWindowFlags(diagnosticWindow.get()) & SDL_WINDOW_HIDDEN) != 0,
                           (SDL_GetWindowFlags(diagnosticWindow.get()) & SDL_WINDOW_NOT_FOCUSABLE) != 0,
                           (SDL_GetWindowFlags(diagnosticWindow.get()) & SDL_WINDOW_FULLSCREEN) != 0);
+          if (backgroundWindow) {
+            const auto flags = SDL_GetWindowFlags(diagnosticWindow.get());
+            runlog::event(runlog::EventKind::Note, "background window: hidden=%d fullscreen=%d inputFocus=%d",
+                          (flags & SDL_WINDOW_HIDDEN) != 0, (flags & SDL_WINDOW_FULLSCREEN) != 0,
+                          (flags & SDL_WINDOW_INPUT_FOCUS) != 0);
+          }
           // Stock FUN_0058c700 plays the native startup videos after display
           // and sound initialization and before the script world runs
           // (all.c:302193). FUN_0054c170 skips an absent file; each
