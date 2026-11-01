@@ -496,6 +496,7 @@ bool CarWorldStepper::step(float seconds, std::string& error) {
     float selDiag[4][4] = {};           // length, distance, aux, stored distanceSquared
     float candA[4] = {};                // candidate wheel-local contact point y
     float candB[4] = {};                // candidate world contact point y
+    float steer[4] = {};                // applied steering angle per wheel (rad)
     // Worst contact by separation (most negative), for identifying bogus cores.
     float minSeparation = 0;
     physics::Vec3 minSepNormal{};
@@ -561,10 +562,13 @@ bool CarWorldStepper::step(float seconds, std::string& error) {
       }
       if (const auto angles = calculateCarSteeringAngles(instance, config))
         for (size_t i = 0; i < car->wheels.size(); ++i)
-          if (car->wheels[i] && car->wheels[i]->suspensionBody &&
-              !applyWheelSteeringOrientation(*car->wheels[i], (*angles)[i])) {
-            why = "car step: wheel steering orientation unsupported";
-            return false;
+          if (car->wheels[i] && car->wheels[i]->suspensionBody) {
+            if (!applyWheelSteeringOrientation(*car->wheels[i], (*angles)[i])) {
+              why = "car step: wheel steering orientation unsupported";
+              return false;
+            }
+            if (i < 4)
+              scratch.steer[i] = (*angles)[i];
           }
       std::string detail;
       if (!instance.advanceDrivetrain(
@@ -1461,7 +1465,8 @@ bool CarWorldStepper::step(float seconds, std::string& error) {
       const auto found = witnesses_.find(u.wheelBody);
       line.add("%s{\"i\":%zu,\"w\":%.1f,\"l\":%.3f,\"F\":%.0f,\"cb\":%d,"
                "\"wi\":%d,\"s\":\"%c\",\"t\":\"%c\",\"h\":%d,\"cy\":%.3f,"
-               "\"wy\":%.3f,\"sl\":%.2f,\"rj\":[%.3f,%.3f,%.3f,%.3f],"
+               "\"wy\":%.3f,\"sl\":%.2f,\"sa\":%.3f,\"ls\":%.3f,\"aa\":%.3f,"
+               "\"rj\":[%.3f,%.3f,%.3f,%.3f],"
                "\"ca\":%.3f,\"cbd\":%.3f}",
                firstWheel ? "" : ",", i, w->angularSpeed, u.length, u.force,
                u.contactBody ? 1 : 0,
@@ -1469,7 +1474,8 @@ bool CarWorldStepper::step(float seconds, std::string& error) {
                scratch.tire[i], scratch.hits[i], u.contactPoint[1],
                u.wheelBody ? u.wheelBody->state[u.wheelBody->current].pos[1]
                            : 0.0f,
-               w->slipMagnitude, scratch.selDiag[i][0], scratch.selDiag[i][1],
+               w->slipMagnitude, scratch.steer[i], w->longitudinalSlip,
+               w->slipAngle, scratch.selDiag[i][0], scratch.selDiag[i][1],
                scratch.selDiag[i][2], scratch.selDiag[i][3], scratch.candA[i],
                scratch.candB[i]);
       firstWheel = false;
