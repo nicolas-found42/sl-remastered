@@ -21,6 +21,7 @@ python3 -I tests/native_run_paths_test.py
 python3 -I tests/run_log_test.py
 python3 -I tests/run_screenshot_test.py
 python3 -I tests/diagnose_merge_test.py
+python3 -I tests/cartrace_check_test.py
 python3 -I tests/replay_test.py
 python3 -I tests/oracle_controller_test.py
 python3 -I tests/stock_run_layout_test.py

@@ -69,9 +69,11 @@ The subsequent keydown and keyup remain ordered and 2.106 wall seconds apart,
 rather than collapsing at the end of loading. The Car reaches 6.15 m/s.
 `cold` reaches 7.37 m/s with a 1.901-second observed hold. The frame counter advances through the waits while stock menu and loading
 transitions complete. The scheduler and physics retain their existing real
-clocks. No artificial disk-loading delay was injected. `cartrace_check.py` passes the final
-rapid and cold traces. This check is limited to speed steps, falling, finite
-values, and diagnostic tags. It does not establish complete collision Parity.
+clocks. No artificial disk-loading delay was injected. The then-current `cartrace_check.py` passed the final
+rapid and cold traces for its implemented speed-step and falling checks.
+Correction (ticket #5): it read `tags` while production emits `anom`, and did
+not reject nonfinite numbers. Its earlier pass did not validate diagnostic
+anomalies or finite values; the corrected checker rejects recorded iteration caps. It does not establish complete collision Parity.
 
 These Runs are outcome checks, not a new performance benchmark. A full build
 ran concurrently with some samples, elapsed-time random seeds differed, and
@@ -79,10 +81,14 @@ no speedup is claimed from these timings.
 
 ## Limits and checks
 
-The throttle screenshot's HUD still shows zero speed and about 1000 RPM despite
-Cartrace motion. The camera renders the player Car and road, allowing observation of driving,
-but frames the Car close and partly offscreen from the side. HUD response and
-stock Chase Camera framing remain explicit visual Gaps. Readiness and controlled chassis
+Correction (ticket #5): the earlier reading of the HUD as zero speed and about
+1000 RPM was wrong. The six-digit `000000` is the odometer; `x1000` is the
+tachometer unit caption. Those markings do not establish frozen speed or RPM.
+The later fixed-seed benchmark image shows `029` km/h and gear 2, consistent
+with its roughly 8.1 m/s Cartrace. This corrects the interpretation, not the
+original Run provenance, and does not establish complete HUD Parity. The camera renders the player Car and road, allowing observation of driving,
+but frames the Car close and partly offscreen from the side. Complete dynamic HUD behavior and
+stock Chase Camera framing remain unverified visual behavior. Readiness and controlled chassis
 motion do not establish HUD Parity, full driving fidelity, or any Career Rung.
 No stock image or frame-by-frame comparison was performed.
 

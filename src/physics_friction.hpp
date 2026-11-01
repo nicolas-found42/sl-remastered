@@ -19,6 +19,7 @@ struct DirectContact {
   float normalForce = 0; // +0xa4, force (not impact impulse)
   bool constraintRow = false; // explicitly registered in world+0xb8, not contact list+0x118
   bool processed = false; // transient: selected by the pending-contact pass
+  int correctionResult = 0; // transient: actual direct-corrector return in this pass
 };
 struct DirectContactWorld { uint32_t corrections = 0; float step = 0; }; // world +0x14, +0x0c
 // -1: unsupported; otherwise the original routine's result (0, 1 or 2).
