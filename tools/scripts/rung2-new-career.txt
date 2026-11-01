@@ -1,22 +1,31 @@
-# Timed input for build/startup_probe --script. Seconds from the start of the frame loop.
-# Rung 2: reach the main menu, NEW CAREER, type a name, confirm, observe the save flow.
-8 move 320 240
-8.5 shot @run/r2-menu.bmp
-9.5 move 250 96
-10 shot @run/r2-hole-hover.bmp
-10.5 down
-11 up
-13 shot @run/r2-name-dialog.bmp
-14 sdl_type Tester
-15 shot @run/r2-name-typed.bmp
-16 move 256 378
-16.5 down
-17 up
-18 shot @run/r2-after-ok.bmp
-19 move 318 376
-19.5 down
-20 up
-23 shot @run/r2-char-ok-3s.bmp
-28 shot @run/r2-char-ok-8s.bmp
-38 shot @run/r2-char-ok-18s.bmp
-45 quit
+# Rung 2: NEW CAREER through the real dialogs on the rapid path.
+# wait splash cancels the splash with the stock hotkey, wait menu returns when
+# the stock main menu is ready, then the click opens the StringRequesterDialog.
+# sdl_type is paced one character per line: Osd.animate consumes one Input.lastKey
+# per frame, so a same-tick burst is partly dropped (see decisions 2026-11-01).
+0 wait splash 30
+0 keydown Escape
+0 wait menu 30
+0 keyup Escape
+0 clickn 0.390625 0.2
+0.5 sdl_type C
+0.7 sdl_type a
+0.9 sdl_type r
+1.1 sdl_type e
+1.3 sdl_type e
+1.5 sdl_type r
+1.7 sdl_type S
+1.9 sdl_type i
+2.1 sdl_type x
+2.4 shot @run/r2-name-typed.bmp
+2.6 clickn 0.4 0.7875
+3.0 shot @run/r2-character.bmp
+3.2 clickn 0.68 0.62
+3.7 shot @run/r2-character-changed.bmp
+3.9 clickn 0.5 0.783333
+6 shot @run/r2-garage-welcome.bmp
+6.1 clickn 0.5 0.7875
+8 shot @run/r2-garage.bmp
+8.1 clickn 0.234375 0.079167
+11 shot @run/r2-carlot.bmp
+12 quit
