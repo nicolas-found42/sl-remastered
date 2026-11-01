@@ -38,6 +38,10 @@ public:
 	// Scripted input for automated runs. Folded into sample() beside the real SDL state.
 	void setSyntheticMouseButton(uint8_t sdlButton, bool down);
 	void setSyntheticKey(uint32_t scancode, bool down);
+	// Real or scripted key held in the current frame. Stock startup checks
+	// GetAsyncKeyState(VK_ESCAPE) with no device axis, so the intro skip reads
+	// key state directly rather than a ControlSet mapping.
+	bool keyHeld(uint32_t scancode) const;
 	// Uses the actual embedded stock cursor image; only cursor index zero is
 	// decoded so far. Restores the previous SDL cursor on teardown.
 	bool selectStockCursor(const std::filesystem::path& exe, int32_t index,

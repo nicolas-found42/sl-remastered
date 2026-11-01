@@ -298,6 +298,15 @@ void PlatformInput::setSyntheticKey(uint32_t scancode, bool down) {
 	else syntheticKeys_.erase(scancode);
 }
 
+bool PlatformInput::keyHeld(uint32_t scancode) const {
+	{
+		std::lock_guard<std::mutex> lock(keyMutex_);
+		if (frameKeys_.count(scancode)) return true;
+	}
+	std::lock_guard<std::mutex> lock(syntheticMutex_);
+	return syntheticKeys_.count(scancode) != 0;
+}
+
 std::optional<int32_t> PlatformInput::type(int32_t device, int32_t axis) const {
 	if (device < 0 || static_cast<size_t>(device) >= kinds_.size() || axis < 0) return std::nullopt;
 	if (kinds_[static_cast<size_t>(device)] == Kind::Keyboard) return 0;

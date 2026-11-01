@@ -1,0 +1,6 @@
+0 wait splash 120
+0 keydown Escape
+0 wait menu 30
+0 keyup Escape
+2.0 shot @run/intro-skip-menu.bmp
+2.5 quit

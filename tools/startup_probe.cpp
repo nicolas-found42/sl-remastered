@@ -55,7 +55,7 @@ static int probeMain(int argc, char** argv, const std::string& runDir) {
   bool constructor = false, initProbe = false, haveRoot = false,
        noInput = false, useRenderer = false;
   bool renderFrame = false, visibleWindow = false, runLoop = false,
-       holdFrame = false, captureOnError = false;
+       holdFrame = false, captureOnError = false, noIntro = false;
   std::vector<std::string> extraNames;
   for (int i = 1; i < argc; ++i) {
     const std::string arg = argv[i];
@@ -74,6 +74,11 @@ static int probeMain(int argc, char** argv, const std::string& runDir) {
       visibleWindow = true;
     else if (arg == "--hold-frame" && !holdFrame)
       holdFrame = true;
+    // Harness route switch, not a game behavior: the stock executable plays
+    // its native startup videos on every launch (FUN_0058c700). The rapid
+    // iteration route may opt out; the cold-start route must not.
+    else if (arg == "--no-intro" && !noIntro)
+      noIntro = true;
     else if (arg == "--capture-frame" && captureFrame.empty() && i + 1 < argc)
       captureFrame = argv[++i];
     else if (arg == "--capture-on-error" && !captureOnError)
@@ -893,6 +898,95 @@ static int probeMain(int argc, char** argv, const std::string& runDir) {
             gameState.displayModes->push_back(requested);
           displaySize.width = requested[0]; displaySize.height = requested[1];
           recordDisplay("startup-applied", requested, isWindowed);
+          // Stock FUN_0058c700 plays the native startup videos after display
+          // and sound initialization and before the script world runs
+          // (all.c:302193). FUN_0054c170 skips an absent file; each
+          // FUN_0055c470 playback blocks and checks GetAsyncKeyState(VK_ESCAPE)
+          // on every iteration. Audio streams are present in the 2005 files
+          // but are not rendered here: device audio is separate scope.
+          if (!noIntro && visibleWindow && runLoop && videoPlayer) {
+            // Stock checks GetAsyncKeyState(VK_ESCAPE) with no press edge, so a
+            // key already held when playback starts skips it on the first
+            // iteration. A script whose first action is "0 keydown Escape"
+            // models exactly that held-from-launch state; without it the
+            // intros play to their end like the stock executable.
+            bool launchEscapeHeld = false;
+            if (!scriptPath.empty()) {
+              std::ifstream scripted(scriptPath);
+              for (std::string line; std::getline(scripted, line);) {
+                std::istringstream fields(line);
+                double at = 0;
+                std::string verb, key;
+                if (!(fields >> at >> verb) || at > 0.0) continue;
+                std::getline(fields >> std::ws, key);
+                if (verb == "keydown" && key == "Escape") {
+                  platformInput->setSyntheticKey(SDL_SCANCODE_ESCAPE, true);
+                  launchEscapeHeld = true;
+                  break;
+                }
+                if (verb == "keyup" && key == "Escape") break;
+              }
+            }
+            for (const char* intro :
+                 {"data\\fmv\\Activision.avi", "data\\fmv\\Invictus.avi",
+                  "data\\fmv\\StreetLegal.avi"}) {
+              const auto introOrigin = std::chrono::steady_clock::now();
+              if (!videoPlayer->open(intro, false, 0.0, error)) {
+                if (error.find("file not found") != std::string::npos) {
+                  runlog::event(runlog::EventKind::Note,
+                                "startup video %s absent; skipped", intro);
+                  error.clear();
+                  continue;
+                }
+                runlog::event(runlog::EventKind::Error,
+                              "startup video open: %s", error.c_str());
+                std::fprintf(stderr, "startup probe: startup video: %s\n",
+                             error.c_str());
+                return 1;
+              }
+              // open() anchored the timeline at 0.0; elapsed playback seconds
+              // are the same monotonic clock stock's DirectShow loop uses.
+              bool skipped = false;
+              while (videoPlayer->playing()) {
+                SDL_PumpEvents();
+                // The probe records key state in beginFrame; stock reads
+                // GetAsyncKeyState with no ControlSet mapping, so both the
+                // real and scripted key state count here.
+                platformInput->beginFrame();
+                const bool* keys = SDL_GetKeyboardState(nullptr);
+                if ((keys && keys[SDL_SCANCODE_ESCAPE]) ||
+                    platformInput->keyHeld(SDL_SCANCODE_ESCAPE)) {
+                  skipped = true;
+                  // Stock breaks the DirectShow loop on the same key state.
+                  runlog::event(runlog::EventKind::Note,
+                                "startup video %s skipped", intro);
+                  break;
+                }
+                const double seconds = std::chrono::duration<double>(
+                                           std::chrono::steady_clock::now() -
+                                           introOrigin)
+                                           .count();
+                if (!videoPlayer->draw(seconds, error) ||
+                    !diagnosticRenderer->present(error)) {
+                  runlog::event(runlog::EventKind::Error,
+                                "startup video draw: %s", error.c_str());
+                  std::fprintf(stderr, "startup probe: startup video: %s\n",
+                               error.c_str());
+                  return 1;
+                }
+                SDL_Delay(5);
+              }
+              videoPlayer->close();
+              if (!skipped) {
+                runlog::event(runlog::EventKind::Note,
+                              "startup video %s finished", intro);
+              }
+            }
+            // The held-at-launch model covers the intro videos only; the
+            // script's own keydown/keyup actions own the state afterwards.
+            if (launchEscapeHeld)
+              platformInput->setSyntheticKey(SDL_SCANCODE_ESCAPE, false);
+          }
           gameState.changeDisplayMode = [&, isWindowed, recordDisplay](PlatformDisplayMode mode, std::string& detail) {
             // FUN_004b9810 refuses changes in an already-windowed renderer;
             // the stock OptionsDialog still saves its requested Config fields.

@@ -1,0 +1,6 @@
+0 wait splash 120
+0.3 shot @run/intro-splash.bmp
+0.5 wait menu 60
+0.6 shot @run/intro-menu.bmp
+1.1 shot @run/intro-menu-later.bmp
+1.2 quit
