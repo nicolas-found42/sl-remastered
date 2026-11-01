@@ -108,6 +108,41 @@ checks or copy the proprietary corpus to bypass that refusal. Direct Run-log int
 pass for error, SIGSEGV, abort, throw, SIGTERM, SIGKILL, and partial Runs.
 The existing screenshot safety checks and ten replay tests also pass.
 
+## Writable save boundary review correction
+
+Incremental review found that `data/save` could point outside the writable data
+root while `FileState` treated its canonical target as trusted. The public
+`FileState` regression in `tests/file_state_test.cpp` reproduced deletion and
+truncation of a disposable Installed Game sentinel before the fix. It now
+checks refusal and preserved bytes for delete, copy, move and write-open through
+both save-root and nested symlinks into disposable game/reference trees.
+
+`tests/native_run_paths_test.py` exercises the native process boundary: unsafe
+save-root and nested save-file links refuse before recorder output is created.
+Contained save links still reach normal startup. Duplicate `--data-root` flags
+also refuse before recorder output; previously preflight used the last value
+while the main parser used the first. Diagnostic wording is not an assertion.
+
+The isolated positive Run at `/tmp/sl-issue-2-review-positive` used the existing
+bundled rapid Free Ride scenario through `run_native.py`, unchanged stock data
+and the same source fixture named above. It exited 0 without timing out and
+recorded `source_save_unchanged: true`. Menu readiness was observed at loop
+3.066 seconds and driving readiness at 5.874 seconds; the driving-ready screenshot
+and normal throttle input completed. The final throttle screenshot was not emitted
+before the queued quit, so it is not claimed as evidence here. This verifies
+continued normal entry with the boundary checks, and makes no new Parity or
+Native-status claim.
+
 The repeated rapid/cold comparison and remaining acceptance limits are recorded
 in [rapid-benchmark-evidence.md](rapid-benchmark-evidence.md). This supersedes no
 Native or Parity status from the isolated-path evidence above.
+
+After merging integration `0751819`, the same positive scenario was repeated at
+`/tmp/sl-issue-2-review-merged-positive`: exit 0, no timeout, and an unchanged
+source fixture. Its process milestones were menu 3.462 seconds and driving
+6.035 seconds. These are compatibility observations, not benchmark samples.
+The full build completed; CTest passed 119 of 120 with the known
+`object_world_step_unit` failure, recorded in
+`/tmp/sl-issue-1/review-fix-ctest-fixtures.log`. The first gate attempt had nine
+additional missing-fixture failures before the worktree's read-only Installed
+Game link was supplied. The original integrated gate remains the final check.
