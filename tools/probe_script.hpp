@@ -12,6 +12,7 @@
 
 // Only the input schedule pauses at a wait; simulation and loading keep running.
 // wait splash observes the active splash cancel hotkey ready for normal Escape.
+// clickn/moven use fractions of the current window (0..1); pixel verbs retain their meaning.
 // click X Y queues both mouse edges at that position across animation passes.
 class ProbeScript {
 public:
@@ -55,11 +56,15 @@ public:
           return false;
         }
       } else if (action.verb == "move" || action.verb == "sdl_move" ||
-                 action.verb == "click") {
+                 action.verb == "click" || action.verb == "clickn" || action.verb == "moven") {
         float x = 0, y = 0;
         if (!(fields >> x >> y) || !std::isfinite(x) || !std::isfinite(y)) {
           error = action.verb + " expects X Y at line " +
                   std::to_string(lineNumber);
+          return false;
+        }
+        if ((action.verb == "clickn" || action.verb == "moven") && (x < 0 || x > 1 || y < 0 || y > 1)) {
+          error = action.verb + " expects window fractions in [0,1] at line " + std::to_string(lineNumber);
           return false;
         }
         action.a = std::to_string(x);
@@ -67,10 +72,10 @@ public:
       } else if (action.verb == "wait") {
         fields >> action.a >> action.b;
         std::istringstream timeout(action.b);
-        if ((action.a != "splash" && action.a != "menu" && action.a != "driving") ||
+        if ((action.a != "splash" && action.a != "menu" && action.a != "options" && action.a != "video" && action.a != "driving") ||
             !(timeout >> action.timeout) || !std::isfinite(action.timeout) ||
             action.timeout <= 0 || !(timeout >> std::ws).eof()) {
-          error = "expected wait splash|menu|driving <positive timeout> at line " +
+          error = "expected wait splash|menu|options|video|driving <positive timeout> at line " +
                   std::to_string(lineNumber);
           return false;
         }

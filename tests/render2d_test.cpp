@@ -35,6 +35,25 @@ int main() {
 	const bool ok = match(1, 1, 255, 0, 0, 255) && match(2, 1, 0, 0, 255, 255) && match(0, 0, 0, 0, 255, 255);
 	SDL_UnlockSurface(surface.get());
 	if (!ok) return 1;
+  // A fullscreen desktop can have a different aspect ratio from the stock
+  // content resolution. Verify rendered pixels, including the presentation bars.
+  Surface wide(SDL_CreateSurface(8, 4, SDL_PIXELFORMAT_RGBA32), SDL_DestroySurface);
+  auto letterbox = Render2D::forSurface(wide.get(), error);
+  if (!letterbox || !letterbox->presentation(2, 2, error) ||
+      !letterbox->outputSize(width, height, error) || width != 2 || height != 2) return 1;
+  const uint8_t green[] = {0, 255, 0, 255};
+  const auto greenTexture = letterbox->texture(1, 1, green, sizeof green, error);
+  if (!greenTexture || !letterbox->clear(0, 0, 0, 255, error) ||
+      !letterbox->draw(*greenTexture, {0, 0, 2, 2}, error) || !letterbox->present(error)) return 1;
+  if (!SDL_LockSurface(wide.get())) return 1;
+  bool letterboxPixels = true;
+  for (int y = 0; y < 4; ++y) for (int x = 0; x < 8; ++x) {
+    const auto* pixel = static_cast<const uint8_t*>(wide->pixels) + y * wide->pitch + x * 4;
+    const uint8_t expectedGreen = x >= 2 && x <= 5 ? 255 : 0;
+    if (pixel[0] != 0 || pixel[1] != expectedGreen || pixel[2] != 0) letterboxPixels = false;
+  }
+  SDL_UnlockSurface(wide.get());
+  if (!letterboxPixels) return 1;
 	std::puts("render2d pixels: ok");
 	return 0;
 }

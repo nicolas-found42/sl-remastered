@@ -1,0 +1,10 @@
+0 wait splash 30
+0 keydown Escape
+0 wait menu 30
+0 keyup Escape
+0 clickn 0.62 0.4125
+0 wait options 5
+0 clickn 0.5 0.2
+0 wait video 5
+0 shot @run/video.bmp
+0.1 quit

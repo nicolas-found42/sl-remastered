@@ -45,7 +45,7 @@ RAPID_SCRIPT = TOOLS_DIR / 'scripts' / 'free-ride-fast.txt'
 COLD_SCRIPT_TEXT = (
     '# Cold-start Free Ride: legacy timed menu click, then wait driving and\n'
     '# the same post-ready throttle burst as free-ride-fast.txt.\n'
-    '10 move 420 127\n13 down\n13.5 up\n13.5 wait driving 60\n'
+    '10 moven 0.65625 0.264583333\n13 down\n13.5 up\n13.5 wait driving 60\n'
     '13.5 shot @run/driving-ready.bmp\n13.6 keydown Up\n15.6 keyup Up\n'
     '15.7 shot @run/driving-throttle.bmp\n15.8 quit\n')
 DEFAULT_TIMEOUT = 120.0

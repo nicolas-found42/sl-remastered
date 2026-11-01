@@ -672,6 +672,17 @@ void testMostSpecificOverload() {
 } // namespace
 
 int main() {
+  {
+    World w;
+    w.start();
+    // Stock Vector.removeElement returns true/false using literal0x0d.
+    for (uint32_t value : {0u, 1u}) {
+      const std::vector<TufaNode> body{node(0x07, true, 28), node(0x0d, true, value), ret};
+      const auto result = w.run(body);
+      CHECK(result.ok && std::holds_alternative<int32_t>(result.value) && std::get<int32_t>(result.value) == static_cast<int32_t>(value));
+    }
+  }
+
   testNullReferenceNot();
   testReferenceCast();
   testImplicitVirtualOverride();
