@@ -51,12 +51,12 @@ int main() {
   // Stock multiplies the 15-bit draw by the float32 constant at 0x005f1388
   // (bits 0x38000100, ~1/32767); a 1/32768 scale flips used-car install-skip
   // draws in Chassis.addStockParts. A draw of 1 must give exactly 0x38000100.
-  state.state = 0x001c590;
+  state.state = 0xd2c5f641;
   const auto unit = mathRandom({}, nullptr, &arena, nullptr);
   const auto* unitValue = std::get_if<VmValue>(&unit);
   if (!unitValue || !std::holds_alternative<float>(*unitValue) ||
       bits(std::get<float>(*unitValue)) != 0x38000100) return 1;
   if (!std::holds_alternative<std::string>(mathRandom({int32_t{0}}, nullptr, &arena, nullptr)) ||
-      state.state != 0x7fff0000 || !std::holds_alternative<std::string>(mathRandom({}, nullptr, nullptr, nullptr))) return 1;
+      state.state != 0x00010000 || !std::holds_alternative<std::string>(mathRandom({}, nullptr, nullptr, nullptr))) return 1;
   return 0;
 }
