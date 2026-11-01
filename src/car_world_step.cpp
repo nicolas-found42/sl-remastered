@@ -1518,6 +1518,32 @@ bool CarWorldStepper::step(float seconds, std::string& error) {
                     tags.empty() ? "" : ",\"anom\":\"see anomaly note\"");
     runlog::traceSanitizeJson(line.text, sizeof line.text);
     runlog::tracePush(channel, line.text);
+    // Geometry identities and vectors allow road-boundary transitions to be
+    // paired with Cartrace without growing its bounded line buffer.
+    auto* contactChannel = runlog::traceChannel("contacttrace");
+    if (contactChannel && std::getenv("SLRR_CAR_TRACE"))
+      contactChannel->stream.store(true, std::memory_order_relaxed);
+    TraceLine road;
+    road.add("{\"kind\":\"wheels\",\"tick\":%llu,\"car\":\"%p\",\"wh\":[",
+             static_cast<unsigned long long>(tick), static_cast<const void*>(car.get()));
+    bool firstContact = true;
+    for (size_t i = 0; i < car->wheels.size() && i < 4; ++i) {
+      const auto& wheel = car->wheels[i];
+      if (!wheel) continue;
+      const auto found = witnesses_.find(wheel->suspension.wheelBody);
+      const auto* face = found != witnesses_.end() && found->second
+                             ? found->second->groundFace() : nullptr;
+      if (!face || !face->valid()) continue;
+      const auto& contact = wheel->suspension;
+      road.add("%s{\"i\":%zu,\"leaf\":\"%p\",\"face\":%zu,"
+               "\"p\":[%.5f,%.5f,%.5f],\"n\":[%.5f,%.5f,%.5f]}",
+               firstContact ? "" : ",", i, static_cast<const void*>(face->leafOwner()),
+               face->faceIndex(), contact.contactPoint[0], contact.contactPoint[1],
+               contact.contactPoint[2], contact.normal[0], contact.normal[1], contact.normal[2]);
+      firstContact = false;
+    }
+    road.add("]}");
+    runlog::tracePush(contactChannel, road.text);
     if (!tags.empty()) {
       runlog::event(runlog::EventKind::Note,
                     "car anomaly tick %llu: %s (steps in cartrace.jsonl)",

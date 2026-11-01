@@ -1,5 +1,8 @@
 #include "physics_contact_geometry.hpp"
 #include "physics_core_pair.hpp"
+#include "run_log.hpp"
+#include <cstdio>
+#include <cstdlib>
 #include <algorithm>
 #include <cmath>
 #include <utility>
@@ -357,6 +360,38 @@ ContactGeometryResult updateGroundFacePair(GroundFacePair &pair,
       query(body->state[body->current ^ 1], ground->state[ground->current ^ 1]);
   if (!predicted) {
     return ContactGeometryResult::Unsupported;}
+  if (pair.bodyFeature && pair.triangleFeature &&
+      (bodyFeature != pair.bodyFeature || triangleFeature != pair.triangleFeature)) {
+    // Retained 004a2d10 rows keep fixed features; identify the first rewalk
+    // transition with the geometry and prediction flags that drove it.
+    auto* channel = runlog::traceChannel("contacttrace");
+    if (channel && std::getenv("SLRR_CAR_TRACE"))
+      channel->stream.store(true, std::memory_order_relaxed);
+    char line[1024];
+    const auto& oldBody = core.features[*pair.bodyFeature].ref;
+    const auto& oldFace = pair.triangle.features[*pair.triangleFeature].ref;
+    const auto& newBody = core.features[*bodyFeature].ref;
+    const auto& newFace = pair.triangle.features[*triangleFeature].ref;
+    const auto oldWorld = transformPoint(body->state[body->current ^ 1].pos,
+                                         body->state[body->current ^ 1].rot,
+                                         pair.contact.pointA);
+    std::snprintf(line, sizeof line,
+                  "{\"kind\":\"features\",\"body\":\"%p\",\"time\":%.6f,\"resting\":%d,"
+                  "\"old\":[%zu,%zu,%d,%d],\"new\":[%zu,%zu,%d,%d],"
+                  "\"distance\":%.9g,\"pa\":[%.9g,%.9g,%.9g],"
+                  "\"pb\":[%.9g,%.9g,%.9g],\"old_p\":[%.9g,%.9g,%.9g],"
+                  "\"previous_sep\":%.9g,\"predicted\":[%u,%u]}",
+                  static_cast<void*>(body), body->state[body->current ^ 1].time,
+                  int(pair.contact.resting), *pair.bodyFeature, *pair.triangleFeature,
+                  int(oldBody.kind), int(oldFace.kind), *bodyFeature, *triangleFeature,
+                  int(newBody.kind), int(newFace.kind), predicted->distance,
+                  predicted->pointA[0], predicted->pointA[1], predicted->pointA[2],
+                  predicted->pointB[0], predicted->pointB[1], predicted->pointB[2],
+                  oldWorld[0], oldWorld[1], oldWorld[2], pair.contact.separation,
+                  root(body)->state[root(body)->current ^ 1].stepFlags,
+                  root(ground)->state[root(ground)->current ^ 1].stepFlags);
+    runlog::tracePush(channel, line);
+  }
   DirectContact contact = pair.contact;
   auto result = updateDirectContactGeometryWithSearch(
       contact, *predicted, body->proto->shape.radius, 0, worldPoint, world,
