@@ -111,20 +111,14 @@ each launch). The full cold/end-to-end UI paths remain the supplied
 `tools/scripts/rung*-*.txt` scripts; one Free Ride cold run does not cover the
 career flow.
 
-Measured 2026-11-01, same `build/startup_probe`, fixture, scenario workload,
-640×480 visible window, `SDL_AUDIODRIVER=dummy SLRR_CAR_TRACE=1`, three
-alternating samples each (seconds; menu/driving are frame-loop elapsed at the
-wait milestone, total is the probe process wall time; game-data manifest and
-save copy happen before the probe and are not included):
-
-| Route | menu ready | driving ready | total |
-|---|---|---|---|
-| rapid | 3.060–3.062 | 5.606–5.666 | 8.67–8.81 |
-| cold (`--cold-start`) | click fixed at 13.0 | 15.948–15.998 | 19.05–19.13 |
-
-All six exited 0; `tools/cartrace_check.py` passed each (worst step 0.42 m/s,
-no fall), the player reached 11.2–11.6 m/s after the 2 s throttle on both
-routes, and the source save matched its manifest afterwards. This measures
-setup time only, not Parity.
+Measured 2026-11-01 on the integrated Release arm64 executable, five alternating
+Runs per route with the same source fixture, tracing, 640×480 window and two-second
+throttle workload. Median total duration including preparation and verification
+is 6.147 s rapid (6.050–6.234) versus 19.410 s cold (19.354–19.445).
+Menu readiness from `probeMain`, excluding recorder startup, is 0.607 s rapid
+versus 3.460 s cold. All ten Runs preserve the source fixture and produce both
+bundled screenshots. Driving outcomes are comparable, with remaining physics,
+HUD and camera Gaps. See the [final benchmark evidence](rapid-benchmark-evidence.md)
+for all samples, clock origins, hashes, retained artifacts and limitations.
 
 Run the checks with `python3 -I tools/parity/test_run_native.py`.
