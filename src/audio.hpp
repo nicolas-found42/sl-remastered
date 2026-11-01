@@ -20,6 +20,9 @@ public:
 	bool pause(std::string& error);
 	bool clear(std::string& error);
 	bool queuedSamples(size_t& count, std::string& error) const;
+	// Name of the bound playback device (e.g. "MacBook Pro Speakers"), empty
+	// on failure. Lets a run prove it opened real hardware, not a dummy sink.
+	bool deviceName(std::string& name, std::string& error) const;
 
 private:
 	explicit AudioOutput(SDL_AudioStream* stream) : stream_(stream) {}

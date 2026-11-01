@@ -54,6 +54,16 @@ bool AudioOutput::clear(std::string& error) {
 	return true;
 }
 
+bool AudioOutput::deviceName(std::string& name, std::string& error) const {
+	const SDL_AudioDeviceID device = SDL_GetAudioStreamDevice(stream_);
+	if (!device) { error = SDL_GetError(); return false; }
+	const char* text = SDL_GetAudioDeviceName(device);
+	if (!text) { error = SDL_GetError(); return false; }
+	name = text;
+	error.clear();
+	return true;
+}
+
 bool AudioOutput::queuedSamples(size_t& count, std::string& error) const {
 	const int bytes = SDL_GetAudioStreamQueued(stream_);
 	if (bytes < 0) { error = SDL_GetError(); return false; }
