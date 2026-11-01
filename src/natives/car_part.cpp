@@ -153,6 +153,7 @@ VmObject* allocateObjectWithPtr(std::string_view className, uint32_t word0, uint
 }
 
 struct ResolvedWheel {
+	CarWheelRuntime* live = nullptr;
 	CarWheel* wheel = nullptr;
 	CarWheelExtraState* extra = nullptr;
 };
@@ -161,15 +162,51 @@ ResolvedWheel resolveWheel(const VmObject* receiver, VmArena* arena) {
 	ResolvedWheel out;
 	if (!receiver || !arena || !arena->gameState || !arena->gameState->world) return out;
 	const auto* state = nativeResourceState(receiver, arena);
-	if (!state) return out;
+	if (!state) {
+		static bool noted = false;
+		if (!noted) { noted = true; runlog::event(runlog::EventKind::Note, "wheel reference resolution: no owned resource state"); }
+		return out;
+	}
 	const uint32_t instanceId = state->words[0];
 	const uint32_t wheelIdx = state->words[1];
 	if (wheelIdx >= 16) return out;
 	WorldNode* node = arena->gameState->world->findInstance(instanceId);
 	if (!node || !node->carInstance) return out;
+	// Chassis.getWheel stores the chassis Part identity. The live wheel record
+	// belongs to the owning Car, reached through the installed-part car link.
+	if (!node->carInstance->isCar) {
+		if (auto* car = arena->gameState->world->nodeFor(node->carInstance->carLink.owner);
+		    car && car->carInstance && car->carInstance->isCar) node = car;
+	}
 	out.wheel = &node->carInstance->wheelStates[wheelIdx];
 	out.extra = &node->carInstance->wheelExtras[wheelIdx];
+	const auto& physics = node->carInstance->carPhysics;
+	if (physics && wheelIdx < physics->wheels.size()) out.live = physics->wheels[wheelIdx].get();
 	return out;
+}
+
+// 00440ed0 and 00441270..004414d0 rebuild the live 00491f80 settings
+// after writing their wheel-record field. Preserve raw lengths across calls.
+void configureWheelSuspension(const ResolvedWheel& wheel, const char* cause) {
+  if (!wheel.live || !wheel.extra) return;
+  auto& live = *wheel.live;
+  const auto& extra = *wheel.extra;
+  live.radius = extra.radius;
+  live.springForce = extra.springForce;
+  live.damping = extra.dampingBump;
+  live.reboundDamping = extra.dampingRebound;
+  live.restLength = extra.restLength + extra.radius;
+  live.initialLength = live.restLength;
+  live.suspension.settings = physics::configureSuspension(
+      live.springForce, live.damping, live.restLength,
+      extra.maxLength + extra.radius, extra.minLength + extra.radius,
+      live.reboundDamping, extra.radius);
+  live.maximumLength = live.suspension.settings.maxLength;
+  live.minimumLength = live.suspension.settings.minLength;
+  runlog::event(runlog::EventKind::Note,
+                "wheel suspension %s: force=%.3g damping=%.3g/%.3g rest=%.3g min=%.3g max=%.3g radius=%.3g",
+                cause, live.springForce, live.damping, live.reboundDamping,
+                live.restLength, live.minimumLength, live.maximumLength, live.radius);
 }
 
 CarSfxTable* resolveSfxTable(const VmObject* receiver, VmArena* arena) {
@@ -939,6 +976,8 @@ NativeResult chassisGetWheel(const std::vector<VmValue>& args, const VmObject* r
 	const auto resolved = resolvePartAndCar(receiver, arena);
 	WorldNode* targetNode = resolved.partNode ? resolved.partNode : resolved.carNode;
 	if (!targetNode || !targetNode->carInstance) return VmValue{static_cast<const VmObject*>(nullptr)};
+	runlog::event(runlog::EventKind::Note, "wheel reference created: chassis=0x%08x car=0x%08x index=%d",
+	              targetNode->instanceId, resolved.carNode ? resolved.carNode->instanceId : 0u, idx);
 	auto* wheelObj = allocateObjectWithPtr("java.game.parts.WheelRef", targetNode->instanceId,
 	                                       static_cast<uint32_t>(idx), arena, classes);
 	return VmValue{wheelObj};
@@ -1030,6 +1069,26 @@ NativeResult chassisForceUpdate(const std::vector<VmValue>& args, const VmObject
                                 const std::vector<const TufaClass*>*) {
 	if (!args.empty()) return std::string{"invalid Chassis.forceUpdate arguments"};
 	const auto resolved = resolvePartAndCar(receiver, arena);
+	runlog::event(runlog::EventKind::Note, "chassis force update: part=0x%08x car=0x%08x script=%s",
+	              resolved.partNode ? resolved.partNode->instanceId : 0u,
+	              resolved.carNode ? resolved.carNode->instanceId : 0u,
+	              receiver && receiver->runtimeClass ? receiver->runtimeClass->name.c_str() : "none");
+	// FUN_0043e320 -> FUN_00448430 invokes the actual chassis script before
+	// consuming its wheel/engine variables. A mass-only update skips every
+	// installed suspension/tire setter performed by that script.
+	if (resolved.carInst && resolved.carInst->carPhysics) {
+		const auto* chassis = resolved.carInst->chassisObject
+		                          ? resolved.carInst->chassisObject : receiver;
+		if (!arena || !arena->callScript || !chassis)
+			return std::string{"Chassis.forceUpdate: script caller unavailable"};
+		auto result = arena->callScript(chassis, "updatevariables", {});
+		if (!result.ok) return "Chassis.forceUpdate: updatevariables: " + result.error;
+		static bool gapNoted = false;
+		if (!gapNoted) {
+			gapNoted = true;
+			runlog::event(runlog::EventKind::Note, "Chassis.forceUpdate: script wheel configuration applied; FUN_00448430 complete engine-field transfer remains a gap");
+		}
+	}
 	if (arena && arena->gameState && arena->gameState->world) {
 		if (resolved.carNode) carPartUpdateMass(*resolved.carNode, *arena->gameState->world);
 		else if (resolved.partNode) carPartUpdateMass(*resolved.partNode, *arena->gameState->world);
@@ -1120,7 +1179,10 @@ NativeResult wheelRefGetRadius(const std::vector<VmValue>& args, const VmObject*
 NativeResult wheelRefSetRadius(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
                                const std::vector<const TufaClass*>*) {
 	if (args.size() != 1 || !std::holds_alternative<float>(args[0])) return std::string{"invalid WheelRef.setRadius"};
-	if (auto w = resolveWheel(receiver, arena); w.extra) w.extra->radius = std::get<float>(args[0]);
+	if (auto w = resolveWheel(receiver, arena); w.extra) {
+		w.extra->radius = std::get<float>(args[0]);
+		configureWheelSuspension(w, "radius");
+	}
 	return std::monostate{};
 }
 
@@ -1193,7 +1255,10 @@ NativeResult wheelRefSetPacejka(const std::vector<VmValue>& args, const VmObject
 NativeResult wheelRefSetForce(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
                               const std::vector<const TufaClass*>*) {
 	if (args.size() != 1 || !std::holds_alternative<float>(args[0])) return std::string{"invalid WheelRef.setForce"};
-	if (auto w = resolveWheel(receiver, arena); w.extra) w.extra->springForce = std::get<float>(args[0]);
+	if (auto w = resolveWheel(receiver, arena); w.extra) {
+		w.extra->springForce = std::get<float>(args[0]);
+		configureWheelSuspension(w, "force");
+	}
 	return std::monostate{};
 }
 
@@ -1202,7 +1267,8 @@ NativeResult wheelRefSetDamping1(const std::vector<VmValue>& args, const VmObjec
 	if (args.size() != 1 || !std::holds_alternative<float>(args[0])) return std::string{"invalid WheelRef.setDamping(F)"};
 	if (auto w = resolveWheel(receiver, arena); w.extra) {
 		w.extra->dampingBump = std::get<float>(args[0]);
-		w.extra->dampingRebound = std::get<float>(args[0]);
+		w.extra->dampingRebound = std::get<float>(args[0]) * 0.7f;
+		configureWheelSuspension(w, "damping");
 	}
 	return std::monostate{};
 }
@@ -1214,6 +1280,7 @@ NativeResult wheelRefSetDamping2(const std::vector<VmValue>& args, const VmObjec
 	if (auto w = resolveWheel(receiver, arena); w.extra) {
 		w.extra->dampingBump = std::get<float>(args[0]);
 		w.extra->dampingRebound = std::get<float>(args[1]);
+		configureWheelSuspension(w, "damping pair");
 	}
 	return std::monostate{};
 }
@@ -1221,21 +1288,30 @@ NativeResult wheelRefSetDamping2(const std::vector<VmValue>& args, const VmObjec
 NativeResult wheelRefSetRestLen(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
                                 const std::vector<const TufaClass*>*) {
 	if (args.size() != 1 || !std::holds_alternative<float>(args[0])) return std::string{"invalid WheelRef.setRestLen"};
-	if (auto w = resolveWheel(receiver, arena); w.extra) w.extra->restLength = std::get<float>(args[0]);
+	if (auto w = resolveWheel(receiver, arena); w.extra) {
+		w.extra->restLength = std::get<float>(args[0]);
+		configureWheelSuspension(w, "rest length");
+	}
 	return std::monostate{};
 }
 
 NativeResult wheelRefSetMinLen(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
                                const std::vector<const TufaClass*>*) {
 	if (args.size() != 1 || !std::holds_alternative<float>(args[0])) return std::string{"invalid WheelRef.setMinLen"};
-	if (auto w = resolveWheel(receiver, arena); w.extra) w.extra->minLength = std::get<float>(args[0]);
+	if (auto w = resolveWheel(receiver, arena); w.extra) {
+		w.extra->minLength = std::get<float>(args[0]);
+		configureWheelSuspension(w, "min length");
+	}
 	return std::monostate{};
 }
 
 NativeResult wheelRefSetMaxLen(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
                                const std::vector<const TufaClass*>*) {
 	if (args.size() != 1 || !std::holds_alternative<float>(args[0])) return std::string{"invalid WheelRef.setMaxLen"};
-	if (auto w = resolveWheel(receiver, arena); w.extra) w.extra->maxLength = std::get<float>(args[0]);
+	if (auto w = resolveWheel(receiver, arena); w.extra) {
+		w.extra->maxLength = std::get<float>(args[0]);
+		configureWheelSuspension(w, "max length");
+	}
 	return std::monostate{};
 }
 
@@ -1290,6 +1366,8 @@ NativeResult wheelRefSetArm(const std::vector<VmValue>& args, const VmObject* re
 	if (auto w = resolveWheel(receiver, arena); w.extra) {
 		for (size_t i = 0; i < 7; ++i)
 			if (const auto* fv = std::get_if<float>(&args[i])) w.extra->arm[i] = *fv;
+		runlog::event(runlog::EventKind::Note, "wheel arm parameters (pose application gap): %.3g %.3g %.3g %.3g %.3g %.3g %.3g",
+		              w.extra->arm[0],w.extra->arm[1],w.extra->arm[2],w.extra->arm[3],w.extra->arm[4],w.extra->arm[5],w.extra->arm[6]);
 	}
 	return std::monostate{};
 }
@@ -1300,6 +1378,8 @@ NativeResult wheelRefSetHub(const std::vector<VmValue>& args, const VmObject* re
 	if (auto w = resolveWheel(receiver, arena); w.extra) {
 		for (size_t i = 0; i < 10; ++i)
 			if (const auto* fv = std::get_if<float>(&args[i])) w.extra->hub[i] = *fv;
+		runlog::event(runlog::EventKind::Note, "wheel hub parameters (pose application gap): %.3g %.3g %.3g %.3g %.3g %.3g %.3g %.3g %.3g %.3g",
+		              w.extra->hub[0],w.extra->hub[1],w.extra->hub[2],w.extra->hub[3],w.extra->hub[4],w.extra->hub[5],w.extra->hub[6],w.extra->hub[7],w.extra->hub[8],w.extra->hub[9]);
 	}
 	return std::monostate{};
 }

@@ -29,6 +29,14 @@ void CarRuntimeInstance::initializeWheelDrivetrain() {
     extra.brakeThermal.baseBrake = extra.brake;
     extra.brakeThermal.baseHandbrake = extra.handBrake;
     extra.radius = wheel->radius;
+    // Raw wheel-record lengths exclude radius. The setters reconfigure
+    // 00491f80 from these fields, not from detached defaults.
+    extra.springForce = wheel->springForce;
+    extra.dampingBump = wheel->damping;
+    extra.dampingRebound = wheel->reboundDamping;
+    extra.restLength = wheel->restLength - wheel->radius;
+    extra.maxLength = wheel->config.spring[0] + 0.1f;
+    extra.minLength = -1.0f;
   }
 }
 

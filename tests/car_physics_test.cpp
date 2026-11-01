@@ -308,6 +308,7 @@ int main() {
         physics::createBodyProto(1, 1, 0.3f, 0, 0, nullptr, error);
     assert(wheelProto);
     wheels[0].wheelBody = *wheelProto;
+    wheels[0].boneBody = *wheelProto;
     wheels[0].spring = {0.5f, 0.3f, 0.05f};
     wheels[0].friction = {1.5f, 1.5f};
     wheels[0].hasWheel = true;
@@ -346,6 +347,24 @@ int main() {
     for (size_t i = 0; i < 3; ++i)
       assert(near(wheelMounted->root->state[0].pos[i],
                   hub->state[hub->current].pos[i]));
+    assert(wheelMounted->root->attachment->parent == hub);
+    detachPartPhysics(*wheelMounted);
+    assert(attachPartPhysics(*wheelMounted, wheelSlot, *wheelCar->part, wheelSlot, 101));
+    assert(wheelMounted->root->attachment->parent == wheelCar->wheels[0]->boneBody.get());
+    // Rim center stays on its helper's axle when it rotates, rather than
+    // orbiting a neutral-frame offset. This exercises the installed part.
+    auto& rim = *wheelCar->wheels[0]->boneBody;
+    assert(wheelMounted->root->attachment->relative.position == physics::Vec3{});
+    physics::RelativeBodyPose spin;
+    spin.setOrientation({std::sin(0.4f), 0, 0, std::cos(0.4f)});
+    physics::predictChildPose(rim.state[rim.current], spin, rim.state[rim.current]);
+    physics::predictChildPose(rim.state[rim.current], wheelMounted->root->attachment->relative,
+                              wheelMounted->root->state[wheelMounted->root->current]);
+    for (size_t i = 0; i < 3; ++i)
+      assert(near(wheelMounted->root->state[wheelMounted->root->current].pos[i], rim.state[rim.current].pos[i]));
+    detachPartPhysics(*wheelMounted);
+    assert(attachPartPhysics(*wheelMounted, wheelSlot, *wheelCar->part, wheelSlot, 301));
+    assert(wheelMounted->root->attachment->parent == wheelCar->wheels[0]->armBody.get());
     detachPartPhysics(*wheelMounted);
 
     // A non-wheel slot still aligns to the root geometry body.
@@ -382,13 +401,13 @@ int main() {
     auto *rootNode = world.registerCarPhysics(*carNode, registered, error);
     assert(rootNode);
     auto nodes = world.children(*carNode);
-    assert(nodes && nodes->size() == 5);
+    assert(nodes && nodes->size() == 6);
     assert((*nodes)[0]->name == "part_comp" && (*nodes)[1]->name == "bbone" &&
-           (*nodes)[2] == rootNode && (*nodes)[3]->name == "hub" &&
-           (*nodes)[4]->name == "a_arm");
-    assert(world.dynamicBody(*(*nodes)[3]).lock().get() ==
-           registered->wheels[0]->hubBody.get());
+           (*nodes)[2] == rootNode && (*nodes)[3]->name == "wheelbone" &&
+           (*nodes)[4]->name == "hub" && (*nodes)[5]->name == "a_arm");
     assert(world.dynamicBody(*(*nodes)[4]).lock().get() ==
+           registered->wheels[0]->hubBody.get());
+    assert(world.dynamicBody(*(*nodes)[5]).lock().get() ==
            registered->wheels[0]->armBody.get());
     assert(!registered->bodyObservations
                 .at(registered->wheels[0]->suspensionBody.get())

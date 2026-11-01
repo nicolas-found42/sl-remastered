@@ -197,6 +197,13 @@ void movePartTree(PartPhysics &part, const physics::Vec3 &position,
 namespace {
 bool finalizeInstalledParent(PartPhysics &target, physics::Body &parent,
                              std::string &error) {
+  // FUN_0049a050's 0x8000 branch retains the helper prototype's own mass
+  // and center, updates inertia, then continues up to its physical parent.
+  if (parent.flags & 0x8000) {
+    for (auto& state : parent.state) physics::updateWorldInertia(*parent.proto, state);
+    return parent.attachment && parent.attachment->parent &&
+           finalizeInstalledParent(target, *parent.attachment->parent, error);
+  }
   std::vector<physics::Body *> bodies;
   physics::BodyProto *prototype = nullptr;
   if (target.indexedCar) {
@@ -319,8 +326,13 @@ bool wheelReferencePose(const PartPhysics &target, int32_t slotType,
                   type, index, wheels, decline);
     return false;
   }
-  const auto &body = *target.indexedCar->wheels[index]->hubBody;
-  out = body.state[body.current];
+  // The neutral reference record must not acquire the hub's live travel or
+  // spin: installation alignment is separate from the moving slot parent.
+  const auto* main = target.rootGeometryBody();
+  if (!main || main->current > 1) return false;
+  out = main->state[main->current];
+  const auto& position = target.indexedCar->wheels[index]->config.position;
+  out.pos = physics::transformPoint(out.pos, out.rot, {position[0], position[1], position[2]});
   return true;
 }
 
@@ -361,13 +373,37 @@ bool attachPartPhysics(PartPhysics &part, const PartSlotState &partSlot,
   physics::State wheelPose{};
   if (wheelReferencePose(target, targetSlotType, wheelPose))
     targetPose = wheelPose;
-  const auto aligned = alignPartSlots(targetPose, targetSlot, partSlot);
-  movePartTree(part, aligned.position, aligned.rotation);
   auto *bodyParent = slotBody;
+  // FUN_0044a250 binds slot types 101/201/301 to the wheelbone/hub/a_arm
+  // resources (+0x0c/+0x1c/+0x2c in the wheel record), respectively.
+  const uint32_t type = static_cast<uint32_t>(targetSlotType) & 0xffffu;
+  if (target.indexedCar && type > 100 && type <= 400) {
+    const size_t index = (type - 1) % 100;
+    if (index >= target.indexedCar->wheels.size() || !target.indexedCar->wheels[index])
+      return false;
+    auto& wheel = *target.indexedCar->wheels[index];
+    bodyParent = type <= 200   ? wheel.boneBody.get()
+                 : type <= 300 ? wheel.hubBody.get()
+                               : wheel.armBody.get();
+    if (!bodyParent || bodyParent->current > 1) return false;
+    // 00472e80 uses the returned slot resource body's current pose, not the
+    // neutral record coordinates returned alongside it by getInfo(0x2f).
+    targetPose = bodyParent->state[bodyParent->current];
+  }
+  const auto aligned = alignPartSlots(targetPose, targetSlot, partSlot);
   if ((bodyParent->flags & 0x8000u) == 0 && bodyParent->attachment)
     bodyParent = bodyParent->attachment->parent;
+  movePartTree(part, aligned.position, aligned.rotation);
   if (!physics::attachBody(*part.root, *bodyParent))
     return false;
+  if (type > 100 && type <= 400 && target.indexedCar) {
+    const auto& relative = part.root->attachment->relative;
+    runlog::event(runlog::EventKind::Note,
+                  "wheel slot attachment: type=%u target=(%.4f,%.4f,%.4f) helper=(%.4f,%.4f,%.4f) relative=(%.4f,%.4f,%.4f)",
+                  type, aligned.position[0], aligned.position[1], aligned.position[2],
+                  bodyParent->state[bodyParent->current].pos[0], bodyParent->state[bodyParent->current].pos[1], bodyParent->state[bodyParent->current].pos[2],
+                  relative.position[0], relative.position[1], relative.position[2]);
+  }
   static std::atomic<uint64_t> nextSequence{1};
   part.attachmentSequence =
       nextSequence.fetch_add(1, std::memory_order_relaxed);

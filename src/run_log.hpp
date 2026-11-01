@@ -269,7 +269,7 @@ inline void setSnapshot(const char *name, const std::string &text) {
 // the steps that led there. Writers do not allocate.
 constexpr size_t kTraceChannels = 3;
 constexpr size_t kTraceCapacity = 512;
-constexpr size_t kTraceLineSize = 2048;
+constexpr size_t kTraceLineSize = 4096;
 struct TraceChannel {
   char name[24] = {};
   char lines[kTraceCapacity][kTraceLineSize];

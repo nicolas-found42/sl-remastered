@@ -54,7 +54,7 @@ static int probeMain(int argc, char** argv, const std::string& runDir) {
   std::string crashMode = "segv", crashKeyName;
   bool constructor = false, initProbe = false, haveRoot = false,
        noInput = false, useRenderer = false;
-  bool renderFrame = false, visibleWindow = false, runLoop = false,
+  bool renderFrame = false, visibleWindow = false, backgroundWindow = false, runLoop = false,
        holdFrame = false, captureOnError = false, noIntro = false;
   std::vector<std::string> extraNames;
   for (int i = 1; i < argc; ++i) {
@@ -72,6 +72,8 @@ static int probeMain(int argc, char** argv, const std::string& runDir) {
       runLoop = true;
     else if (arg == "--visible" && !visibleWindow)
       visibleWindow = true;
+    else if (arg == "--background" && !backgroundWindow)
+      backgroundWindow = true;
     else if (arg == "--hold-frame" && !holdFrame)
       holdFrame = true;
     // Harness route switch, not a game behavior: the stock executable plays
@@ -118,11 +120,22 @@ static int probeMain(int argc, char** argv, const std::string& runDir) {
     } else {
       std::fprintf(stderr,
                    "usage: startup_probe [--constructor|--init] [--no-input] "
-                   "[--renderer] [--frame] [--loop] [--visible] [--script "
+                   "[--renderer] [--frame] [--loop] [--visible|--background] [--no-intro] [--script "
                    "file] [--crash-on-key NAME[:mode]] [--no-run-log] [--class "
                    "name]... [--data-root directory] [--reference-root directory] [game-root]\n");
       return 2;
     }
+  }
+  if (backgroundWindow && visibleWindow) {
+    std::fprintf(stderr, "startup probe: --background and --visible are mutually exclusive\n");
+    return 2;
+  }
+  // Cocoa's SDL initialization can activate the process before any window
+  // exists. The hidden/non-focusable window flags alone do not prevent it.
+  if (backgroundWindow &&
+      !SDL_SetHintWithPriority(SDL_HINT_MAC_BACKGROUND_APP, "1", SDL_HINT_OVERRIDE)) {
+    std::fprintf(stderr, "startup probe: cannot disable macOS foreground activation: %s\n", SDL_GetError());
+    return 1;
   }
   PackRegistry packs(root);
   ClassEnvironment classes(root);
@@ -398,7 +411,8 @@ static int probeMain(int argc, char** argv, const std::string& runDir) {
       return 1;
     }
     diagnosticWindow.reset(SDL_CreateWindow(
-        "Street Legal Racing - Redline", 640, 480, SDL_WINDOW_HIDDEN));
+        "Street Legal Racing - Redline", 640, 480,
+        SDL_WINDOW_HIDDEN | (backgroundWindow ? SDL_WINDOW_NOT_FOCUSABLE : 0)));
     if (!diagnosticWindow || !(diagnosticRenderer = Render2D::forWindow(
                                    diagnosticWindow.get(), error))) {
       std::fprintf(stderr, "startup probe: diagnostic renderer: %s\n",
@@ -425,10 +439,10 @@ static int probeMain(int argc, char** argv, const std::string& runDir) {
     gameState.video = videoPlayer.get();
     std::puts("renderer: awaiting stock Config display settings");
   }
-  if ((renderFrame || visibleWindow || runLoop) && !diagnosticRenderer) {
+  if ((renderFrame || visibleWindow || backgroundWindow || runLoop) && !diagnosticRenderer) {
     std::fprintf(
         stderr,
-        "startup probe: --frame, --loop and --visible require --renderer\n");
+        "startup probe: --frame, --loop, --visible and --background require --renderer\n");
     return 1;
   }
   std::optional<FileState> fileState;
@@ -919,7 +933,9 @@ static int probeMain(int argc, char** argv, const std::string& runDir) {
             std::fprintf(stderr, "startup probe: show configured window: %s\n", SDL_GetError());
             return 1;
           }
-          if (!applyDisplayMode(diagnosticWindow.get(), requested, isWindowed, error)) {
+          // Harness presentation override: keep real Config fields and content
+          // dimensions, but never enter desktop fullscreen in background Runs.
+          if (!applyDisplayMode(diagnosticWindow.get(), requested, isWindowed || backgroundWindow, error)) {
             runlog::event(runlog::EventKind::Error, "display startup rejected: %s", error.c_str());
             std::fprintf(stderr, "startup probe: configured display: %s\n", error.c_str());
             return 1;
@@ -933,6 +949,12 @@ static int probeMain(int argc, char** argv, const std::string& runDir) {
           displaySize.width = requested[0];
           displaySize.height = requested[1];
           recordDisplay("startup-applied", requested, isWindowed);
+          if (backgroundWindow)
+            runlog::event(runlog::EventKind::Note,
+                          "background presentation: hidden=%d nonfocusable=%d fullscreen=%d; native intro bypassed",
+                          (SDL_GetWindowFlags(diagnosticWindow.get()) & SDL_WINDOW_HIDDEN) != 0,
+                          (SDL_GetWindowFlags(diagnosticWindow.get()) & SDL_WINDOW_NOT_FOCUSABLE) != 0,
+                          (SDL_GetWindowFlags(diagnosticWindow.get()) & SDL_WINDOW_FULLSCREEN) != 0);
           // Stock FUN_0058c700 plays the native startup videos after display
           // and sound initialization and before the script world runs
           // (all.c:302193). FUN_0054c170 skips an absent file; each
@@ -1047,7 +1069,7 @@ static int probeMain(int argc, char** argv, const std::string& runDir) {
               detail.clear();
               return true;
             }
-            if (!applyDisplayMode(diagnosticWindow.get(), mode, false, detail)) {
+            if (!applyDisplayMode(diagnosticWindow.get(), mode, backgroundWindow, detail)) {
               runlog::event(runlog::EventKind::Error, "display change rejected: requested=%dx%dx%d cause=%s", mode[0], mode[1], mode[2], detail.c_str());
               return false;
             }
@@ -1249,9 +1271,9 @@ static int probeMain(int argc, char** argv, const std::string& runDir) {
                          "startup probe: frame loop requires completed Init\n");
             return 1;
           }
-          if (!visibleWindow) {
+          if (!visibleWindow && !backgroundWindow) {
             std::fprintf(stderr,
-                         "startup probe: frame loop requires --visible\n");
+                         "startup probe: frame loop requires --visible or --background\n");
             return 1;
           }
           if (!timers.setTimeWarp(timers.timeScale(),

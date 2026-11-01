@@ -41,7 +41,7 @@ def start(tmp, name, script_text):
     script.write_text(script_text)
     env = dict(os.environ, SLRR_RUN_DIR=str(base))
     process = subprocess.Popen(
-        [PROBE, "--init", "--renderer", "--loop", "--visible", "--script", str(script), "--data-root", str(tmp / "data"), str(GAME)],
+        [PROBE, "--init", "--renderer", "--loop", "--background", "--no-intro", "--script", str(script), "--data-root", str(tmp / "data"), str(GAME)],
         env=env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
     return process, base
 

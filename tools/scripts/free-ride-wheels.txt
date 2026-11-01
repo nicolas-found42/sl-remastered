@@ -1,0 +1,24 @@
+# Normal Free Ride entry; measure both steering directions under load.
+0 wait splash 30
+0 keydown Escape
+0 wait menu 30
+0 keyup Escape
+0 clickn 0.65625 0.264583333
+0 wait driving 60
+0 shot @run/ready.bmp
+0.1 keydown Up
+3 shot @run/accelerating.bmp
+3.1 keydown Left
+3.6 shot @run/left.bmp
+3.8 keyup Left
+4.1 keydown Right
+4.6 shot @run/right.bmp
+4.8 keyup Right
+5 keyup Up
+6 shot @run/coasting.bmp
+6.1 keydown Down
+9 shot @run/braking.bmp
+12 shot @run/stopping.bmp
+12.1 keyup Down
+14 shot @run/stopped.bmp
+14.1 quit
