@@ -82,6 +82,18 @@ pc 7 line 296) -> `MultiChoice.unfocus` (tree 2 pc 10 line 38) ->
 `Vector.removeElement` (tree 24 pc 7 line 283) -> `Vector.indexOf(Object,I)`
 (tree 12 pc 6 line 141) -> `Vector.indexOf` (tree 13 pc 13 line 148).
 
+Stock VM evidence: `FUN_0041fbc0` (stock `Thread::callMethod`) rejects a null
+receiver for a non-native method only by logging
+`Thread::callMethod: instance method called with no instance`
+(string at virtual address `0x0060c2e8` in the authority image, MD5
+`e686099e7233bb7d7c461b1b35c5064c`) and returning `-1`
+(`0041fbe8` tests method flag `0x8`, `0041fbf6` tests the receiver, and the
+`0041fc03`/`0041fc0e` path logs then returns -1). The caller
+`FUN_004207c0` keeps running (`local/census/DecompileAt-004207c0.log`). The
+Port instead returns a fatal VM error from the qualified-receiver path
+(`src/vm.cpp`, "null or invalid qualified receiver"), which is why the stock
+script sequence aborts the run.
+
 Stock script evidence: `MultiChoice.unfocus` sets `hkl`/`hkr` to null
 (`MultiChoice.class` tree 2 node 20), so a second `unfocus` on the same gadget
 passes a null search value to `Vector.removeElement`, which calls
