@@ -1738,6 +1738,14 @@ bool SceneCameraRenderer::draw(const std::array<float, 16> &view,
   std::vector<std::pair<uint32_t, std::vector<SceneMaterialRenderer *>>>
       textGroups;
   for (auto &object : objects_) {
+    const auto resolved = resources_.resolve(object->owner());
+    bool hiddenByLeaf = false;
+    for (const WorldNode* ancestor = resolved.worldNode ? resources_.world().parent(*resolved.worldNode) : nullptr;
+         ancestor; ancestor = resources_.world().parent(*ancestor))
+      if (ancestor->type == 1 && (ancestor->flags & 0x40u)) { hiddenByLeaf = true; break; }
+    // FUN_00511180 stops at WORLDTREELEAF. Cached material records survive
+    // the hidden subtree cleanup (00511e60), but must not draw its descendants.
+    if (hiddenByLeaf) continue;
     const auto font = object->textMaterialId();
     if (!font) {
       const auto opaque = object->opaque(error, requireCached);

@@ -116,10 +116,20 @@ int main() {
     action = script.poll(6.11, ready, ignore, error);
     CHECK(action && action->verb == "keyup");
   }
+  {
+    ProbeScript script;
+    std::istringstream input("0 clickn 0.25 0.75\n0 moven 1 0\n");
+    CHECK(script.read(input, error));
+    const auto* action = script.poll(0, always, ignore, error);
+    CHECK(action && action->verb == "clickn" && std::stof(action->a) == 0.25f && std::stof(action->b) == 0.75f);
+    script.consume();
+    action = script.poll(0, always, ignore, error);
+    CHECK(action && action->verb == "moven" && std::stof(action->a) == 1 && std::stof(action->b) == 0);
+  }
   for (const auto* text : {"0 wait unknown 2\n", "0 wait menu 0\n",
                            "0 wait menu -1\n", "0 wait driving 2oops\n",
                            "bad wait menu 2\n", "0 press Up\n", "0 keydown\n",
-                           "0 click 10\n", "0 click nan 4\n", "0 wait splash 0\n", "0 move 10\n", "0 move x 4\n", "0 shot\n"}) {
+                           "0 clickn -0.1 0.5\n", "0 moven 0.5 1.1\n", "0 clickn 0.5\n", "0 click 10\n", "0 click nan 4\n", "0 wait splash 0\n", "0 move 10\n", "0 move x 4\n", "0 shot\n"}) {
     ProbeScript script;
     std::istringstream input(text);
     CHECK(!script.read(input, error));

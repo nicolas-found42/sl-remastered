@@ -118,3 +118,6 @@ std::vector<PlatformDisplayMode> uniqueDisplayModes(const std::vector<PlatformDi
 std::optional<std::vector<PlatformDisplayMode>> platformDisplayModes(std::string& error);
 
 std::optional<std::array<float, 2>> normalizeCursorPosition(float x, float y, int width, int height);
+
+// Applies a host-supported stock display request; failures retain the previous mode.
+bool applyDisplayMode(SDL_Window* window, PlatformDisplayMode mode, bool windowed, std::string& error);

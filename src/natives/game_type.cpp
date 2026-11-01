@@ -4036,10 +4036,17 @@ static DispatchTask dispatchAnimationCallbacks(DispatchContext &context,
         }
         const auto input = world.cursorInput()();
         const auto button = controller->playerInput->sampleAxis(45);
-        if (!input || !button || !std::isfinite((*input)[0]) ||
-            !std::isfinite((*input)[1])) {
-          error = "active cursor input unavailable";
-          co_return false;
+        if (!button) { error = "active cursor button unavailable"; co_return false; }
+        if (!input) {
+          // A host letterbox bar is outside the game viewport. Ignore presses
+          // there and cancel a press dragged out of the content rectangle.
+          cursor.leftDown = *button > 0.2f;
+          cursor.dragging = true;
+          setLinkOwner(cursor.pressedBox, nullptr);
+          continue;
+        }
+        if (!std::isfinite((*input)[0]) || !std::isfinite((*input)[1])) {
+          error = "active cursor input unavailable"; co_return false;
         }
         const float oldX = cursor.x, oldY = cursor.y;
         cursor.x = std::clamp((*input)[0], -1.0f, 1.0f);
@@ -4112,9 +4119,16 @@ static DispatchTask dispatchAnimationCallbacks(DispatchContext &context,
                 co_return false;
               }
               const WorldNode *ancestor = box;
-              while (ancestor && ancestor != sector)
+              bool hiddenByLeaf = false;
+              while (ancestor) {
+                // FUN_0049e710 refuses to descend through a type-1 node
+                // with WORLDTREELEAF (+0x54 bit0x40). Stock Group.deactivate
+                // uses precisely this flag to remove hidden gadgets from picks.
+                if (ancestor->type == 1 && (ancestor->flags & 0x40u)) hiddenByLeaf = true;
+                if (ancestor == sector) break;
                 ancestor = world.parent(*ancestor);
-              if (!ancestor)
+              }
+              if (!ancestor || hiddenByLeaf)
                 continue;
               candidates.push_back(box);
               boxes.push_back(*box->physicsBox);
@@ -4130,6 +4144,12 @@ static DispatchTask dispatchAnimationCallbacks(DispatchContext &context,
           }
           if (hit)
             break;
+        }
+        if (*button > 0.2f && !cursor.leftDown) {
+          for (const WorldNode* ancestor = hit; ancestor; ancestor = world.parent(*ancestor))
+            runlog::event(runlog::EventKind::Note, "cursor pick ancestry: node=0x%08x name=%s flags=0x%x class=%s",
+                          ancestor->value, ancestor->name.c_str(), ancestor->flags,
+                          ancestor->scriptReceiver && ancestor->scriptReceiver->runtimeClass ? ancestor->scriptReceiver->runtimeClass->name.c_str() : "native");
         }
         if (hit && !world.parent(*hit)) {
           error = "cursor box parent unavailable";

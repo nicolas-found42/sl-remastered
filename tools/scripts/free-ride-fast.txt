@@ -4,7 +4,7 @@
 0 keydown Escape
 0 wait menu 30
 0 keyup Escape
-0 click 420 127
+0 clickn 0.65625 0.264583333
 0 wait driving 60
 0 shot @run/driving-ready.bmp
 0.1 keydown Up

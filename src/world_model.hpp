@@ -526,6 +526,8 @@ public:
   float cursorSensitivity() const { return cursorSensitivity_; }
   int32_t systemCursor() const { return systemCursor_; }
   using CursorInput = std::function<std::optional<std::array<float, 3>>()>;
+  // A null sample means the host pointer is outside game content (e.g. a
+  // letterbox bar); it cancels presses there without stopping simulation.
   void setCursorInput(CursorInput input) { cursorInput_ = std::move(input); }
   const CursorInput &cursorInput() const { return cursorInput_; }
   const std::vector<WorldNode *> &staticBoxes() const { return boxBodies_; }

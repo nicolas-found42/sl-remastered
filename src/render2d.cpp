@@ -148,8 +148,12 @@ bool Render2D::saveFrame(const std::string& path, std::string& error) {
 }
 
 bool Render2D::outputSize(int& width, int& height, std::string& error) const {
-	if (!SDL_GetRenderOutputSize(renderer_, &width, &height)) { error = SDL_GetError(); return false; }
-	error.clear(); return true;
+  SDL_RendererLogicalPresentation mode;
+  if (!SDL_GetRenderLogicalPresentation(renderer_, &width, &height, &mode)) { error = SDL_GetError(); return false; }
+  // SDL's current output size is the physical presentation rectangle, not
+  // the logical content dimensions (e.g. 1265x949 for 800x600 fullscreen).
+  if (mode == SDL_LOGICAL_PRESENTATION_DISABLED && !SDL_GetRenderOutputSize(renderer_, &width, &height)) { error = SDL_GetError(); return false; }
+  error.clear(); return true;
 }
 
 uint32_t Render2D::maxTextureSize() const {
@@ -160,4 +164,17 @@ uint32_t Render2D::maxTextureSize() const {
 	const Sint64 reported = properties ? SDL_GetNumberProperty(properties, SDL_PROP_RENDERER_MAX_TEXTURE_SIZE_NUMBER, 0) : 0;
 	if (reported <= 0) return hostLimit;
 	return static_cast<uint32_t>(std::min<Sint64>(reported, hostLimit));
+}
+
+bool Render2D::presentation(int width, int height, std::string& error) {
+  if (!SDL_SetRenderLogicalPresentation(renderer_, width, height, SDL_LOGICAL_PRESENTATION_LETTERBOX)) {
+    error = SDL_GetError(); return false;
+  }
+  error.clear(); return true;
+}
+bool Render2D::windowToRender(float x, float y, float& renderX, float& renderY) const {
+  return SDL_RenderCoordinatesFromWindow(renderer_, x, y, &renderX, &renderY);
+}
+bool Render2D::renderToWindow(float x, float y, float& windowX, float& windowY) const {
+  return SDL_RenderCoordinatesToWindow(renderer_, x, y, &windowX, &windowY);
 }

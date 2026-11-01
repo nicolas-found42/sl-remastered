@@ -372,7 +372,7 @@ static int probeMain(int argc, char** argv, const std::string& runDir) {
       return 1;
     }
     diagnosticWindow.reset(SDL_CreateWindow(
-        "Startup diagnostic", 640, 480, visibleWindow ? 0 : SDL_WINDOW_HIDDEN));
+        "Street Legal Racing - Redline", 640, 480, SDL_WINDOW_HIDDEN));
     if (!diagnosticWindow || !(diagnosticRenderer = Render2D::forWindow(
                                    diagnosticWindow.get(), error))) {
       std::fprintf(stderr, "startup probe: diagnostic renderer: %s\n",
@@ -386,7 +386,7 @@ static int probeMain(int argc, char** argv, const std::string& runDir) {
     }
     gameState.currentDisplayMode = [&]() -> std::optional<PlatformDisplayMode> {
       int width = 0, height = 0;
-      if (!SDL_GetWindowSizeInPixels(diagnosticWindow.get(), &width, &height))
+      if (!diagnosticRenderer->outputSize(width, height, error))
         return std::nullopt;
       auto format = SDL_GetWindowPixelFormat(diagnosticWindow.get());
       if (format == SDL_PIXELFORMAT_UNKNOWN)
@@ -397,8 +397,7 @@ static int probeMain(int argc, char** argv, const std::string& runDir) {
     gameState.renderer = diagnosticRenderer.get();
     videoPlayer = std::make_unique<VideoPlayer>(*diagnosticRenderer, root);
     gameState.video = videoPlayer.get();
-    std::printf("renderer: %s 640x480 diagnostic window\n",
-                visibleWindow ? "visible" : "hidden");
+    std::puts("renderer: awaiting stock Config display settings");
   }
   if ((renderFrame || visibleWindow || runLoop) && !diagnosticRenderer) {
     std::fprintf(
@@ -810,6 +809,52 @@ static int probeMain(int argc, char** argv, const std::string& runDir) {
               std::memcpy(&gammaBits, gamma, sizeof gammaBits);
               std::printf("Config.video_gamma bits = 0x%08x\n", gammaBits);
             }
+        if (diagnosticRenderer) {
+          const auto integerConfig = [&](const char* name) -> std::optional<int32_t> {
+            for (const auto& state : states) if (state.owner == config)
+              for (const auto& field : state.fields) if (field.name == name)
+                if (const auto* value = std::get_if<int32_t>(&field.value)) return *value;
+            return std::nullopt;
+          };
+          auto width = integerConfig("video_x"), height = integerConfig("video_y");
+          auto depth = integerConfig("video_depth"), windowed = integerConfig("video_windowed");
+          if (!width || !height || !depth || !windowed) {
+            std::fprintf(stderr, "startup probe: stock Config display fields unavailable\n"); return 1;
+          }
+          PlatformDisplayMode requested{*width, *height, *depth};
+          bool isWindowed = *windowed != 0;
+          // FUN_0058c700 -> FUN_004fc1b0: either zero dimension selects the
+          // stock 640x480x32 windowed fallback before renderer initialization.
+          if (*width == 0 || *height == 0) { requested = {640, 480, 32}; isWindowed = true; }
+          const auto recordDisplay = [&](const char* cause, PlatformDisplayMode mode, bool windowedMode) {
+            int windowWidth = 0, windowHeight = 0, renderWidth = 0, renderHeight = 0, backingWidth = 0, backingHeight = 0;
+            SDL_GetWindowSize(diagnosticWindow.get(), &windowWidth, &windowHeight);
+            SDL_GetWindowSizeInPixels(diagnosticWindow.get(), &backingWidth, &backingHeight);
+            diagnosticRenderer->outputSize(renderWidth, renderHeight, error);
+            const auto* fullscreenMode = SDL_GetWindowFullscreenMode(diagnosticWindow.get());
+            runlog::event(runlog::EventKind::Note,
+                          "display %s: requested=%dx%dx%d windowed=%d window=%dx%d backing=%dx%d render=%dx%d fullscreen=%d exclusive=%d hostMode=%dx%d",
+                          cause, mode[0], mode[1], mode[2], windowedMode, windowWidth, windowHeight,
+                          backingWidth, backingHeight, renderWidth, renderHeight,
+                          (SDL_GetWindowFlags(diagnosticWindow.get()) & SDL_WINDOW_FULLSCREEN) != 0,
+                          fullscreenMode != nullptr, fullscreenMode ? fullscreenMode->w : backingWidth, fullscreenMode ? fullscreenMode->h : backingHeight);
+          };
+          recordDisplay("before-startup", requested, isWindowed);
+          if (visibleWindow && !SDL_ShowWindow(diagnosticWindow.get())) {
+            std::fprintf(stderr, "startup probe: show configured window: %s\n", SDL_GetError()); return 1;
+          }
+          if (!applyDisplayMode(diagnosticWindow.get(), requested, isWindowed, error)) {
+            runlog::event(runlog::EventKind::Error, "display startup rejected: %s", error.c_str());
+            std::fprintf(stderr, "startup probe: configured display: %s\n", error.c_str()); return 1;
+          }
+          if (!diagnosticRenderer->presentation(requested[0], requested[1], error)) {
+            std::fprintf(stderr, "startup probe: display presentation: %s\n", error.c_str()); return 1;
+          }
+          if (std::find(gameState.displayModes->begin(), gameState.displayModes->end(), requested) == gameState.displayModes->end())
+            gameState.displayModes->push_back(requested);
+          displaySize.width = requested[0]; displaySize.height = requested[1];
+          recordDisplay("startup-applied", requested, isWindowed);
+        }
         std::printf("measurement = %.0f; sound = %.6g, %.6g, %.6g\n",
                     measurement.value, sound.volumes[0], sound.volumes[1],
                     sound.volumes[2]);
@@ -1013,13 +1058,22 @@ static int probeMain(int argc, char** argv, const std::string& runDir) {
           std::optional<std::array<float, 3>> cursorInput =
               std::array<float, 3>{};
           world.setCursorInput([&]() { return cursorInput; });
-          const auto updateCursorPosition = [&](float x, float y) {
+          bool cursorMappingFailed = false;
+          const auto updateCursorPosition = [&](float x, float y, bool record = false) {
             int width = 0, height = 0;
-            if (!SDL_GetWindowSize(diagnosticWindow.get(), &width, &height)) {
-              cursorInput.reset();
-              return;
+            float renderX = 0, renderY = 0;
+            if (!diagnosticRenderer->outputSize(width, height, error) ||
+                !diagnosticRenderer->windowToRender(x, y, renderX, renderY)) {
+              cursorMappingFailed = true; cursorInput.reset(); return;
             }
-            const auto point = normalizeCursorPosition(x, y, width, height);
+            // The host desktop may letterbox the stock content resolution.
+            // Bars are outside the game viewport, not clamped onto edge buttons.
+            if (renderX < 0 || renderY < 0 || renderX > static_cast<float>(width) || renderY > static_cast<float>(height)) {
+              if (record) runlog::event(runlog::EventKind::Input, "cursor ignored outside content: window=%.3f,%.3f content=%.3f,%.3f size=%dx%d", x, y, renderX, renderY, width, height);
+              cursorInput.reset(); return;
+            }
+            const auto point = normalizeCursorPosition(renderX, renderY, width, height);
+            if (record && point) runlog::event(runlog::EventKind::Input, "cursor mapping: window=%.3f,%.3f content=%.3f,%.3f size=%dx%d normalized=%.6g,%.6g", x, y, renderX, renderY, width, height, (*point)[0], (*point)[1]);
             if (point)
               cursorInput =
                   std::array<float, 3>{(*point)[0], (*point)[1], 0.0f};
@@ -1073,6 +1127,18 @@ static int probeMain(int argc, char** argv, const std::string& runDir) {
             const auto flag = value ? std::get_if<int32_t>(value) : nullptr;
             return flag && *flag != 0;
           };
+          const auto derivesFrom = [&](const TufaClass* cls, std::string_view name) {
+            for (size_t depth = 0; cls && depth < loaded.size(); ++depth) {
+              if (cls->name == name) return true;
+              const auto parent = cls->classHeader[3];
+              if (parent >= cls->constants.size() || cls->constants[parent].kind != 4 || cls->constants[parent].a >= cls->constants.size()) break;
+              const auto& parentName = cls->constants[cls->constants[parent].a].text;
+              const auto found = std::find_if(loaded.begin(), loaded.end(), [&](const TufaClass* candidate) { return candidate->name == parentName; });
+              cls = found == loaded.end() ? nullptr : *found;
+            }
+            return false;
+          };
+          std::map<const VmObject*, std::array<int32_t, 4>> settingsReadiness;
           // nullptr when ready; otherwise the first condition still blocking.
           const auto scriptReady =
               [&](std::string_view condition) -> const char* {
@@ -1108,33 +1174,39 @@ static int probeMain(int argc, char** argv, const std::string& runDir) {
             if (condition == "menu") {
               if (section->runtimeClass->name != "java.game.MainMenu")
                 return "active state is not java.game.MainMenu";
-              return shown(fieldObject(objectField(section, "mmd")))
-                         ? nullptr
-                         : "main menu dialog not shown";
+              const auto* menu = fieldObject(objectField(section, "mmd"));
+              if (!shown(menu)) return "main menu dialog not shown";
+              const auto* active = objectField(menu, "actGroup");
+              const auto* main = objectField(menu, "mainGroup");
+              if (!active || !main || *active != *main) return "main menu group not active";
+              return nullptr;
+            }
+            if (condition == "options" || condition == "video") {
+              for (const auto& object : arena.objects) {
+                if (!object || !derivesFrom(object->runtimeClass, "java.game.OptionsDialog")) continue;
+                const auto integer = [&](const char* name) {
+                  const auto* field = objectField(object.get(), name);
+                  const auto* value = field ? std::get_if<int32_t>(field) : nullptr;
+                  return value ? *value : INT32_MIN;
+                };
+                const std::array<int32_t, 4> observed{integer("shown"), integer("actGroup"), integer("optionsGroup"), integer("videoGroup")};
+                const auto previous = settingsReadiness.find(object.get());
+                if (previous == settingsReadiness.end() || previous->second != observed) {
+                  settingsReadiness[object.get()] = observed;
+                  runlog::event(runlog::EventKind::Note, "settings readiness: shown=%d actGroup=%d optionsGroup=%d videoGroup=%d", observed[0], observed[1], observed[2], observed[3]);
+                }
+                if (!shown(object.get())) continue;
+                const auto* active = objectField(object.get(), "actGroup");
+                const auto* expected = objectField(object.get(), condition == "video" ? "videoGroup" : "optionsGroup");
+                const auto* activeGroup = active ? std::get_if<int32_t>(active) : nullptr;
+                const auto* expectedGroup = expected ? std::get_if<int32_t>(expected) : nullptr;
+                if (activeGroup && expectedGroup && *activeGroup == *expectedGroup && *activeGroup >= 0) return nullptr;
+              }
+              return "requested stock OptionsDialog group not shown";
             }
             // A background/menu car is not a driving scene. Observe the real
             // stock Track ancestry and player's chassis without changing either.
-            const TufaClass* cls = section->runtimeClass;
-            bool track = false;
-            for (size_t depth = 0; cls && depth < loaded.size(); ++depth) {
-              if (cls->name == "java.game.Track") {
-                track = true;
-                break;
-              }
-              const auto parent = cls->classHeader[3];
-              if (parent >= cls->constants.size() ||
-                  cls->constants[parent].kind != 4 ||
-                  cls->constants[parent].a >= cls->constants.size())
-                break;
-              const auto& name = cls->constants[cls->constants[parent].a].text;
-              const auto found = std::find_if(
-                  loaded.begin(), loaded.end(),
-                  [&](const TufaClass* candidate) {
-                    return candidate->name == name;
-                  });
-              cls = found == loaded.end() ? nullptr : *found;
-            }
-            if (!track)
+            if (!derivesFrom(section->runtimeClass, "java.game.Track"))
               return "active state is not a java.game.Track";
             const auto* player =
                 fieldObject(staticField("java.game.GameLogic", "player"));
@@ -1449,21 +1521,29 @@ static int probeMain(int argc, char** argv, const std::string& runDir) {
                               "startup probe: script quit at %.1fs", action.at);
                 return 0;
               }
-              if (action.verb == "click" && platformInput) {
-                const float x = std::stof(action.a), y = std::stof(action.b);
-                updateCursorPosition(x, y);
+              if ((action.verb == "click" || action.verb == "clickn") && platformInput) {
+                float x = std::stof(action.a), y = std::stof(action.b);
+                if (action.verb == "clickn") {
+                  int width = 0, height = 0;
+                  diagnosticRenderer->outputSize(width, height, error);
+                  const float renderX = x * static_cast<float>(width), renderY = y * static_cast<float>(height);
+                  if (!diagnosticRenderer->renderToWindow(renderX, renderY, x, y)) return 1;
+                }
+                runlog::event(runlog::EventKind::Input, "script %s: window position=%.3f,%.3f", action.verb.c_str(), x, y);
+                updateCursorPosition(x, y, true);
                 // Preserve both edges and their position across animation
                 // passes, just as captured platform mouse input does.
                 platformInput->captureMouseButton(SDL_BUTTON_LEFT, true, x, y);
                 platformInput->captureMouseButton(SDL_BUTTON_LEFT, false, x, y);
-              } else if (action.verb == "move") {
+              } else if (action.verb == "move" || action.verb == "moven") {
                 int width = 0, height = 0;
-                SDL_GetWindowSize(diagnosticWindow.get(), &width, &height);
-                const auto point = normalizeCursorPosition(
-                    std::stof(action.a), std::stof(action.b), width, height);
-                if (point)
-                  cursorInput =
-                      std::array<float, 3>{(*point)[0], (*point)[1], 0.0f};
+                float x = std::stof(action.a), y = std::stof(action.b);
+                if (action.verb == "moven") {
+                  diagnosticRenderer->outputSize(width, height, error);
+                  const float renderX = x * static_cast<float>(width), renderY = y * static_cast<float>(height);
+                  if (!diagnosticRenderer->renderToWindow(renderX, renderY, x, y)) return 1;
+                }
+                updateCursorPosition(x, y);
               } else if ((action.verb == "down" || action.verb == "up") &&
                          platformInput) {
                 platformInput->setSyntheticMouseButton(SDL_BUTTON_LEFT,
@@ -1655,10 +1735,13 @@ static int probeMain(int argc, char** argv, const std::string& runDir) {
                 }
               }
             }
+            if (cursorMappingFailed) {
+              std::fprintf(stderr, "startup probe: cursor presentation mapping failed: %s\n", SDL_GetError()); return 1;
+            }
             runlog::inputFlush(sinceLoopStart());
             platformInput->beginFrame(animationDispatch == nullptr);
             if (const auto position = platformInput->frameButtonPosition())
-              updateCursorPosition((*position)[0], (*position)[1]);
+              updateCursorPosition((*position)[0], (*position)[1], true);
             for (auto* player : world.playerInputs())
               if (player && player->playerInput)
                 player->playerInput->beginFrame(previousFrameSeconds);
@@ -1819,6 +1902,12 @@ static int probeMain(int argc, char** argv, const std::string& runDir) {
               return 1;
             }
             if (!pendingShot.empty()) {
+              int ww = 0, wh = 0, bw = 0, bh = 0, rw = 0, rh = 0;
+              SDL_GetWindowSize(diagnosticWindow.get(), &ww, &wh);
+              SDL_GetWindowSizeInPixels(diagnosticWindow.get(), &bw, &bh);
+              diagnosticRenderer->outputSize(rw, rh, error);
+              runlog::event(runlog::EventKind::Note, "display capture: window=%dx%d backing=%dx%d render=%dx%d fullscreen=%d simulationScale=%.6g",
+                            ww, wh, bw, bh, rw, rh, (SDL_GetWindowFlags(diagnosticWindow.get()) & SDL_WINDOW_FULLSCREEN) != 0, timers.timeScale());
               if (!diagnosticRenderer->saveFrame(pendingShot, error)) {
                 std::fprintf(stderr, "startup probe: script shot %s: %s\n",
                              pendingShot.c_str(), error.c_str());

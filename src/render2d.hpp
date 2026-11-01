@@ -37,6 +37,9 @@ public:
 	bool present(std::string& error);
 	bool saveFrame(const std::string& path, std::string& error);
 	bool outputSize(int& width, int& height, std::string& error) const;
+	bool presentation(int width, int height, std::string& error);
+	bool windowToRender(float x, float y, float& renderX, float& renderY) const;
+	bool renderToWindow(float x, float y, float& windowX, float& windowY) const;
 	// Largest texture side this host accepts: SDL_PROP_RENDERER_MAX_TEXTURE_SIZE_NUMBER capped at 16384.
 	uint32_t maxTextureSize() const;
 

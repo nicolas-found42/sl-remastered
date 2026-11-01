@@ -2865,7 +2865,9 @@ static VmResult executeTree(VmExecutionState &execution, VmFrame &frame) {
           if (!value.ok)
             return value;
           stack.push_back(value.value);
-        } else if (literal.op == 0x0b && literal.wide) {
+        } else if ((literal.op == 0x0b || literal.op == 0x0d) && literal.wide) {
+          // FUN_00420ff0 literal0x100d copies the boolean operand, just as
+          // literal0x100b copies an integer. Stock Script booleans use I.
           int32_t value;
           std::memcpy(&value, &literal.operand, sizeof(value));
           stack.emplace_back(VmValue{value});

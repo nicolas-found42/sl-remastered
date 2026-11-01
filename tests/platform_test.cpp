@@ -24,6 +24,13 @@ int main(int argc, char** argv) {
 	}
 	PlatformPixelSize size{};
 	if (!platform->pixelSize(size, error) || size.width <= 0 || size.height <= 0) return 1;
+  if (!applyDisplayMode(platform->window(), {800, 600, 32}, true, error) ||
+      !platform->pixelSize(size, error) || size.width != 800 || size.height != 600) return 1;
+  for (const auto mode : {PlatformDisplayMode{0, 600, 32}, PlatformDisplayMode{800, 600, 16}}) {
+    if (applyDisplayMode(platform->window(), mode, true, error) || error.empty() ||
+        !platform->pixelSize(size, error) || size.width != 800 || size.height != 600) return 1;
+  }
+  if (!applyDisplayMode(platform->window(), {640, 480, 32}, true, error)) return 1;
 	{
 		auto input = PlatformInput::create(error);
 		if (!input) { std::fprintf(stderr, "input: %s\n", error.c_str()); return 1; }

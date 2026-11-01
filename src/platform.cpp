@@ -393,7 +393,9 @@ std::optional<std::vector<PlatformDisplayMode>> platformDisplayModes(std::string
   SDL_DisplayMode **modes = SDL_GetFullscreenDisplayModes(display, &count);
   if (!modes) { error = SDL_GetError(); return std::nullopt; }
   std::vector<PlatformDisplayMode> values;
-  for (int i = 0; i < count; ++i) if (modes[i])
+  // The native renderer supports 32-bit color. Do not offer unimplemented
+  // 16-bit output as a selectable mode in the stock options dialog.
+  for (int i = 0; i < count; ++i) if (modes[i] && SDL_BITSPERPIXEL(modes[i]->format) == 32)
     values.push_back({modes[i]->w, modes[i]->h, static_cast<int32_t>(SDL_BITSPERPIXEL(modes[i]->format))});
   SDL_free(modes);
   return uniqueDisplayModes(values);
@@ -403,4 +405,43 @@ std::optional<std::array<float, 2>> normalizeCursorPosition(float x, float y, in
   if (width <= 0 || height <= 0 || !std::isfinite(x) || !std::isfinite(y)) return std::nullopt;
   return std::array<float, 2>{std::clamp(2.0f * x / width - 1.0f, -1.0f, 1.0f),
                               std::clamp(2.0f * y / height - 1.0f, -1.0f, 1.0f)};
+}
+
+bool applyDisplayMode(SDL_Window* window, PlatformDisplayMode mode, bool windowed, std::string& error) {
+  if (!window || mode[0] <= 0 || mode[1] <= 0 || mode[0] > 32767 || mode[1] > 32767 || mode[2] != 32) {
+    error = "display request unsupported: dimensions must fit stock signed shorts and host renderer requires 32-bit color";
+    return false;
+  }
+  const SDL_DisplayMode* selected = nullptr;
+  SDL_DisplayMode selectedValue{};
+  if (!windowed) {
+    int count = 0;
+    SDL_DisplayMode** modes = SDL_GetFullscreenDisplayModes(SDL_GetDisplayForWindow(window), &count);
+    if (!modes) { error = SDL_GetError(); return false; }
+    for (int i = 0; i < count; ++i)
+      if (modes[i] && modes[i]->w == mode[0] && modes[i]->h == mode[1] && SDL_BITSPERPIXEL(modes[i]->format) == mode[2]) {
+        selectedValue = *modes[i]; selected = &selectedValue; break;
+      }
+    SDL_free(modes);
+    // macOS may expose only the desktop mode. The renderer retains the stock
+    // content resolution and letterboxes it; nullptr selects desktop fullscreen.
+
+  }
+  int oldWidth = 0, oldHeight = 0;
+  if (!SDL_GetWindowSize(window, &oldWidth, &oldHeight)) { error = SDL_GetError(); return false; }
+  const bool oldFullscreen = (SDL_GetWindowFlags(window) & SDL_WINDOW_FULLSCREEN) != 0;
+  const SDL_DisplayMode* oldMode = SDL_GetWindowFullscreenMode(window);
+  std::optional<SDL_DisplayMode> previous;
+  if (oldMode) previous = *oldMode;
+  if (!SDL_SetWindowFullscreen(window, false) || !SDL_SetWindowSize(window, mode[0], mode[1]) ||
+      !SDL_SetWindowFullscreenMode(window, selected) || !SDL_SetWindowFullscreen(window, !windowed) || !SDL_SyncWindow(window)) {
+    error = SDL_GetError();
+    SDL_SetWindowFullscreen(window, false);
+    SDL_SetWindowSize(window, oldWidth, oldHeight);
+    SDL_SetWindowFullscreenMode(window, previous ? &*previous : nullptr);
+    SDL_SetWindowFullscreen(window, oldFullscreen);
+    SDL_SyncWindow(window);
+    return false;
+  }
+  error.clear(); return true;
 }
