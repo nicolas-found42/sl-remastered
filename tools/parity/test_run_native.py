@@ -26,6 +26,7 @@ class NativeRecordTest(unittest.TestCase):
             self.assertEqual((save / 'game/options').read_bytes(), b'initial')
             self.assertEqual((out / 'data/save/game/options').read_bytes(), b'changed')
             self.assertEqual(json.loads((out / 'result.json').read_text())['exit_code'], 0)
+            self.assertTrue(json.loads((out / 'result.json').read_text())['source_save_unchanged'])
             metadata = json.loads((out / 'metadata.json').read_text())
             self.assertEqual(metadata['game_data']['status'], 'complete')
             manifest = json.loads((out / 'game-data-manifest.json').read_text())
@@ -47,13 +48,33 @@ class NativeRecordTest(unittest.TestCase):
             missing = subprocess.run(base + ['--script', str(root / 'absent.txt')],
                                      capture_output=True)
             self.assertEqual(missing.returncode, 2)
-            bad_timeout = subprocess.run(base + ['--timeout', '0'], capture_output=True)
-            self.assertEqual(bad_timeout.returncode, 2)
+            for value in ('0', 'nan', 'inf'):
+                bad_timeout = subprocess.run(base + ['--timeout', value], capture_output=True)
+                self.assertEqual(bad_timeout.returncode, 2)
             escaping = root / 'escaping.txt'
             escaping.write_text(f'0 wait menu 30\n1 shot {save / "options"}\n2 quit\n')
             escape = subprocess.run(base + ['--script', str(escaping)], capture_output=True)
             self.assertEqual(escape.returncode, 2)
             self.assertFalse((root / 'out').exists())
+
+    def test_explicit_reference_root_rejects_symlink_output(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            reference, game, save = (root / name for name in ('reference', 'game', 'save'))
+            for path in (reference, game, save):
+                path.mkdir()
+            alias = root / 'reference-alias'
+            alias.symlink_to(reference, target_is_directory=True)
+            probe = root / 'probe'
+            probe.write_text('unused')
+            tool = Path(__file__).with_name('run_native.py')
+            result = subprocess.run(['python3', '-I', str(tool), str(alias / 'out'),
+                                     '--probe', str(probe), '--game', str(game),
+                                     '--save', str(save), '--reference-root', str(reference)],
+                                    capture_output=True, text=True)
+            self.assertEqual(result.returncode, 2)
+            self.assertIn('outside reference root', result.stderr)
+            self.assertFalse((reference / 'out').exists())
 
     def test_rejects_overlapping_paths_even_through_symlinks(self):
         with tempfile.TemporaryDirectory() as temp:

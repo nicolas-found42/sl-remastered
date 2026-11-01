@@ -17,6 +17,7 @@ python3 -I tools/native_evidence_audit.py
 python3 -I tests/menu_trace_test.py
 python3 -I tests/startup_trace_test.py
 python3 -I tests/startup_constructor_test.py
+python3 -I tests/native_run_paths_test.py
 python3 -I tests/run_log_test.py
 python3 -I tests/run_screenshot_test.py
 python3 -I tests/diagnose_merge_test.py

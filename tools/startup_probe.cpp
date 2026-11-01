@@ -46,7 +46,7 @@
 
 static int probeMain(int argc, char** argv, const std::string& runDir) {
   const auto processClockOrigin = std::chrono::steady_clock::now();
-  std::string root = "ref/raw", dataRoot;
+  std::string root = "ref/raw", dataRoot, referenceRoot = "ref";
   std::string captureFrame, scriptPath;
   // Test hook: --crash-on-key NAME[:segv|abort|error] fails when that key goes
   // down (see docs/run-log.md).
@@ -103,6 +103,8 @@ static int probeMain(int argc, char** argv, const std::string& runDir) {
       constructor = true;
     else if (arg == "--class" && i + 1 < argc)
       extraNames.push_back(argv[++i]);
+    else if (arg == "--reference-root" && i + 1 < argc)
+      referenceRoot = argv[++i];
     else if (arg == "--data-root" && dataRoot.empty() && i + 1 < argc)
       dataRoot = argv[++i];
     else if (!haveRoot && !arg.empty() && arg[0] != '-') {
@@ -113,7 +115,7 @@ static int probeMain(int argc, char** argv, const std::string& runDir) {
                    "usage: startup_probe [--constructor|--init] [--no-input] "
                    "[--renderer] [--frame] [--loop] [--visible] [--script "
                    "file] [--crash-on-key NAME[:mode]] [--no-run-log] [--class "
-                   "name]... [--data-root directory] [game-root]\n");
+                   "name]... [--data-root directory] [--reference-root directory] [game-root]\n");
       return 2;
     }
   }
@@ -318,7 +320,8 @@ static int probeMain(int argc, char** argv, const std::string& runDir) {
     world.setCursorSelector([&](int32_t index, bool visible,
                                 std::string& cursorError) {
       return platformInput->selectStockCursor(
-          "ref/raw/StreetLegal_Redline.bak.exe", index, visible, cursorError);
+          (std::filesystem::path(referenceRoot) / "raw/StreetLegal_Redline.bak.exe").string(),
+          index, visible, cursorError);
     });
   }
   if (useRenderer) {
@@ -405,7 +408,7 @@ static int probeMain(int argc, char** argv, const std::string& runDir) {
   }
   std::optional<FileState> fileState;
   if (!dataRoot.empty()) {
-    fileState.emplace(dataRoot, "ref", root);
+    fileState.emplace(dataRoot, referenceRoot, root);
     arena.fileState = &*fileState;
   }
   const auto& loaded = runtime.classes();
@@ -1923,6 +1926,8 @@ int main(int argc, char** argv) {
       enabled = false;
     else if (arg == "--script" && i + 1 < argc)
       options.scriptPath = argv[++i];
+    else if (arg == "--reference-root" && i + 1 < argc)
+      options.referenceRoot = argv[++i];
     else if (arg == "--data-root" && i + 1 < argc)
       options.dataRoot = argv[++i];
     else if (arg == "--capture-frame" || arg == "--class" ||
@@ -1933,12 +1938,38 @@ int main(int argc, char** argv) {
       haveRoot = true;
     }
   }
+  // Reject unsafe writable roots before either the recorder or Scripts write.
+  if (!options.dataRoot.empty()) {
+    namespace fs = std::filesystem;
+    std::error_code ec;
+    const auto data = fs::weakly_canonical(options.dataRoot, ec);
+    if (ec) {
+      std::fprintf(stderr, "startup probe: cannot resolve data root\n");
+      return 2;
+    }
+    const auto contains = [](const fs::path& a, const fs::path& b) {
+      auto i = a.begin(), j = b.begin();
+      for (; i != a.end() && j != b.end(); ++i, ++j)
+        if (*i != *j)
+          return false;
+      return i == a.end();
+    };
+    for (const auto& source : {options.referenceRoot, options.gameRoot}) {
+      const auto protectedRoot = fs::weakly_canonical(source, ec);
+      if (ec || contains(protectedRoot, data) || contains(data, protectedRoot)) {
+        std::fprintf(stderr, "startup probe: data root must not overlap reference or installed game\n");
+        return 2;
+      }
+    }
+  }
   std::unique_ptr<runlog::RunRecorder> recorder;
   if (enabled) {
     std::string error;
     recorder = runlog::RunRecorder::start(options, error);
-    if (!recorder || !error.empty())
+    if (!recorder || !error.empty()) {
       std::fprintf(stderr, "startup probe: run log: %s\n", error.c_str());
+      return 2;
+    }
   }
   const int code =
       probeMain(argc, argv, recorder ? recorder->dir() : std::string{});

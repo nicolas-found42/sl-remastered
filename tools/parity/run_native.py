@@ -12,8 +12,8 @@ Every run snapshots the --save fixture into a fresh data root (the fixture is
 never modified), copies the exact script that ran into the output directory,
 and points the probe's run recorder (SLRR_RUN_DIR) at <output>/run so
 `shot @run/...` lines work and run telemetry stays inside the record. The
-probe runs from the repository root because its Reference Folder guard is the
-cwd-relative `ref`; scripts should therefore use `@run/` shot paths. A nonzero
+probe runs from the isolated writable data root with an explicit Reference
+Folder; scripts should use `@run/` shot paths. A nonzero
 exit or subprocess timeout is a failure; screenshots and exit codes alone do
 not prove driving or parity.
 """
@@ -22,6 +22,7 @@ import datetime
 import hashlib
 import importlib.util
 import json
+import math
 import os
 from pathlib import Path
 import shutil
@@ -58,6 +59,8 @@ def main():
     parser.add_argument('output', help='new output directory outside ref/')
     parser.add_argument('--probe', required=True, help='built startup_probe')
     parser.add_argument('--game', required=True, help='extracted 2005 game directory')
+    parser.add_argument('--reference-root', default=str(snapshot_module.REF),
+                        help='immutable Reference Folder (default: repository ref/)')
     parser.add_argument('--save', required=True, help='save directory to copy before the run')
     parser.add_argument('--script', help='script file to run instead of the bundled mode script')
     parser.add_argument('--cold-start', action='store_true',
@@ -69,11 +72,12 @@ def main():
         mode = 'cold' if args.cold_start else 'rapid'
         probe, game, save = (Path(p).resolve(strict=True) for p in (args.probe, args.game, args.save))
         out = Path(args.output).resolve()
+        reference = Path(args.reference_root).resolve()
         timeout = args.timeout if args.timeout is not None else DEFAULT_TIMEOUT
-        if timeout <= 0:
+        if not math.isfinite(timeout) or timeout <= 0:
             raise ValueError('timeout must be positive')
-        if out == snapshot_module.REF or snapshot_module.REF in out.parents:
-            raise ValueError('output must be outside ref/')
+        if out == reference or reference in out.parents or out in reference.parents:
+            raise ValueError('output must be outside reference root and must not contain it')
         if not probe.is_file() or not game.is_dir() or not save.is_dir():
             raise ValueError('probe must be a file; game and save must be directories')
         if any(out == source or source in out.parents or out in source.parents for source in (game, save)):
@@ -101,7 +105,7 @@ def main():
                              'path': str(manifest_path), 'sha256': digest(manifest_path)}
         except (OSError, ValueError) as error:
             data_identity = {'status': 'unavailable', 'reason': str(error)}
-        snapshot_module.snapshot(save, out / 'initial-save')
+        initial_save = snapshot_module.snapshot(save, out / 'initial-save')
         data = out / 'data'
         data.mkdir()
         shutil.copytree(out / 'initial-save/save', data / 'save')
@@ -115,9 +119,11 @@ def main():
         run_dir = out / 'run'
         run_dir.mkdir()
         cmd = [str(probe), '--init', '--renderer', '--loop', '--visible',
-               '--script', str(script), '--data-root', str(data), str(game)]
+               '--script', str(script), '--data-root', str(data),
+               '--reference-root', str(reference), str(game)]
         metadata = {'probe': str(probe), 'probe_sha256': digest(probe), 'game': str(game),
                     'game_data': data_identity,
+                    'reference_root': str(reference),
                     'mode': mode, 'script_source': script_label,
                     'script_path': str(script), 'script_sha256': digest(script),
                     'run_dir': str(run_dir),
@@ -130,20 +136,22 @@ def main():
         # Run-local recorder: @run shots and run telemetry land inside the record.
         environment['SLRR_RUN_DIR'] = str(run_dir)
         start = time.monotonic()
-        # The probe resolves its Reference Folder guard as the cwd-relative
-        # `ref`, so it must run from the repository root; scripts write shots
-        # into the record with `shot @run/...`.
+        # Keep cwd-relative writes disposable. The probe receives an explicit
+        # Reference Folder for both save guards and stock cursor resources.
         with (out / 'stdout.log').open('w') as stdout, (out / 'stderr.log').open('w') as stderr:
             try:
-                result = subprocess.run(cmd, env=environment, cwd=snapshot_module.REF.parent,
+                result = subprocess.run(cmd, env=environment, cwd=data,
                                         stdout=stdout, stderr=stderr, timeout=timeout)
                 status = {'exit_code': result.returncode, 'timed_out': False}
             except subprocess.TimeoutExpired:
                 status = {'exit_code': None, 'timed_out': True}
+            except OSError as error:
+                status = {'exit_code': None, 'timed_out': False, 'error': str(error)}
         status['elapsed_seconds'] = time.monotonic() - start
+        status['source_save_unchanged'] = (snapshot_module.manifest(save) == initial_save['files'])
         (out / 'result.json').write_text(json.dumps(status, indent=2) + '\n')
         print(json.dumps(status))
-        if status['timed_out'] or status['exit_code'] != 0:
+        if status['timed_out'] or status['exit_code'] != 0 or not status['source_save_unchanged']:
             return 1
         return 0
     except (OSError, ValueError) as error:

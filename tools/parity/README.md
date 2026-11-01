@@ -58,6 +58,24 @@ python3 -I tools/parity/run_native.py local/verify/fast-1 \
   --save local/stock-data/save
 ```
 
+The launcher runs the probe from the isolated `<output>/data` directory.
+`--reference-root PATH` selects the immutable Reference Folder for save guards,
+Run output guards, and stock cursor resources. The default is the launcher's
+repository `ref/`, resolved through symlinks. From a worktree without its own
+Reference Folder, pass the original checkout's absolute `ref/` path. The native
+probe also accepts `--reference-root`; its default remains cwd-relative `ref`
+for existing callers. Native Runs refuse writable data and recorder directories
+that overlap the Installed Game or Reference Folder, including symlink aliases.
+Recorder initialization failure stops the probe before game startup.
+
+`result.json` records whether the source fixture's file hashes still match the
+prelaunch snapshot. A changed fixture, process launch error, nonzero exit, or
+bounded process timeout fails the launcher. Timeouts must be finite and positive.
+Exact scripts, source-save manifests, and executable hashes remain in the output.
+
+The [ticket #2 evidence record](rapid-run-evidence.md) distinguishes the executed
+workflow checks from unresolved gameplay and full-gate failures.
+
 The bundled rapid script is `tools/scripts/free-ride-fast.txt`. The process
 timeout is 120 s, covering a menu wait of up to 30 s, a driving wait of up to
 60 s, startup and post-ready actions; override with `--timeout SECONDS`.
@@ -70,8 +88,8 @@ python3 -I tools/parity/run_native.py local/verify/cold-1 \
   --probe build/startup_probe --game <game-dir> --save <save-dir> --cold-start
 ```
 
-Custom script (any later-state fixture save works the same way; the save is
-copied, never written in place):
+Custom script (the fixture is copied, never written in place; verify normal
+load and entry for each later-state save):
 
 ```sh
 python3 -I tools/parity/run_native.py local/verify/custom-1 \
