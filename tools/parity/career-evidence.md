@@ -200,3 +200,27 @@ was launched after the owner's no-focus request. Jev selected the hidden Cocoa
 approach with probability 0.96 and no contradicted requirement checks.
 After the final hint guard build, `ctest-final.log` records 122/123 passing
 without the global audio override; only the same sleeping-body assertion fails.
+
+
+2026-11-01 handoff at the owner's request: commit and merge unfinished work.
+The stale Native evidence identity is now reconciled locally: the recorded
+VM test hash exactly matched f090ebb, while integration 8c1c3f3 changed its
+null-receiver expectation. The current three VM checks pass and the strict
+Native evidence audit reports six matches with zero artifact errors. The
+reviewed identity delta is recorded in career-evidence-refresh.json; no Native
+status or proprietary artifact was changed.
+
+The existing object_world_step_unit remains unresolved: the box stays supported
+at approximately y=0.278 but does not meet the stock sleep gate. Added test
+output exposes angular velocity and support activity without changing any
+assertion. Experimental cached-contact changes passed isolated geometry tests
+but made the original box fall through the floor; those changes and temporary
+debug logs are excluded from the merge. Their patch and diagnostic logs are
+preserved with the private local evidence for follow-up. This is a partial
+handoff, not full issue #6 acceptance or a clean full-suite claim.
+
+Final handoff validation (`resolution/handoff-check.log`) rebuilt the tree and
+ran all 123 CTests: 122 pass, with only the original sleeping-body assertion
+failing. `tools/check.sh` stops at that failure; later checks were not reached
+in this invocation. A separate strict Native audit again reports six matches
+and zero artifact errors (`resolution/handoff-audit.log`).
