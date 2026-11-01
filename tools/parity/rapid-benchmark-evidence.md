@@ -116,8 +116,8 @@ There are no custom capture delays or extra sleeps in these scenarios.
 `cartrace_check.py` originally passed all ten traces for speed steps and falling.
 Correction (ticket #5): its supposed tag check read `tags`, while production
 emits `anom`; that pass did not validate anomaly tags. The corrected checker
-rejects these traces for their recorded `iteration_cap` anomalies. Separately counted `iteration_cap` anomalies occur 5–8 times per Run and
-are not rejected by that checker. Logs retain incomplete spatial factory
+rejects these traces for their recorded `iteration_cap` anomalies, which occur
+5–8 times per Run. Logs retain incomplete spatial factory
 collision coverage, unsupported special body pairs and mesh directives,
 tire-contact rejection, and incomplete HUD damage diagnostics. These are Gaps.
 The inspected first-pair throttle images show the same Car, road and HUD speed
