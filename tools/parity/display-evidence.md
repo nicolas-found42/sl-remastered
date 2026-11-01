@@ -70,3 +70,31 @@ across those transitions remain pending. Gamma, shadow, texture-detail, flare,
 headlight, and particle rendering controls are not verified by this checkpoint.
 The two settings Natives remain unimplemented here rather than accepting no-op
 changes. Full integration checks belong to the parent integration checkout.
+
+## Blocker at the apply/cancel step (2026-11-01)
+
+Reaching the settings apply path is blocked by a VM semantics divergence, not by
+the display code. Run `local/runs/20261101T113035Z-85061` selects a resolution in
+Video Options (`clickn 0.6 0.2`) and then presses Back (`clickn 0.94 0.925`). The
+run aborts with `null or invalid qualified receiver` with the stack
+`Group.handleEvent` (tree 10 pc 583 line 277) -> `Osd.deactivateText` (tree 72
+pc 7 line 296) -> `MultiChoice.unfocus` (tree 2 pc 10 line 38) ->
+`Vector.removeElement` (tree 24 pc 7 line 283) -> `Vector.indexOf(Object,I)`
+(tree 12 pc 6 line 141) -> `Vector.indexOf` (tree 13 pc 13 line 148).
+
+Stock script evidence: `MultiChoice.unfocus` sets `hkl`/`hkr` to null
+(`MultiChoice.class` tree 2 node 20), so a second `unfocus` on the same gadget
+passes a null search value to `Vector.removeElement`, which calls
+`search.equals(...)` with a null receiver. Rejecting that call is the port's VM
+policy; the stock VM evidently tolerates the null receiver, since stock ships
+this exact script on the Back/cancel path. Back alone (`.../t45-back`) and
+selection alone (`.../t45-sel`) both exit ok, so the failing sequence is the
+post-selection redraw plus Back.
+
+Consequence: applying/persisting/cancelling a display change through the stock
+Options UI cannot be exercised until the VM matches stock for a null receiver
+(and the subsequent `hkl.inactivate()` on null). Live mode application,
+persistence, restart and timing across transitions remain unverified for the
+same reason. Startup presentation below is verified with a real window capture
+(run `local/runs/20261101T113010Z-84628`: `video-options.bmp`, window 1265x949,
+render 800x600, fullscreen=1, exclusive=0).
