@@ -83,10 +83,43 @@ int main() {
     action = script.poll(2, never, ignore, error);
     CHECK(action && action->verb == "keyup" && action->a == "Left Shift");
   }
+  {
+    // Predetermined navigation runs at the same schedule offset, while the
+    // real splash and menu independently report readiness.
+    ProbeScript script;
+    std::istringstream input("0 wait splash 30\n0 keydown Escape\n0 wait menu 30\n0 keyup Escape\n0 click 420 127\n0 wait driving 60\n0.1 keydown Up\n2.1 keyup Up\n");
+    CHECK(script.read(input, error));
+    std::string active = "loading";
+    const auto ready = [&](std::string_view condition) -> const char* {
+      return condition == active ? nullptr : "wrong active state";
+    };
+    CHECK(!script.poll(0, ready, ignore, error));
+    active = "splash";
+    auto* action = script.poll(0.01, ready, ignore, error);
+    CHECK(action && action->verb == "keydown");
+    script.consume();
+    CHECK(!script.poll(0.01, ready, ignore, error));
+    active = "menu";
+    action = script.poll(0.02, ready, ignore, error);
+    CHECK(action && action->verb == "keyup");
+    script.consume();
+    action = script.poll(0.02, ready, ignore, error);
+    CHECK(action && action->verb == "click" && std::stof(action->a) == 420 && std::stof(action->b) == 127);
+    script.consume();
+    CHECK(!script.poll(0.02, ready, ignore, error));
+    active = "driving";
+    CHECK(!script.poll(4, ready, ignore, error));
+    action = script.poll(4.11, ready, ignore, error);
+    CHECK(action && action->verb == "keydown");
+    script.consume();
+    CHECK(!script.poll(6, ready, ignore, error));
+    action = script.poll(6.11, ready, ignore, error);
+    CHECK(action && action->verb == "keyup");
+  }
   for (const auto* text : {"0 wait unknown 2\n", "0 wait menu 0\n",
                            "0 wait menu -1\n", "0 wait driving 2oops\n",
                            "bad wait menu 2\n", "0 press Up\n", "0 keydown\n",
-                           "0 move 10\n", "0 move x 4\n", "0 shot\n"}) {
+                           "0 click 10\n", "0 click nan 4\n", "0 wait splash 0\n", "0 move 10\n", "0 move x 4\n", "0 shot\n"}) {
     ProbeScript script;
     std::istringstream input(text);
     CHECK(!script.read(input, error));

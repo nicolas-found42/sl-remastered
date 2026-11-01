@@ -3,7 +3,8 @@
 
 Modes:
   rapid (default) -- bundled tools/scripts/free-ride-fast.txt; waits for the
-      real menu and a real driving scene, then a short throttle burst.
+      splash cancel hotkey, skips the splash with normal Escape, clicks the real
+      menu and waits for a real driving scene, then a short throttle burst.
   --cold-start -- same driving wait and post-ready throttle burst, but the
       menu is entered with the legacy fixed-timed click (10/13/13.5 s).
   --script FILE -- caller-supplied script instead of a bundled one.

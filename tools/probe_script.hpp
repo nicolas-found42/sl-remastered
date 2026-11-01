@@ -11,6 +11,8 @@
 #include <vector>
 
 // Only the input schedule pauses at a wait; simulation and loading keep running.
+// wait splash observes the active splash cancel hotkey ready for normal Escape.
+// click X Y queues both mouse edges at that position across animation passes.
 class ProbeScript {
 public:
   struct Action {
@@ -52,7 +54,8 @@ public:
                   std::to_string(lineNumber);
           return false;
         }
-      } else if (action.verb == "move" || action.verb == "sdl_move") {
+      } else if (action.verb == "move" || action.verb == "sdl_move" ||
+                 action.verb == "click") {
         float x = 0, y = 0;
         if (!(fields >> x >> y) || !std::isfinite(x) || !std::isfinite(y)) {
           error = action.verb + " expects X Y at line " +
@@ -64,10 +67,10 @@ public:
       } else if (action.verb == "wait") {
         fields >> action.a >> action.b;
         std::istringstream timeout(action.b);
-        if ((action.a != "menu" && action.a != "driving") ||
+        if ((action.a != "splash" && action.a != "menu" && action.a != "driving") ||
             !(timeout >> action.timeout) || !std::isfinite(action.timeout) ||
             action.timeout <= 0 || !(timeout >> std::ws).eof()) {
-          error = "expected wait menu|driving <positive timeout> at line " +
+          error = "expected wait splash|menu|driving <positive timeout> at line " +
                   std::to_string(lineNumber);
           return false;
         }
