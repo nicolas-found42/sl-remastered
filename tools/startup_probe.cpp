@@ -56,6 +56,8 @@ static int probeMain(int argc, char** argv, const std::string& runDir) {
        noInput = false, useRenderer = false;
   bool renderFrame = false, visibleWindow = false, runLoop = false,
        holdFrame = false, captureOnError = false, noIntro = false;
+  const char* backgroundEnvironment = SDL_getenv("SLRR_PROBE_BACKGROUND");
+  bool background = backgroundEnvironment && std::string_view(backgroundEnvironment) == "1";
   std::vector<std::string> extraNames;
   for (int i = 1; i < argc; ++i) {
     const std::string arg = argv[i];
@@ -72,6 +74,8 @@ static int probeMain(int argc, char** argv, const std::string& runDir) {
       runLoop = true;
     else if (arg == "--visible" && !visibleWindow)
       visibleWindow = true;
+    else if (arg == "--background")
+      background = true;
     else if (arg == "--hold-frame" && !holdFrame)
       holdFrame = true;
     // Harness route switch, not a game behavior: the stock executable plays
@@ -118,11 +122,23 @@ static int probeMain(int argc, char** argv, const std::string& runDir) {
     } else {
       std::fprintf(stderr,
                    "usage: startup_probe [--constructor|--init] [--no-input] "
-                   "[--renderer] [--frame] [--loop] [--visible] [--script "
+                   "[--renderer] [--frame] [--loop] [--visible|--background] [--script "
                    "file] [--crash-on-key NAME[:mode]] [--no-run-log] [--class "
                    "name]... [--data-root directory] [--reference-root directory] [game-root]\n");
       return 2;
     }
+  }
+  if (background) {
+    // Harness isolation: Cocoa must not activate this process, show a window,
+    // change the user's display or cursor. Stock Config values stay untouched.
+    visibleWindow = false;
+    if (!SDL_SetHintWithPriority(SDL_HINT_MAC_BACKGROUND_APP, "1", SDL_HINT_OVERRIDE) ||
+        !SDL_SetHintWithPriority(SDL_HINT_WINDOW_ACTIVATE_WHEN_SHOWN, "0", SDL_HINT_OVERRIDE) ||
+        !SDL_SetHintWithPriority(SDL_HINT_WINDOW_ACTIVATE_WHEN_RAISED, "0", SDL_HINT_OVERRIDE)) {
+      std::fprintf(stderr, "startup probe: background activation hints refused\n");
+      return 1;
+    }
+    runlog::event(runlog::EventKind::Note, "background harness: hidden/windowed; startup movies and host cursor omitted; scripted Escape skips splash");
   }
   PackRegistry packs(root);
   ClassEnvironment classes(root);
@@ -330,6 +346,10 @@ static int probeMain(int argc, char** argv, const std::string& runDir) {
         [&](int32_t device) { return platformInput->axisCount(device); });
     world.setCursorSelector([&](int32_t index, bool visible,
                                 std::string& cursorError) {
+      if (background) {
+        cursorError.clear();
+        return true;
+      }
       return platformInput->selectStockCursor(
           (std::filesystem::path(referenceRoot) / "raw/StreetLegal_Redline.bak.exe").string(),
           index, visible, cursorError);
@@ -919,7 +939,7 @@ static int probeMain(int argc, char** argv, const std::string& runDir) {
             std::fprintf(stderr, "startup probe: show configured window: %s\n", SDL_GetError());
             return 1;
           }
-          if (!applyDisplayMode(diagnosticWindow.get(), requested, isWindowed, error)) {
+          if (!applyDisplayMode(diagnosticWindow.get(), requested, isWindowed || background, error)) {
             runlog::event(runlog::EventKind::Error, "display startup rejected: %s", error.c_str());
             std::fprintf(stderr, "startup probe: configured display: %s\n", error.c_str());
             return 1;
@@ -933,6 +953,12 @@ static int probeMain(int argc, char** argv, const std::string& runDir) {
           displaySize.width = requested[0];
           displaySize.height = requested[1];
           recordDisplay("startup-applied", requested, isWindowed);
+          if (background) {
+            const auto flags = SDL_GetWindowFlags(diagnosticWindow.get());
+            runlog::event(runlog::EventKind::Note, "background window: hidden=%d fullscreen=%d inputFocus=%d",
+                          (flags & SDL_WINDOW_HIDDEN) != 0, (flags & SDL_WINDOW_FULLSCREEN) != 0,
+                          (flags & SDL_WINDOW_INPUT_FOCUS) != 0);
+          }
           // Stock FUN_0058c700 plays the native startup videos after display
           // and sound initialization and before the script world runs
           // (all.c:302193). FUN_0054c170 skips an absent file; each
@@ -1047,7 +1073,7 @@ static int probeMain(int argc, char** argv, const std::string& runDir) {
               detail.clear();
               return true;
             }
-            if (!applyDisplayMode(diagnosticWindow.get(), mode, false, detail)) {
+            if (!applyDisplayMode(diagnosticWindow.get(), mode, background, detail)) {
               runlog::event(runlog::EventKind::Error, "display change rejected: requested=%dx%dx%d cause=%s", mode[0], mode[1], mode[2], detail.c_str());
               return false;
             }
@@ -1249,7 +1275,7 @@ static int probeMain(int argc, char** argv, const std::string& runDir) {
                          "startup probe: frame loop requires completed Init\n");
             return 1;
           }
-          if (!visibleWindow) {
+          if (!visibleWindow && !background) {
             std::fprintf(stderr,
                          "startup probe: frame loop requires --visible\n");
             return 1;

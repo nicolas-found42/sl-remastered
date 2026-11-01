@@ -1,0 +1,15 @@
+# Empty OK must keep the requester open; Cancel after typing must create no Career.
+0 wait splash 30
+0 keydown Escape
+0 wait menu 30
+0 keyup Escape
+0 clickn 0.390625 0.2
+0.5 clickn 0.4 0.7875
+1 shot @run/r2-empty-name.bmp
+1.2 sdl_type A
+1.4 sdl_type b
+1.6 sdl_type c
+2 shot @run/r2-before-cancel.bmp
+2.2 clickn 0.6 0.7875
+3 shot @run/r2-cancelled.bmp
+4 quit

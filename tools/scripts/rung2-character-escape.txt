@@ -1,0 +1,15 @@
+# Stock MainMenu ignores the character dialog result: Escape still creates Career.
+0 wait splash 30
+0 keydown Escape
+0 wait menu 30
+0 keyup Escape
+0 clickn 0.390625 0.2
+0.5 sdl_type E
+0.7 sdl_type s
+0.9 sdl_type c
+1.2 clickn 0.4 0.7875
+1.7 shot @run/r2-before-character-escape.bmp
+1.9 keydown Escape
+2 keyup Escape
+6 shot @run/r2-after-character-escape.bmp
+7 quit

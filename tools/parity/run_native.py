@@ -8,6 +8,9 @@ Modes:
   --cold-start -- same driving wait and post-ready throttle burst, but the
       menu is entered with the legacy fixed-timed click (10/13/13.5 s).
   --script FILE -- caller-supplied script instead of a bundled one.
+  --background -- render to a hidden window without desktop fullscreen/focus,
+      startup movies, or host cursor changes. Rapid scripts skip the splash
+      using Escape. SLRR_PROBE_BACKGROUND=1 also enables this for direct probes.
 
 Every run snapshots the --save fixture into a fresh data root (the fixture is
 never modified), copies the exact script that ran into the output directory,
@@ -68,6 +71,8 @@ def main():
     parser.add_argument('--script', help='script file to run instead of the bundled mode script')
     parser.add_argument('--cold-start', action='store_true',
                         help='legacy timed menu entry instead of wait menu; same driving wait')
+    parser.add_argument('--background', action='store_true',
+                        help='hidden window without desktop fullscreen/focus or startup movies; use scripted Escape for splash')
     parser.add_argument('--timeout', type=float,
                         help='maximum seconds (default: 120)')
     args = parser.parse_args()
@@ -121,7 +126,9 @@ def main():
             script.write_text(COLD_SCRIPT_TEXT)
         run_dir = out / 'run'
         run_dir.mkdir()
-        cmd = [str(probe), '--init', '--renderer', '--loop', '--visible',
+        background = args.background or os.environ.get('SLRR_PROBE_BACKGROUND') == '1'
+        cmd = [str(probe), '--init', '--renderer', '--loop',
+               '--background' if background else '--visible',
                '--script', str(script), '--data-root', str(data),
                '--reference-root', str(reference), str(game)]
         metadata = {'probe': str(probe), 'probe_sha256': digest(probe), 'game': str(game),

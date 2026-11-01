@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
+# Automated probes keep rendering and scripted input without activating Cocoa.
+export SLRR_PROBE_BACKGROUND="${SLRR_PROBE_BACKGROUND:-1}"
 
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release > /dev/null
 cmake --build build
@@ -18,6 +20,7 @@ python3 -I tests/menu_trace_test.py
 python3 -I tests/startup_trace_test.py
 python3 -I tests/startup_constructor_test.py
 python3 -I tests/native_run_paths_test.py
+python3 -I tests/native_background_test.py
 python3 -I tests/run_log_test.py
 python3 -I tests/run_screenshot_test.py
 python3 -I tests/diagnose_merge_test.py

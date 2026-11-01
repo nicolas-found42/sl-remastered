@@ -10,6 +10,15 @@ python3 -I tools/parity/run_native.py local/verify/native-attempt-unique \
   --save local/rapid-testing/baseline-data/save
 ```
 
+Use `--background` while working alongside the Run. It keeps the Cocoa window
+hidden, prevents desktop fullscreen and focus activation, omits native startup
+movies and leaves the host cursor alone. The normal rapid script still sends
+Escape as soon as the splash hotkey is ready. Rendering, captures, stock Script
+initialization and simulation continue; this route does not test visible host
+display behavior. `SLRR_PROBE_BACKGROUND=1` applies the same mode to existing
+direct probe invocations, overriding `--visible`. `tools/check.sh` defaults to
+this mode; explicitly setting the variable to `0` retains its visible route.
+
 The default rapid script waits for the actual Main Menu, enters Free Ride through
 normal input, waits for the player's physical Car and presented camera, then
 holds Up for two logical seconds. `--cold-start` retains the legacy 10/13/13.5-second
