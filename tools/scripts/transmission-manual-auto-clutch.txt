@@ -1,0 +1,44 @@
+# Stock Options mode selection, then configured Up/Down/A/Z/C controls.
+# Fixture display: 800x600. Use run_native.py --background.
+0 wait splash 30
+0 keydown Escape
+0 wait menu 30
+0 keyup Escape
+0.5 click 480 245
+1 click 400 228
+1.5 click 490 119
+1.8 click 490 119
+2.5 shot @run/mode.bmp
+3 click 750 554
+3.5 click 750 554
+4 click 480 155
+4 wait driving 60
+4 shot @run/ready.bmp
+4.2 keydown Up
+5.5 shot @run/neutral-or-launch.bmp
+5.7 keydown A
+6.5 shot @run/held-upshift.bmp
+6.7 keyup A
+8 shot @run/drive.bmp
+8.2 keydown C
+9 shot @run/clutch-held.bmp
+9.2 keyup C
+10 shot @run/clutch-released.bmp
+10.2 keydown A
+10.8 keyup A
+11.4 keydown Z
+12 keyup Z
+12.6 keydown Z
+13.2 keyup Z
+13.8 keyup Up
+14.2 keydown Down
+16 shot @run/brake.bmp
+16.2 keyup Down
+16.8 keydown Z
+17.4 keyup Z
+18 keydown Z
+18.6 keyup Z
+19.2 keydown Up
+21 shot @run/reverse-or-neutral.bmp
+21.2 keyup Up
+22 quit

@@ -130,6 +130,79 @@ int main() {
     assert(!retained.contact.resting && retained.contact.normalImpulse == 0 &&
            retained.contact.normalForce == 0 && retained.contact.frictionForce == 0);
   }
+  {
+    // Captured from the deterministic box landing: 004af4f0 accepts this
+    // cached vertex inside the face even though a full rewalk prefers an
+    // edge. Retaining it must preserve the support row and local point.
+    BodyProto box;
+    box.invMass = 0.05f;
+    box.shape.type = ShapeType::Box;
+    box.shape.core = std::make_shared<CollisionCore>(boxCore({0.25f, 0.25f, 0.25f}));
+    Body landing;
+    landing.proto = &box;
+    landing.flags = kBodyActive;
+    landing.state[0].pos = {2.70539117f, 0.346628428f, 0.0134900305f};
+    landing.state[0].quat = {0.126091242f, 0.664773941f, -0.112605035f, 0.727665305f};
+    landing.state[0].rot = matrixFromQuat(landing.state[0].quat);
+    landing.state[1] = landing.state[0];
+    const std::array<Vec3, 3> triangle{{{2, 0, -1}, {3, 0, 0}, {3, 0, -1}}};
+    GroundFacePair retained;
+    assert(createGroundFacePair(landing, ground, triangle, {0, 1, 0}, retained, error));
+    const Vec3 vertex{0.25f, -0.25f, 0.25f};
+    const auto& core = *box.shape.core;
+    for (size_t i = 0; i < core.features.size(); ++i) {
+      const auto ref = core.features[i].ref;
+      if (ref.kind == CoreFeatureKind::Vertex && core.vertices[ref.index].position == vertex)
+        retained.bodyFeature = i;
+    }
+    for (size_t i = 0; i < retained.triangle.features.size(); ++i) {
+      const auto ref = retained.triangle.features[i].ref;
+      if (ref.kind == CoreFeatureKind::Face && retained.triangle.faces[ref.index].normal == Vec3({0, 1, 0}))
+        retained.triangleFeature = i;
+    }
+    assert(retained.bodyFeature && retained.triangleFeature);
+    const auto bodyFeature = retained.bodyFeature;
+    const auto triangleFeature = retained.triangleFeature;
+    retained.contact.resting = true;
+    retained.contact.normalImpulse = 3;
+    retained.contact.normalForce = 4;
+    retained.contact.frictionForce = 5;
+    assert(updateGroundFacePair(retained, faceWorld, point) == ContactGeometryResult::Updated);
+    assert(retained.bodyFeature == bodyFeature && retained.triangleFeature == triangleFeature);
+    assert(retained.contact.pointA == vertex && retained.contact.resting);
+    assert(retained.contact.normalImpulse == 3 && retained.contact.normalForce == 4 &&
+           retained.contact.frictionForce == 5);
+    // The same fixed-feature lifetime also applies when both sides are
+    // body collision cores, rather than a specialized ground-face record.
+    BodyProto triangleBody;
+    triangleBody.flags = kProtoStatic;
+    triangleBody.shape.type = ShapeType::Mesh;
+    triangleBody.shape.core = std::make_shared<CollisionCore>(retained.triangle);
+    Body obstacle;
+    obstacle.proto = &triangleBody;
+    DynamicBodyPair bodyPair;
+    assert(createDynamicBodyPair(landing, obstacle, bodyPair, error));
+    bodyPair.firstFeature = bodyFeature;
+    bodyPair.secondFeature = triangleFeature;
+    bodyPair.contact.resting = true;
+    bodyPair.contact.normalImpulse = 3;
+    bodyPair.contact.normalForce = 4;
+    bodyPair.contact.frictionForce = 5;
+    assert(updateDynamicBodyPair(bodyPair, faceWorld, point) == ContactGeometryResult::Updated);
+    assert(bodyPair.firstFeature == bodyFeature && bodyPair.secondFeature == triangleFeature);
+    assert(bodyPair.contact.pointA == vertex && bodyPair.contact.resting);
+    assert(bodyPair.contact.normalImpulse == 3 && bodyPair.contact.normalForce == 4 &&
+           bodyPair.contact.frictionForce == 5);
+    DynamicBodyPair reversed;
+    assert(createDynamicBodyPair(obstacle, landing, reversed, error));
+    reversed.firstFeature = triangleFeature;
+    reversed.secondFeature = bodyFeature;
+    reversed.contact.resting = true;
+    assert(updateDynamicBodyPair(reversed, faceWorld, point) == ContactGeometryResult::Updated);
+    assert(reversed.firstFeature == triangleFeature && reversed.secondFeature == bodyFeature);
+    assert(reversed.contact.pointB == vertex && reversed.contact.resting);
+    assert(reversed.contact.normal == Vec3({0, -1, 0}));
+  }
   // Ground contacts carry the stored PHYS face normal (0049b830 constructs
   // them from the face); the aligned core normal passes the deviation check.
   assert(face.contact.normal == Vec3({0, 1, 0}));
@@ -165,6 +238,37 @@ int main() {
   second.flags |= 0x40u;
   assert(updateDynamicBodyPair(dynamic, dynamicWorld, point) ==
          ContactGeometryResult::Dropped);
+  {
+    // Retained body/body rows obey the same 004a2d10 fixed-feature
+    // lifetime as ground rows. A vertex-to-face transition is a new impact.
+    BodyProto box;
+    box.flags = kProtoStatic;
+    box.shape.type = ShapeType::Box;
+    box.shape.core = std::make_shared<CollisionCore>(boxCore({1, 1, 1}));
+    Body moving, obstacle;
+    moving.proto = &sphere;
+    moving.flags = kBodyActive;
+    obstacle.proto = &box;
+    moving.state[0].pos = moving.state[1].pos = {1.3f, 1.3f, 1.3f};
+    DynamicBodyPair retained;
+    ContactGeometryWorld geometry;
+    assert(createDynamicBodyPair(moving, obstacle, retained, error));
+    assert(updateDynamicBodyPair(retained, geometry, point) == ContactGeometryResult::Updated);
+    const auto oldFeature = retained.secondFeature;
+    retained.contact.resting = true;
+    retained.contact.normalImpulse = 3;
+    retained.contact.normalForce = 4;
+    retained.contact.frictionForce = 5;
+    assert(updateDynamicBodyPair(retained, geometry, point) == ContactGeometryResult::Updated);
+    assert(retained.secondFeature == oldFeature && retained.contact.resting &&
+           retained.contact.normalImpulse == 3 && retained.contact.normalForce == 4 &&
+           retained.contact.frictionForce == 5);
+    moving.state[0].pos = moving.state[1].pos = {1.53f, 0, 0};
+    assert(updateDynamicBodyPair(retained, geometry, point) == ContactGeometryResult::Updated);
+    assert(retained.secondFeature != oldFeature);
+    assert(!retained.contact.resting && retained.contact.normalImpulse == 0 &&
+           retained.contact.normalForce == 0 && retained.contact.frictionForce == 0);
+  }
   {
     // FUN_0049c8f0: endpoint spheres miss, but the displacement segment
     // passes the object. A bound-only implementation must not pass the miss.

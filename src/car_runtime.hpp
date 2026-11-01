@@ -154,6 +154,7 @@ struct CarControlStepContext {
   float displayedEngineSpeed = 0;  // +0x1e1c, radians/second
   bool automatic = false;          // stock flag 0x10
   bool semiautomatic = false;      // stock flag 0x20
+  bool automaticClutch = false;   // stock flag 0x40, transmission bit 1 clear
   bool engineRunning = false;      // stock flag 0x4000
   bool automaticInhibited = false; // stock flags 0x40004
   bool positiveMass = true;
@@ -263,6 +264,9 @@ struct CarRuntimeInstance {
   float clutchState = 0.0f;
   int32_t currentGear = 0;
   float currentGearRatio = 0; // car +0x1dd8, updated by 00454500
+  float previousAutomaticClutch = 0; // stock +0x1f44; reset by transmission command
+  float previousClutchEngineSpeed = 0; // stock +0x1f48
+  float clutchRpm = 5000; // 00446180 prototype +0x10
   CarShiftState shiftState;
   float engineAngularSpeed = 0;   // stock +0x1e18
   float displayedEngineSpeed = 0; // stock +0x1e1c

@@ -692,7 +692,7 @@ target_link_options(car_engine_test PRIVATE -fsanitize=address,undefined)
 add_test(NAME car_engine_unit COMMAND car_engine_test)
 
 target_sources(sl_data PRIVATE src/physics_contact_geometry.cpp)
-add_executable(physics_contact_geometry_test tests/physics_contact_geometry_test.cpp src/physics_contact_geometry.cpp src/physics_friction.cpp src/physics_body.cpp src/physics_core_pair.cpp src/physics_polyhedron.cpp)
+add_executable(physics_contact_geometry_test tests/physics_contact_geometry_test.cpp src/physics_cached.cpp src/physics_contact_geometry.cpp src/physics_friction.cpp src/physics_body.cpp src/physics_core_pair.cpp src/physics_polyhedron.cpp)
 target_include_directories(physics_contact_geometry_test PRIVATE src)
 target_compile_options(physics_contact_geometry_test PRIVATE -fsanitize=address,undefined -fno-sanitize-recover=undefined -UNDEBUG)
 target_link_options(physics_contact_geometry_test PRIVATE -fsanitize=address,undefined)

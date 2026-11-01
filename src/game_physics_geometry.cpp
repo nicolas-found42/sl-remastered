@@ -156,7 +156,10 @@ GamePhysicsHit queryGamePhysicsFace(const GamePhysicsGeometry &geometry,
     return result;
   }
   const float t = std::fabs(d0 / (d0 - d1));
-  if (!(t > 0) || !std::isfinite(t))
+  // FUN_0049fa60 calls 0049bda0 for an in-triangle contact even when
+  // the segment starts on the plane (fraction zero). It still performs
+  // the barycentric rejection for a start outside the triangle.
+  if (!std::isfinite(t))
     return result;
   std::array<float, 3> relative{};
   for (size_t i = 0; i < 3; ++i)

@@ -562,13 +562,22 @@ bool CarWorldStepper::step(float seconds, std::string& error) {
               (instance.transmissionMode & 1) != 0 &&
               (instance.transmissionMode & 4) == 0;
           context.semiautomatic = (instance.transmissionMode & 5) == 5;
+          context.automaticClutch = (instance.transmissionMode & 2) == 0;
           context.engineRunning = instance.engineRunning;
           context.positiveMass = car->mass > 0;
           std::string detail;
+          const int previousGear = instance.currentGear;
           if (!instance.advanceControls(*controls, config, context, detail)) {
             why = "car step: controls: " + detail;
             return false;
           }
+          if (previousGear != instance.currentGear)
+            runlog::event(runlog::EventKind::Note,
+                          "transmission: mode=%d gear=%d->%d request=%d clutch=%.3f wheel=%.3f engine=%.3f time=%.3f clutchUntil=%.3f upUntil=%.3f downUntil=%.3f",
+                          instance.transmissionMode, previousGear, instance.currentGear,
+                          controls->digital[2], instance.clutchState, context.drivenWheelSpeed,
+                          context.displayedEngineSpeed, context.time, instance.shiftState.clutchUntil,
+                          instance.shiftState.upUntil, instance.shiftState.downUntil);
         }
       }
       if (const auto angles = calculateCarSteeringAngles(instance, config))
@@ -889,6 +898,28 @@ bool CarWorldStepper::step(float seconds, std::string& error) {
               s.type == physics::ShapeType::Hull) &&
              s.vertices.empty() && s.triangles.empty();
     };
+    // FUN_004a5190 traverses every registered root against other roots;
+    // FUN_0049c8f0 fans compound pairs out to their leaf bodies. Cars are
+    // registered roots too, even when there are no scene objects nearby.
+    for (size_t i = 0; i < stepCars.size(); ++i) {
+      for (size_t j = i + 1; j < stepCars.size(); ++j) {
+        const auto& firstCar = *stepCars[i].car;
+        const auto& secondCar = *stepCars[j].car;
+        if ((firstCar.root->flags & physics::kBodyAsleep) &&
+            (secondCar.root->flags & physics::kBodyAsleep))
+          continue;
+        for (const auto& first : firstCar.bodyChildren)
+          for (const auto& second : secondCar.bodyChildren) {
+            auto* a = const_cast<physics::Body*>(first.first);
+            auto* b = const_cast<physics::Body*>(second.first);
+            if (!a || !b || degenerate(a) || degenerate(b))
+              continue;
+            if (!considerDynamicPair(a, b, geometryWorld, contacts,
+                                     seenDynamic, pendingDynamicErase_, why))
+              return false;
+          }
+      }
+    }
     // Stock resolves an object through the sector its body is queued in; the
     // port has no body-sector queue, so each object uses the loaded sectors
     // whose bounds contain its predicted centre (the same approximation the
@@ -1207,7 +1238,8 @@ bool CarWorldStepper::step(float seconds, std::string& error) {
     for (size_t ci = 0; ci < done.size(); ++ci) {
       const auto& c = done[ci];
       worldCorrections += c.correctionResult != 0;
-      if (belongsToPlayer(c.a) || belongsToPlayer(c.b)) {
+      const bool playerContact = belongsToPlayer(c.a) || belongsToPlayer(c.b);
+      if (playerContact) {
         ++playerContacts;
         playerCorrections += c.correctionResult != 0;
         playerImpulse = std::max(playerImpulse, std::fabs(c.normalImpulse));
@@ -1241,6 +1273,39 @@ bool CarWorldStepper::step(float seconds, std::string& error) {
             channel->stream.store(true, std::memory_order_relaxed);
           runlog::tracePush(channel, detail.text);
         }
+      }
+      // Retain every first-pass player contact and subsequent corrections:
+      // Cartrace's single worst impulse cannot establish wall separation or
+      // distinguish a renewed body impact from a stale retained record.
+      if (playerContact && (contactIterations == 1 || c.correctionResult != 0)) {
+        auto* channel = runlog::traceChannel("contacttrace");
+        if (channel && std::getenv("SLRR_CAR_TRACE"))
+          channel->stream.store(true, std::memory_order_relaxed);
+        const auto* face = offerFace(ci);
+        const auto* groundPair = offerGroundPair(ci);
+        const auto* dynamic = ci < lastOffers_.size() ? lastOffers_[ci].dynamicPair : nullptr;
+        const auto featureA = groundPair ? groundPair->bodyFeature : dynamic ? dynamic->pair.firstFeature
+                                                                             : std::nullopt;
+        const auto featureB = groundPair ? groundPair->triangleFeature : dynamic ? dynamic->pair.secondFeature
+                                                                                 : std::nullopt;
+        TraceLine detail;
+        detail.add("{\"kind\":\"body-contact\",\"tick\":%llu,\"pass\":%zu,"
+                   "\"a\":\"%p\",\"b\":\"%p\",\"leaf\":\"%p\",\"face\":%zu,"
+                   "\"features\":[%lld,%lld],\"resting\":%d,\"correction\":%d,"
+                   "\"sep\":%.9g,\"impulse\":%.9g,\"n\":[%.9g,%.9g,%.9g],"
+                   "\"pa\":[%.9g,%.9g,%.9g],\"pb\":[%.9g,%.9g,%.9g]}",
+                   static_cast<unsigned long long>(tick_), contactIterations,
+                   static_cast<void*>(c.a), static_cast<void*>(c.b),
+                   face ? static_cast<const void*>(face->leafOwner()) : nullptr,
+                   face ? face->faceIndex() : 0,
+                   featureA ? static_cast<long long>(*featureA) : -1LL,
+                   featureB ? static_cast<long long>(*featureB) : -1LL,
+                   int(c.resting), c.correctionResult, c.separation, c.normalImpulse,
+                   c.normal[0], c.normal[1], c.normal[2],
+                   c.pointA[0], c.pointA[1], c.pointA[2],
+                   c.pointB[0], c.pointB[1], c.pointB[2]);
+        runlog::traceSanitizeJson(detail.text, sizeof detail.text);
+        runlog::tracePush(channel, detail.text);
       }
       sepMin = ci ? std::min(sepMin, c.separation) : c.separation;
       sepMax = ci ? std::max(sepMax, c.separation) : c.separation;
@@ -1494,10 +1559,14 @@ bool CarWorldStepper::step(float seconds, std::string& error) {
     line.add("\"woke_by\":%s,",
              asleepBeforeStep && hooks.wakeCars && stepped ? "\"controls\"" : "null");
     line.add("\"ctl\":{\"src\":%d,\"thr\":%.2f,\"brk\":%.2f,\"clu\":%.2f,"
-             "\"str\":%.2f,\"gear\":%d,\"eng\":%.1f,\"mode\":%d},",
+             "\"str\":%.2f,\"gear\":%d,\"eng\":%.1f,\"mode\":%d,\"shift\":%d,"
+             "\"ratio\":%.3f,\"driven\":%.3f,\"displayed\":%.3f,\"autoClutch\":%.3f},",
              lastControls_ ? 1 : 0, instance.throttleState, instance.brakeState,
              instance.clutchState, instance.steeringState, instance.currentGear,
-             instance.engineAngularSpeed, instance.transmissionMode);
+             instance.engineAngularSpeed, instance.transmissionMode,
+             lastControls_ ? lastControls_->digital[2] : 0,
+             instance.currentGearRatio, instance.drivenWheelSpeed,
+             instance.displayedEngineSpeed, instance.previousAutomaticClutch);
     line.add("\"dyn\":{\"F\":[%.4g,%.4g,%.4g],\"T\":[%.4g,%.4g,%.4g],"
              "\"activity\":[%.4g,%.4g,%.4g],\"invMass\":%.7g},",
              scratch.rootForce[0], scratch.rootForce[1], scratch.rootForce[2],

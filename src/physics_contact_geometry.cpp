@@ -1,5 +1,6 @@
 #include "physics_contact_geometry.hpp"
 #include "physics_core_pair.hpp"
+#include "physics_cached.hpp"
 #include "run_log.hpp"
 #include <cstdio>
 #include <cstdlib>
@@ -355,6 +356,42 @@ ContactGeometryResult updateGroundFacePair(GroundFacePair &pair,
   auto triangleFeature = pair.triangleFeature;
   const auto query = [&](const State &a,
                          const State &b) -> std::optional<CorePair> {
+    // FUN_004af970 keeps valid cached vertex/face geometry. Rewalking a
+    // different closest body feature here would discard a valid state-7 row.
+    if (pair.contact.resting && pair.triangleFeature) {
+      std::optional<CorePair> fixed;
+      if (body->proto->shape.type == ShapeType::Sphere)
+        fixed = cachedPointFace(a, pair.triangle, b, *pair.triangleFeature);
+      else if (pair.bodyFeature)
+        fixed = cachedVertexFace(core, a, *pair.bodyFeature, pair.triangle,
+                                 b, *pair.triangleFeature);
+      if (fixed) {
+        static bool notedFixed = false;
+        if (!notedFixed) {
+          notedFixed = true;
+          runlog::event(runlog::EventKind::Note,
+                        "cached vertex/face retained: body=%p vertex=%lld face=%zu distance=%.9g",
+                        static_cast<void*>(body), pair.bodyFeature ? static_cast<long long>(*pair.bodyFeature) : -1LL,
+                        *pair.triangleFeature, fixed->distance);
+        }
+        bodyFeature = pair.bodyFeature;
+        triangleFeature = pair.triangleFeature;
+        return fixed;
+      }
+    }
+    if (pair.contact.resting && pair.triangleFeature) {
+      const bool fixedFace = *pair.triangleFeature < pair.triangle.features.size() &&
+          pair.triangle.features[*pair.triangleFeature].ref.kind == CoreFeatureKind::Face;
+      const bool fixedVertex = body->proto->shape.type == ShapeType::Sphere ||
+          (pair.bodyFeature && *pair.bodyFeature < core.features.size() &&
+           core.features[*pair.bodyFeature].ref.kind == CoreFeatureKind::Vertex);
+      static bool notedRemainingCache = false;
+      if ((!fixedFace || !fixedVertex) && !notedRemainingCache) {
+        notedRemainingCache = true;
+        runlog::event(runlog::EventKind::Note,
+                      "retained contact subgap: remaining FUN_004af970 feature pairs use a full rewalk");
+      }
+    }
     switch (body->proto->shape.type) {
     case ShapeType::Sphere:
       return closestPointPolyhedron(a, pair.triangle, b, triangleFeature, true);
@@ -520,6 +557,24 @@ ContactGeometryResult updateDynamicBodyPair(DynamicBodyPair &pair,
   auto fb = (b->flags & 0x800u) ? std::optional<std::size_t>{} : pair.secondFeature;
   const auto query = [&](const State& pa,
                          const State& pb) -> std::optional<CorePair> {
+    // Ordinary retained 004af970 rows preserve valid vertex/face pairs.
+    // Wheel and swept replacement-core dispatch retain their own paths.
+    if (pair.contact.resting && !((a->flags | b->flags) & (0x40u | 0x800u))) {
+      std::optional<CorePair> fixed;
+      if (ka == 0 && kb == 2 && pair.secondFeature)
+        fixed = cachedPointFace(pa, *cb, pb, *pair.secondFeature);
+      else if (ka == 2 && kb == 0 && pair.firstFeature)
+        fixed = cachedPointFace(pb, *ca, pa, *pair.firstFeature, false);
+      else if (ka != 0 && kb == 2 && pair.firstFeature && pair.secondFeature)
+        fixed = cachedVertexFace(*ca, pa, *pair.firstFeature, *cb, pb, *pair.secondFeature);
+      if (!fixed && ka == 2 && kb != 0 && pair.firstFeature && pair.secondFeature)
+        fixed = cachedVertexFace(*cb, pb, *pair.secondFeature, *ca, pa, *pair.firstFeature, false);
+      if (fixed) {
+        fa = pair.firstFeature;
+        fb = pair.secondFeature;
+        return fixed;
+      }
+    }
     if (ka == 0 && kb == 0)
       return sphereCoreClosest(pa, pb);
     if (ka == 0 && kb == 2)
@@ -555,6 +610,14 @@ ContactGeometryResult updateDynamicBodyPair(DynamicBodyPair &pair,
   if (ka == 0 && kb == 1)
     fb = pointFeature(*cb, predicted->pointB);
   DirectContact contact = pair.contact;
+  const auto renewFeatures = [&] {
+    // FUN_004a2d10 retains fixed 004af970 features. A rewalk to another
+    // feature replaces the row; its state-7 forces do not migrate with it.
+    if (contact.resting && (fa != pair.firstFeature || fb != pair.secondFeature)) {
+      contact.resting = false;
+      contact.normalImpulse = contact.normalForce = contact.frictionForce = 0;
+    }
+  };
   // FUN_0049c540: wheel pairs bypass the generic ten-step time search.
   // The wheel core point is retained; only the other body's rounding radius
   // is removed from separation and from its local contact point.
@@ -681,6 +744,7 @@ ContactGeometryResult updateDynamicBodyPair(DynamicBodyPair &pair,
                                 wheelFirst ? 0 : otherRadius,
                                 wheelFirst ? otherRadius : 0, worldPoint, true);
     if (result == ContactGeometryResult::Updated) {
+      renewFeatures();
       pair.contact = contact;
       pair.firstFeature = fa;
       pair.secondFeature = fb;
@@ -710,6 +774,8 @@ ContactGeometryResult updateDynamicBodyPair(DynamicBodyPair &pair,
 
   }
   if (result != ContactGeometryResult::Unsupported) {
+    if (result == ContactGeometryResult::Updated)
+      renewFeatures();
     pair.firstFeature = fa;
     pair.secondFeature = fb;
     pair.contact = contact;

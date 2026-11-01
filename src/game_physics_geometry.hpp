@@ -23,8 +23,9 @@ bool decodeGamePhysicsGeometry(const GamePhysicsChunk &chunk,
                                GamePhysicsGeometry &out, std::string &error);
 
 // Bounded 0049fa60 face test: the directed segment must cross from the
-// non-positive to positive side of the stored normal. Near-coplanar and
-// degenerate cases need the stock clipping branch and are unsupported.
+// non-positive to positive side of the stored normal. An in-triangle start
+// on the plane can produce Hit with fraction zero. Near-coplanar crossings
+// use stock clipping; invalid geometry remains Unsupported.
 enum class GamePhysicsHitStatus { Miss, Hit, Unsupported };
 struct GamePhysicsHit {
   GamePhysicsHitStatus status = GamePhysicsHitStatus::Unsupported;
