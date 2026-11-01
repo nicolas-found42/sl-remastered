@@ -1,6 +1,7 @@
 #include "car_runtime.hpp"
 #include "game_creation.hpp"
 #include "natives/game_type.hpp"
+#include "natives/car_part.hpp"
 #include "resource_world.hpp"
 #include "world_model.hpp"
 
@@ -298,6 +299,60 @@ int main() {
   const auto* value = std::get_if<VmValue>(&info);
   assert(value && std::get<int32_t>(*value) ==
                       static_cast<int32_t>(physicsRoot->instanceId));
+  {
+    // A script setter must change the force produced by the real car's
+    // suspension, not merely retain an extra field that no solver reads.
+    auto* chassis = world.addTypedChild(*created.node, 1, "chassis", 0);
+    assert(chassis);
+    chassis->carInstance = std::make_unique<CarRuntimeInstance>();
+    setLinkOwner(chassis->carInstance->carLink, created.node);
+    auto wheelObject = std::make_unique<VmObject>();
+    wheelObject->fields.push_back({"ptr", int32_t{2}, "I"});
+    auto* wheelRef = wheelObject.get();
+    arena.objects.push_back(std::move(wheelObject));
+    arena.resourceStates.push_back({wheelRef, {chassis->instanceId, 0, 0, 0}});
+    auto& live = *created.node->carInstance->carPhysics->wheels[0];
+    const auto original = live.suspension;
+    const float rest = live.suspension.settings.restLength;
+    auto groundProto = std::make_shared<physics::BodyProto>(
+        *physics::createBodyProto(0, 5, 1, 1, 1, nullptr, error));
+    auto ground = std::make_shared<physics::Body>(physics::createBody(*groundProto, {0, 0, 0}));
+    const auto forceAtHalfMetre = [&] {
+      auto& u = live.suspension;
+      u.contactBody = ground.get();
+      u.contactOwner = ground;
+      u.contactPrototype = groundProto;
+      u.normal = {0, 1, 0};
+      u.contactPoint = {0, 0, 0};
+      u.distanceSquared = 0.25f;
+      u.length = 0.5f;
+      u.accumulatedForce = 0;
+      assert(physics::updateSuspension(u) == physics::SuspensionUpdateResult::Active);
+      return u.force;
+    };
+    assert(std::holds_alternative<std::monostate>(wheelRefSetForce({10000.0f}, wheelRef, &arena, nullptr)));
+    assert(std::fabs(forceAtHalfMetre() - (rest - 0.5f) * 10000.0f) < 0.1f);
+    assert(std::holds_alternative<std::monostate>(wheelRefSetForce({20000.0f}, wheelRef, &arena, nullptr)));
+    assert(std::fabs(forceAtHalfMetre() - (rest - 0.5f) * 20000.0f) < 0.1f);
+    assert(std::holds_alternative<std::monostate>(wheelRefSetRestLen({0.25f}, wheelRef, &arena, nullptr)));
+    assert(std::fabs(forceAtHalfMetre() - (0.25f + live.radius - 0.5f) * 20000.0f) < 0.1f);
+    assert(std::holds_alternative<std::monostate>(wheelRefSetRadius({0.4f}, wheelRef, &arena, nullptr)));
+    assert(std::fabs(forceAtHalfMetre() - (0.65f - 0.5f) * 20000.0f) < 0.1f);
+    const float springAtHalfMetre = (0.65f - 0.5f) * 20000.0f;
+    auto& rootState = created.node->carInstance->carPhysics->root->state[
+        created.node->carInstance->carPhysics->root->current];
+    const auto originalVelocity = rootState.vel;
+    assert(std::holds_alternative<std::monostate>(wheelRefSetDamping2({100.0f, 200.0f}, wheelRef, &arena, nullptr)));
+    rootState.vel = {0, 0.1f, 0};
+    assert(std::fabs(forceAtHalfMetre() - (springAtHalfMetre - 40.0f)) < 0.1f);
+    rootState.vel = {0, -0.1f, 0};
+    assert(std::fabs(forceAtHalfMetre() - (springAtHalfMetre + 20.0f)) < 0.1f);
+    assert(std::holds_alternative<std::monostate>(wheelRefSetDamping1({100.0f}, wheelRef, &arena, nullptr)));
+    rootState.vel = {0, 0.1f, 0};
+    assert(std::fabs(forceAtHalfMetre() - (springAtHalfMetre - 14.0f)) < 0.1f);
+    rootState.vel = originalVelocity;
+    live.suspension = original;
+  }
   assert(world.destroy(*created.node));
   assert(body.expired() && world.dynamicBodyCount() == 0 &&
          !game.bindings[1]->link.owner);

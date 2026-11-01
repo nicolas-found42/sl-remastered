@@ -92,4 +92,79 @@ int main() {
   assert(w.boneBody && w.boneBody->proto == &*w.config.boneBody);
   assert(w.boneBody->attachment->parent == &root);
   assert(std::fabs(w.boneBody->state[0].pos[1] - 25.2f) < 0.0001f);
+  // A loaded wheel's hub follows spring travel and yaw, while the rim frame
+  // also spins about its axle. The arm does not acquire steering or spin.
+  {
+    auto chassis = physics::createBody(*rootProto, {0, 0, 0});
+    auto spec = p;
+    spec.position = {0, 0, 0};
+    auto live = buildCarWheelRuntime({spec}, chassis, chassis, {0, 0, 0},
+                                     {0, 0, 0}, 100, {0, -10, 0}, error);
+    assert(live.size() == 1);
+    auto& moving = *live[0];
+    // Contact at the collider center: the stock anchor is half a collider
+    // length above it. Selection, spring force and visible wheel must agree.
+    auto groundProto = std::make_shared<physics::BodyProto>(
+        *physics::createBodyProto(0, 5, 1, 1, 1, nullptr, error));
+    auto ground = std::make_shared<physics::Body>(physics::createBody(*groundProto, {0, 0, 0}));
+    physics::SuspensionContactCandidate contact;
+    contact.a = moving.suspensionBody.get();
+    contact.b = ground.get();
+    contact.otherOwner = ground;
+    contact.otherPrototype = groundProto;
+    contact.pointA = {0, 0, 0};
+    contact.pointB = {0, -0.2f, 0};
+    contact.normal = {0, 1, 0};
+    assert(physics::selectSuspensionContact(moving.suspension, contact) ==
+           physics::SuspensionContactResult::Selected);
+    assert(physics::updateSuspension(moving.suspension) !=
+           physics::SuspensionUpdateResult::Unsupported);
+    assert(std::fabs(moving.suspension.length - 0.5f) < 1e-6f);
+    assert(std::fabs(moving.suspension.force - 1000.0f) < 0.01f);
+    assert(updateWheelPose(moving));
+    assert(std::fabs(moving.hubBody->attachment->relative.position[1] -
+                     moving.radius - contact.pointB[1]) < 1e-6f);
+    moving.suspension.length = 0.45f;
+    moving.angularSpeed = 2;
+    assert(advanceWheelRotation(moving, 0.25f));
+    assert(std::fabs(moving.rotationAngle - 0.5f) < 1e-6f);
+    assert(applyWheelSteeringOrientation(moving, 0.4f));
+    assert(updateWheelPose(moving));
+    const auto& hubFrame = moving.hubBody->attachment->relative;
+    const auto& rimFrame = moving.boneBody->attachment->relative;
+    const auto& armFrame = moving.armBody->attachment->relative;
+    assert(std::fabs(hubFrame.position[1] - 0.25f) < 1e-6f);
+    assert(rimFrame.position == hubFrame.position);
+    const auto axis = physics::matrixTransformRows(hubFrame.rotation(), {0, 0, 1});
+    assert(std::fabs(axis[0] - std::sin(0.4f)) < 1e-6f);
+    assert(std::fabs(axis[2] - std::cos(0.4f)) < 1e-6f);
+    const auto rimUp = physics::matrixTransformRows(rimFrame.rotation(), {0, 1, 0});
+    const auto expectedUp = physics::matrixTransformRows(hubFrame.rotation(),
+                                                         {0, std::cos(0.5f), std::sin(0.5f)});
+    for (size_t i = 0; i < 3; ++i) assert(std::fabs(rimUp[i] - expectedUp[i]) < 1e-6f);
+    assert(armFrame.rotation() == physics::matrixIdentity());
+    moving.suspension.length = 0.55f;
+    assert(updateWheelPose(moving));
+    assert(std::fabs(hubFrame.position[1] - 0.15f) < 1e-6f);
+    // Droop stops at the configured maximum, as in 0044fa70.
+    moving.suspension.length = 5;
+    assert(updateWheelPose(moving));
+    assert(std::fabs(hubFrame.position[1] - 0.1f) < 1e-6f);
+    moving.rotationAngle = 3;
+    assert(advanceWheelRotation(moving, 0.5f));
+    assert(std::fabs(moving.rotationAngle - (4 - 6.2831854820251465f)) < 1e-6f);
+    moving.angularSpeed = -2;
+    moving.rotationAngle = -3;
+    assert(advanceWheelRotation(moving, 0.5f));
+    assert(std::fabs(moving.rotationAngle - (-4 + 6.2831854820251465f)) < 1e-6f);
+    const float angleBefore = moving.rotationAngle;
+    assert(!advanceWheelRotation(moving, -1));
+    assert(moving.rotationAngle == angleBefore);
+    // Explicit refusal preserves a custom linkage instead of overwriting it
+    // with the default geometry branch.
+    const auto pointBefore = hubFrame.position;
+    moving.config.hubValue = 1;
+    assert(!updateWheelPose(moving));
+    assert(hubFrame.position == pointBefore);
+  }
 }

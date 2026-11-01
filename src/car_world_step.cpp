@@ -506,6 +506,8 @@ bool CarWorldStepper::step(float seconds, std::string& error) {
     float selDiag[4][4] = {};           // length, distance, aux, stored distanceSquared
     float candA[4] = {};                // candidate wheel-local contact point y
     float candB[4] = {};                // candidate world contact point y
+    physics::Vec3 tirePoint[4] = {}, tireNormal[4] = {};
+    float tireLoad[4] = {}, tireLength[4] = {}; // inputs at the tire callback, before prediction
     float steer[4] = {};                // applied steering angle per wheel (rad)
     // Worst contact by separation (most negative), for identifying bogus cores.
     float minSeparation = 0;
@@ -532,6 +534,10 @@ bool CarWorldStepper::step(float seconds, std::string& error) {
     physics::Vec3 worstPartPos{}, worstPointB{}, worstPointA{};
     physics::Vec3 rootForce{}, rootTorque{};
   } scratch;
+  std::vector<std::pair<CarWheelRuntime*, float>> rotationSnapshot;
+  for (const auto& entry : stepCars)
+    for (const auto& wheel : entry.car->wheels)
+      if (wheel) rotationSnapshot.emplace_back(wheel.get(), wheel->rotationAngle);
   // Stock runs the car callback (00454500 and 0044e690) in the world step's
   // callback pass, before prediction: player controls, wheel steering, the
   // drivetrain, then each wheel's tire force from the contact selected during
@@ -604,9 +610,19 @@ bool CarWorldStepper::step(float seconds, std::string& error) {
         auto& wheel = car->wheels[i];
         if (!wheel || !wheel->suspensionBody)
           continue;
+        if (!advanceWheelRotation(*wheel, seconds)) {
+          why = "car step: invalid wheel rotation state";
+          return false;
+        }
         const auto found = witnesses_.find(wheel->suspension.wheelBody);
         if (found == witnesses_.end() || !found->second)
           continue;
+        if (&instance == stepCars[primaryIndex].instance && i < 4) {
+          scratch.tireLoad[i] = wheel->suspension.force;
+          scratch.tireLength[i] = wheel->suspension.length;
+          scratch.tirePoint[i] = wheel->suspension.contactPoint;
+          scratch.tireNormal[i] = wheel->suspension.normal;
+        }
         const auto& extra = instance.wheelExtras[i];
         Wheel coefficients;
         std::copy(extra.pacejka.begin(), extra.pacejka.end(),
@@ -1432,6 +1448,8 @@ bool CarWorldStepper::step(float seconds, std::string& error) {
     entry.second->pair.contact.frictionForce = 0;
   }
   const bool stepped = world_.stepRegisteredCars(seconds, hooks, error);
+  if (!stepped)
+    for (const auto& [wheel, angle] : rotationSnapshot) wheel->rotationAngle = angle;
   if (const auto delta = physics::corePairDiagnosticsDelta(); !delta.empty())
     runlog::event(runlog::EventKind::Note,
                   "core pair walks gave up or hit the loop cap (site=line "
@@ -1442,6 +1460,29 @@ bool CarWorldStepper::step(float seconds, std::string& error) {
   // only when no car was registered, which froze the chase camera at its spawn
   // pose once a car existed.
   if (stepped) {
+    for (const auto& entry : stepCars) {
+      for (auto& wheel : entry.car->wheels)
+        if (wheel && !updateWheelPose(*wheel)) {
+          static bool noted = false;
+          if (!noted) {
+            noted = true;
+            runlog::event(runlog::EventKind::Note,
+                          "wheel pose gap: FUN_0044fa70 custom arm/hub linkage or invalid helper frame");
+          }
+        }
+      // FUN_004a7880 publishes changed relative poses recursively, including
+      // installed rims/tires and their geometry, before the frame is rendered.
+      std::function<void(physics::Body*)> refresh = [&](physics::Body* parent) {
+        const auto found = entry.car->bodyChildren.find(parent);
+        if (found == entry.car->bodyChildren.end()) return;
+        for (auto* child : found->second) {
+          physics::predictChildPose(parent->state[parent->current], child->attachment->relative,
+                                    child->state[child->current]);
+          refresh(child);
+        }
+      };
+      refresh(entry.car->root.get());
+    }
     if (seconds >= 0.0001f) {
       for (const auto& entry : stepCars) {
         auto& runtime = *entry.instance;
@@ -1581,11 +1622,25 @@ bool CarWorldStepper::step(float seconds, std::string& error) {
         continue;
       const auto& u = w->suspension;
       const auto found = witnesses_.find(u.wheelBody);
+      const auto* hub = w->hubBody.get();
+      const auto hubPosition = hub && hub->attachment ? hub->attachment->relative.position : physics::Vec3{};
+      const auto bonePosition = w->boneBody && w->boneBody->current < 2
+                                    ? w->boneBody->state[w->boneBody->current].pos
+                                    : physics::Vec3{};
+      const auto boneRotation = w->boneBody && w->boneBody->attachment
+                                    ? w->boneBody->attachment->relative.rotation()
+                                    : physics::matrixIdentity();
+      const auto hubRotation = hub && hub->attachment ? hub->attachment->relative.rotation() : physics::matrixIdentity();
       line.add("%s{\"i\":%zu,\"w\":%.1f,\"l\":%.3f,\"F\":%.0f,\"cb\":%d,"
                "\"wi\":%d,\"s\":\"%c\",\"t\":\"%c\",\"h\":%d,\"cy\":%.3f,"
                "\"wy\":%.3f,\"sl\":%.2f,\"sa\":%.3f,\"ls\":%.3f,\"aa\":%.3f,"
                "\"rj\":[%.3f,%.3f,%.3f,%.3f],"
-               "\"ca\":%.3f,\"cbd\":%.3f,\"sn\":[%.3f,%.3f,%.3f],\"sv\":%.4g,\"ds\":%.6g}",
+               "\"ca\":%.3f,\"cbd\":%.3f,\"sn\":[%.3f,%.3f,%.3f],\"sv\":%.4g,\"ds\":%.6g,\"tF\":%.1f,\"tl\":%.4f,"
+               "\"tP\":[%.4f,%.4f,%.4f],\"tN\":[%.4f,%.4f,%.4f],"
+               "\"R\":%.4f,\"lm\":%.4f,\"ra\":%.4f,\"hp\":[%.4f,%.4f,%.4f],"
+               "\"hr\":[%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f],"
+               "\"br\":[%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f],"
+               "\"bp\":[%.4f,%.4f,%.4f],\"cp\":[%.4f,%.4f,%.4f],\"cn\":[%.4f,%.4f,%.4f]}",
                firstWheel ? "" : ",", i, w->angularSpeed, u.length, u.force,
                u.contactBody ? 1 : 0,
                int(found != witnesses_.end() && found->second), scratch.sel[i],
@@ -1596,7 +1651,17 @@ bool CarWorldStepper::step(float seconds, std::string& error) {
                w->slipAngle, scratch.selDiag[i][0], scratch.selDiag[i][1],
                scratch.selDiag[i][2], scratch.selDiag[i][3], scratch.candA[i],
                scratch.candB[i], u.normal[0], u.normal[1], u.normal[2],
-               u.projectedVelocity, u.distanceSquared);
+               u.projectedVelocity, u.distanceSquared, scratch.tireLoad[i], scratch.tireLength[i],
+               scratch.tirePoint[i][0], scratch.tirePoint[i][1], scratch.tirePoint[i][2],
+               scratch.tireNormal[i][0], scratch.tireNormal[i][1], scratch.tireNormal[i][2],
+               w->radius, u.settings.maxLength, w->rotationAngle, hubPosition[0], hubPosition[1], hubPosition[2],
+               hubRotation[0], hubRotation[1], hubRotation[2], hubRotation[4], hubRotation[5], hubRotation[6],
+               hubRotation[8], hubRotation[9], hubRotation[10],
+               boneRotation[0], boneRotation[1], boneRotation[2], boneRotation[4], boneRotation[5], boneRotation[6],
+               boneRotation[8], boneRotation[9], boneRotation[10],
+               bonePosition[0], bonePosition[1], bonePosition[2],
+               u.contactPoint[0], u.contactPoint[1], u.contactPoint[2],
+               u.normal[0], u.normal[1], u.normal[2]);
       firstWheel = false;
     }
     line.add("],\"col\":{\"pairs\":%zu,\"iter\":%zu,\"n\":[", scratch.pairs,

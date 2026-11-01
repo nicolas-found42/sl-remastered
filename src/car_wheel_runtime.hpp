@@ -27,6 +27,7 @@ struct CarWheelRuntime {
   physics::SuspensionUpdate suspension;
   physics::Mat34 baseSteeringRotation = physics::matrixIdentity();
   physics::Vec3 anchor{};
+  float rotationAngle = 0; // wheel record +0xe8, radians
   physics::Vec3 instantCenterA{};
   physics::Vec3 instantCenterB{};
   float restLength = 0;
@@ -61,3 +62,11 @@ buildCarWheelRuntime(const std::vector<CarWheelPrototype> &prototypes,
                      const physics::Vec3 &partCenter,
                      const physics::Vec3 &partOffset, float mass,
                      const physics::Vec3 &gravity, std::string &error);
+
+// FUN_00454500: advances +0xe8 from angular speed, retaining the stock single
+// +/-2pi wrap. Called after drivetrain/brakes and before the tire callback.
+bool advanceWheelRotation(CarWheelRuntime& wheel, float seconds);
+// FUN_0044fa70 default arm/hub branch. Updates helper attachment frames; the
+// caller refreshes their committed descendants (FUN_004a7880) for rendering.
+// Custom arm/hub linkage geometry remains explicitly unsupported.
+bool updateWheelPose(CarWheelRuntime& wheel);

@@ -166,8 +166,8 @@ buildCarWheelRuntime(const std::vector<CarWheelPrototype> &prototypes,
                    partOffset[i];
       wheel->boneBody = std::make_unique<physics::Body>(physics::createBody(
           *wheel->config.boneBody,
-          physics::transformPoint(partState.pos, partState.rot, point),
-          &partState.rot, root.time));
+          physics::transformPoint(root.pos, root.rot, point),
+          &root.rot, root.time));
       wheel->boneBody->flags |= 0x8020;
       if (!physics::attachBody(*wheel->boneBody, carRoot)) {
         error = "invalid wheel bone attachment";
@@ -177,4 +177,60 @@ buildCarWheelRuntime(const std::vector<CarWheelPrototype> &prototypes,
     result.push_back(std::move(wheel));
   }
   return result;
+}
+
+bool advanceWheelRotation(CarWheelRuntime& wheel, float seconds) {
+  if (!std::isfinite(seconds) || seconds < 0 ||
+      !std::isfinite(wheel.angularSpeed) || !std::isfinite(wheel.rotationAngle))
+    return false;
+  // Stock 005f09cc, 005f0d2c, 005f0eb4 and 005f0eb8, read from the
+  // stock-2005 executable. Do not replace the single wrap with fmod.
+  if (wheel.suspension.wheelBody && std::fabs(wheel.angularSpeed) > 0.001f) {
+    float angle = seconds * wheel.angularSpeed + wheel.rotationAngle;
+    if (!std::isfinite(angle)) return false;
+    if (angle > 3.1415927410125732f)
+      angle -= 6.2831854820251465f;
+    else if (angle < -3.1415927410125732f)
+      angle += 6.2831854820251465f;
+    wheel.rotationAngle = angle;
+  }
+  return true;
+}
+
+bool updateWheelPose(CarWheelRuntime& wheel) {
+  using namespace physics;
+  if (wheel.config.armValue > 0 || wheel.config.hubValue >= 0 ||
+      !wheel.suspensionBody || !wheel.suspensionBody->attachment ||
+      !wheel.hubBody || !wheel.hubBody->attachment ||
+      !wheel.armBody || !wheel.armBody->attachment ||
+      !std::isfinite(wheel.suspension.length) ||
+      !std::isfinite(wheel.suspension.settings.maxLength) ||
+      !std::isfinite(wheel.rotationAngle) ||
+      (wheel.boneBody && (!wheel.boneBody->attachment || !wheel.boneBody->proto)))
+    return false;
+  const auto steered = wheel.suspensionBody->attachment->relative.rotation();
+  const float shift = wheel.radius - std::min(wheel.suspension.length,
+                                              wheel.suspension.settings.maxLength);
+  Vec3 point{};
+  for (size_t i = 0; i < 3; ++i)
+    point[i] = wheel.suspensionBody->attachment->relative.position[i] +
+               (i == 1 ? wheel.config.friction[0] * 0.5f : 0.0f) +
+               wheel.baseSteeringRotation[i * 4 + 1] * shift;
+  wheel.hubBody->attachment->relative.position = point;
+  wheel.hubBody->attachment->relative.setRotation(steered);
+  wheel.armBody->attachment->relative.position = point;
+  wheel.armBody->attachment->relative.setRotation(wheel.baseSteeringRotation);
+  if (wheel.boneBody) {
+    PartSlotDirective spin{};
+    spin.orientation[1] = wheel.rotationAngle;
+    PartSlotState state;
+    if (!makePartSlotState(spin, state)) return false;
+    const auto rotation = matrixMultiply(steered, rotationMatrix(state.rotation));
+    const auto& offset = wheel.boneBody->proto->shape.centerOffset;
+    const auto center = matrixTransformRows(rotation, {offset[0], offset[1], offset[2]});
+    for (size_t i = 0; i < 3; ++i)
+      wheel.boneBody->attachment->relative.position[i] = point[i] - center[i];
+    wheel.boneBody->attachment->relative.setRotation(rotation);
+  }
+  return true;
 }

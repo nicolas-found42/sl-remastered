@@ -1,0 +1,3 @@
+time_utc	phase	decision	evidence	result
+2026-11-01T20:48:30Z	issue-18	Preserve unfinished wheel work on main at explicit owner request; do not close issue or promote Native/Parity status	wheel-driving-evidence.md; local/issue-1/ticket-18-evidence-20261101-af94	Custom arm/hub kinematics, nonidentity-base rotation order, forceUpdate batching/reset, live coefficient record and object sleep failure remain unresolved; Jev review escalated
+2026-11-01T20:54:29Z	issue-18-merge	Combine existing main checkpoints while preserving WIP and recording new integration failure	merge-build.log;merge-tests.log;wheel-driving-evidence.md	Probe builds;3/4 focused tests pass;car_runtime_unit Active assertion fails;known geometry/forceUpdate/coefficient gaps remain
