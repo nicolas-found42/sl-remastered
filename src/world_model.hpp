@@ -604,6 +604,8 @@ public:
   // cameraFollowForce after world forces. Unsupported dynamic bodies reject
   // the call before the camera or world clock changes.
   bool stepEmptyPhysics(float seconds, std::string &error);
+  // Camera device callback 004386a0, before the world force/prediction pass.
+  void advanceCameraZoom(float seconds);
   // Applies cameraFollowForce while other dynamic bodies stay registered.
   // Does not solve collision, joints, or wheel contacts.
   bool stepArmedCameraFollow(float seconds, std::string &error);

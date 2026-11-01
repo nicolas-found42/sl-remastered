@@ -835,6 +835,17 @@ std::optional<std::string> applySeatCameraPose(ResourceWorld &resources,
     std::snprintf(text, sizeof text, "zoom %f", static_cast<double>(pose.zoom));
     applyCameraCommand(cameraNode.cameraDevice->commands, text);
   }
+  const auto& commands = cameraNode.cameraDevice->commands;
+  runlog::event(runlog::EventKind::Note,
+                "seat camera pose: camera=0x%x target=0x%x look=%.2f,%.2f,%.2f move=%.2f,%.2f,%.2f distance=%.2f",
+                cameraNode.instanceId, pose.target,
+                commands.lookOffset[0], commands.lookOffset[1], commands.lookOffset[2],
+                commands.moveOffset[0], commands.moveOffset[1], commands.moveOffset[2],
+                commands.moveDistance);
+  runlog::event(runlog::EventKind::Note,
+                "seat camera zoom: camera=0x%x current=%.2f target=%.2f speed=%.2f deviceFov=%.2f",
+                cameraNode.instanceId, commands.zoomCurrent, commands.zoomTarget,
+                commands.zoomSpeed, cameraNode.cameraDevice->fieldOfView);
   return std::nullopt;
 }
 } // namespace
@@ -1169,18 +1180,11 @@ NativeResult gameRefQueueEvent(const std::vector<VmValue> &args,
     if (!applyCameraCommand(node->cameraDevice->commands, *bytes))
       return "GameRef.queueEvent: unsupported camera command: " + *bytes;
     if (!name.values.empty() && name.values[0].s == "zoom") {
-      // FUN_004386a0 lerps the +0x180 zoom toward +0x184 every physics step
-      // and FUN_00438b60 consumes it; that per-step lerp is not ported for
-      // free (unarmed) camera bodies, so the zoom command is recorded and the
-      // gap is logged rather than hidden.
-      const auto &commands = node->cameraDevice->commands;
-      if (commands.zoomCurrent != commands.zoomTarget)
-        runlog::event(runlog::EventKind::Note,
-                      "gap: camera zoom lerp not simulated (current %.1f "
-                      "target %.1f speed %.1f)",
-                      static_cast<double>(commands.zoomCurrent),
-                      static_cast<double>(commands.zoomTarget),
-                      static_cast<double>(commands.zoomSpeed));
+      const auto& commands = node->cameraDevice->commands;
+      runlog::event(runlog::EventKind::Note,
+                    "camera zoom command: camera=0x%x current=%.2f target=%.2f speed=%.2f",
+                    node->instanceId, commands.zoomCurrent, commands.zoomTarget,
+                    commands.zoomSpeed);
     }
     return std::monostate{};
   }

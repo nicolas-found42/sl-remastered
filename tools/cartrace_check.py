@@ -8,6 +8,7 @@ step carries a tag. A car that falls through the ground fails the check even
 when the run reports status=ok.
 """
 import json
+import math
 import sys
 
 
@@ -31,14 +32,20 @@ def main(argv):
         rows += 1
         car = r.get("car", "")
         speed = r["spd"][1]
+        worst_step = max(worst_step, speed - r["spd"][0])
         if car in prev:
             worst_step = max(worst_step, speed - prev[car])
         prev[car] = speed
         y = r["post"]["p"][1]
         start.setdefault(car, y)
         worst_fall = max(worst_fall, start[car] - y)
-        if r.get("tags"):
-            problems.append("tick %s tags %s" % (r["tick"], r["tags"]))
+        anomaly = r.get("anom") or r.get("tags")
+        if anomaly:
+            problems.append("tick %s anomaly %s" % (r["tick"], anomaly))
+        if not all(math.isfinite(v) for v in (*r["spd"], *r["post"]["p"])):
+            problems.append("tick %s nonfinite speed or position" % r["tick"])
+    if not rows:
+        problems.append("empty trace")
     if worst_step > max_step:
         problems.append("speed step %.2f > %.2f" % (worst_step, max_step))
     if worst_fall > max_fall:
