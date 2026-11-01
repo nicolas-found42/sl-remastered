@@ -149,6 +149,9 @@ bool CarWorldStepper::step(float seconds, std::string& error) {
     objectPairs_.clear();
     dynamicPairs_.clear();
   }
+  // Stock camera input/zoom callback 004386a0 precedes the force callback
+  // 00438b60 and physics prediction, including cameras without follow targets.
+  world_.advanceCameraZoom(seconds);
   const auto cars = world_.carNodes();
   if (cars.empty()) {
     if (world_.dynamicBodyCount() == 0)
@@ -501,7 +504,8 @@ bool CarWorldStepper::step(float seconds, std::string& error) {
     physics::Vec3 minSepPointB{};
     int hits[4] = {}; // wheel face hits this step
     size_t pairs = 0; // body/face pairs of the last gather
-    std::array<unsigned short, 8> iterContacts{};
+    std::array<unsigned short, 8> iterContacts{}, iterPlayerContacts{}, iterPlayerCorrections{}, iterWorldCorrections{};
+    std::array<float, 8> iterPlayerImpulse{};
     std::array<float, 8> iterMaxImpulse{};
     // Separation range of each pass's contacts, and how many were corrected.
     std::array<float, 8> iterSepMin{}, iterSepMax{};
@@ -1160,9 +1164,21 @@ bool CarWorldStepper::step(float seconds, std::string& error) {
 
     float iterationMax = 0;
     float sepMin = 0, sepMax = 0;
-    unsigned correctedCount = 0;
+    unsigned correctedCount = 0, playerContacts = 0, playerCorrections = 0, worldCorrections = 0;
+    float playerImpulse = 0;
+    const auto belongsToPlayer = [&](const physics::Body* body) {
+      while (body && body->attachment)
+        body = body->attachment->parent;
+      return body == car->root.get();
+    };
     for (size_t ci = 0; ci < done.size(); ++ci) {
       const auto& c = done[ci];
+      worldCorrections += c.correctionResult != 0;
+      if (belongsToPlayer(c.a) || belongsToPlayer(c.b)) {
+        ++playerContacts;
+        playerCorrections += c.correctionResult != 0;
+        playerImpulse = std::max(playerImpulse, std::fabs(c.normalImpulse));
+      }
       sepMin = ci ? std::min(sepMin, c.separation) : c.separation;
       sepMax = ci ? std::max(sepMax, c.separation) : c.separation;
       correctedCount += c.normalImpulse != 0;
@@ -1211,6 +1227,10 @@ bool CarWorldStepper::step(float seconds, std::string& error) {
       }
     }
     maxImpulse = std::max(maxImpulse, iterationMax);
+    scratch.iterPlayerCorrections[slot] = static_cast<unsigned short>(playerCorrections);
+    scratch.iterWorldCorrections[slot] = static_cast<unsigned short>(worldCorrections);
+    scratch.iterPlayerContacts[slot] = static_cast<unsigned short>(playerContacts);
+    scratch.iterPlayerImpulse[slot] = playerImpulse;
     scratch.iterContacts[slot] = static_cast<unsigned short>(done.size());
     scratch.iterMaxImpulse[slot] = iterationMax;
     scratch.iterSepMin[slot] = sepMin;
@@ -1443,6 +1463,18 @@ bool CarWorldStepper::step(float seconds, std::string& error) {
     const size_t shownIterations = std::min<size_t>(contactIterations, 8);
     for (size_t i = 0; i < shownIterations; ++i)
       line.add("%s%u", i ? "," : "", unsigned(scratch.iterContacts[i]));
+    line.add("],\"player_n\":[");
+    for (size_t i = 0; i < shownIterations; ++i)
+      line.add("%s%u", i ? "," : "", unsigned(scratch.iterPlayerContacts[i]));
+    line.add("],\"player_corrected\":[");
+    for (size_t i = 0; i < shownIterations; ++i)
+      line.add("%s%u", i ? "," : "", unsigned(scratch.iterPlayerCorrections[i]));
+    line.add("],\"world_corrected\":[");
+    for (size_t i = 0; i < shownIterations; ++i)
+      line.add("%s%u", i ? "," : "", unsigned(scratch.iterWorldCorrections[i]));
+    line.add("],\"player_imp\":[");
+    for (size_t i = 0; i < shownIterations; ++i)
+      line.add("%s%.0f", i ? "," : "", scratch.iterPlayerImpulse[i]);
     line.add("],\"imp\":[");
     for (size_t i = 0; i < shownIterations; ++i)
       line.add("%s%.0f", i ? "," : "", scratch.iterMaxImpulse[i]);

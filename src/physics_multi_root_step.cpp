@@ -409,7 +409,10 @@ FreeBodyStepResult stepMultiRootWorld(World &world,
           return fail("multi-root: unsupported selected suspension contact");
         }
       }
-      for (auto& contact : contacts) contact.processed = false;
+      for (auto& contact : contacts) {
+        contact.processed = false;
+        contact.correctionResult = 0;
+      }
       bool corrected = false;
       // Contacts that may be corrected in this pass (indexes into `contacts`).
       std::vector<bool> allowed(contacts.size(), true);
@@ -487,6 +490,7 @@ FreeBodyStepResult stepMultiRootWorld(World &world,
             rollback();
             return fail("multi-root: contact correction unsupported");
           }
+          contact.correctionResult = result;
           corrected |= result != 0;
           contact.resting = true;
         }

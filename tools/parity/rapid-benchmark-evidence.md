@@ -113,8 +113,10 @@ Up up at +2.1, throttle screenshot at +2.2, and quit at +2.3 logical seconds.
 The fixed pending-screenshot handling completes both captures before exit.
 There are no custom capture delays or extra sleeps in these scenarios.
 
-`cartrace_check.py` passes all ten traces for its speed-step, falling and tag
-checks. Separately counted `iteration_cap` anomalies occur 5–8 times per Run and
+`cartrace_check.py` originally passed all ten traces for speed steps and falling.
+Correction (ticket #5): its supposed tag check read `tags`, while production
+emits `anom`; that pass did not validate anomaly tags. The corrected checker
+rejects these traces for their recorded `iteration_cap` anomalies. Separately counted `iteration_cap` anomalies occur 5–8 times per Run and
 are not rejected by that checker. Logs retain incomplete spatial factory
 collision coverage, unsupported special body pairs and mesh directives,
 tire-contact rejection, and incomplete HUD damage diagnostics. These are Gaps.

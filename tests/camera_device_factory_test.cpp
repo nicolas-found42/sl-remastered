@@ -126,5 +126,21 @@ int main() {
       return 10;
     survivingOwner.reset();
   }
+  {
+    auto* zoomHost = world.addChild(*root, "zoom camera", 0x21);
+    world.markLoaded(*zoomHost);
+    auto zoomDevice = prepareCameraDeviceResources(world, resources, *zoomHost,
+                                                   config, args, makeCameraDevicePrototype(error), error);
+    if (!zoomDevice)
+      return 23;
+    zoomHost->cameraDevice = std::shared_ptr<CameraDeviceResources>(std::move(zoomDevice));
+    auto& device = *zoomHost->cameraDevice;
+    if (!applyCameraCommand(device.commands, "zoom 100"))
+      return 24;
+    world.advanceCameraZoom(0.02f);
+    if (device.fieldOfView != 57.7f ||
+        device.cameraNode()->camera->fieldOfView != 57.7f)
+      return 25;
+  }
   std::puts("camera_device_factory_test: ok");
 }

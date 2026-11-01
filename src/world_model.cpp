@@ -1930,6 +1930,36 @@ bool GameWorld::stepRegisteredCars(float seconds, const LiveCarStepHooks &hooks,
   return true;
 }
 
+void GameWorld::advanceCameraZoom(float seconds) {
+  if (!std::isfinite(seconds) || seconds <= 0)
+    return;
+  for (const auto& entry : nodes_) {
+    auto* device = entry.second->cameraDevice.get();
+    if (!device)
+      continue;
+    auto& command = device->commands;
+    // FUN_004386a0: keep stock's float grouping and do not
+    // clamp the interpolation factor. FUN_00438b60 publishes +0x180 to
+    // the render camera's FOV even when no follow target is armed.
+    command.zoomCurrent = (command.zoomTarget - command.zoomCurrent) *
+                              command.zoomSpeed * seconds +
+                          command.zoomCurrent;
+    device->fieldOfView = command.zoomCurrent;
+    if (auto* camera = device->cameraNode(); camera && camera->camera)
+      camera->camera->fieldOfView = command.zoomCurrent;
+    auto* channel = runlog::traceChannel("cameratrace");
+    if (channel && std::getenv("SLRR_CAR_TRACE"))
+      channel->stream.store(true, std::memory_order_relaxed);
+    char line[200];
+    std::snprintf(line, sizeof line,
+                  "{\"f\":%u,\"camera\":%u,\"dt\":%.4f,\"fov\":%.4f,"
+                  "\"target\":%.4f,\"speed\":%.4f}",
+                  runlog::g_frame.load(std::memory_order_relaxed), entry.second->instanceId,
+                  seconds, command.zoomCurrent, command.zoomTarget, command.zoomSpeed);
+    runlog::tracePush(channel, line);
+  }
+}
+
 bool GameWorld::stepEmptyPhysics(float seconds, std::string &error) {
   if (!std::isfinite(seconds) || seconds <= 0.0f) {
     error = "empty physics: invalid step";
