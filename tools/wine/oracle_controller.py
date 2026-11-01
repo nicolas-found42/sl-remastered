@@ -84,9 +84,16 @@ def main():
     cmd = a.command[1:] if a.command[:1] == ['--'] else a.command
     if not cmd or not (0 < a.timeout < 86400):
         p.error('a command and timeout in (0, 86400) are required')
+    # The worktree's ref/ may itself be a symlink to the shared reference
+    # tree, and the record directory's leaf does not exist yet, so resolve the
+    # nearest existing ancestor and compare that.
     dest = Path(a.record_dir).resolve()
-    ref = Path(__file__).resolve().parents[2] / 'ref'
-    if dest == ref or ref in dest.parents:
+    ref = (Path(__file__).resolve().parents[2] / 'ref').resolve()
+    probe = dest
+    while not probe.exists() and probe != probe.parent:
+        probe = probe.parent
+    if dest == ref or ref in dest.parents or ref in probe.resolve().parents \
+            or probe.resolve() == ref:
         p.error('record directory must be outside ref/')
     dest.mkdir(parents=True, exist_ok=False)
     hashes = {}
