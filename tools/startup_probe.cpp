@@ -1,4 +1,5 @@
 #include "audio.hpp"
+#include "camera_device_factory.hpp"
 #include "camera_frame.hpp"
 #include "car_world_step.hpp"
 #include "class_environment.hpp"
@@ -14,6 +15,7 @@
 #include "object_sound.hpp"
 #include "pack_registry.hpp"
 #include "platform.hpp"
+#include "probe_script.hpp"
 #include "render2d.hpp"
 #include "resource_world.hpp"
 #include "run_log.hpp"
@@ -42,7 +44,7 @@
 #include <string_view>
 #include <vector>
 
-static int probeMain(int argc, char **argv, const std::string &runDir) {
+static int probeMain(int argc, char** argv, const std::string& runDir) {
   const auto processClockOrigin = std::chrono::steady_clock::now();
   std::string root = "ref/raw", dataRoot;
   std::string captureFrame, scriptPath;
@@ -131,8 +133,8 @@ static int probeMain(int argc, char **argv, const std::string &runDir) {
                  error.c_str());
     return 1;
   }
-  const auto &bytes = *configResource.packBytes;
-  const auto &entry = configResource.entry;
+  const auto& bytes = *configResource.packBytes;
+  const auto& entry = configResource.entry;
   const std::string payload(bytes.begin() + entry.payloadOffset,
                             bytes.begin() + entry.payloadOffset +
                                 entry.payloadSize);
@@ -147,9 +149,9 @@ static int probeMain(int argc, char **argv, const std::string &runDir) {
   VmArena arena;
   arena.randomState = &mainRandom;
   arena.loadScriptPath =
-      [&](const std::string &path,
-          std::string &detail) -> std::optional<std::string> {
-    const auto *cls = classes.loadScriptPath(path, detail);
+      [&](const std::string& path,
+          std::string& detail) -> std::optional<std::string> {
+    const auto* cls = classes.loadScriptPath(path, detail);
     return cls ? std::optional<std::string>(cls->name) : std::nullopt;
   };
   arena.performanceMilliseconds = [&] {
@@ -173,60 +175,60 @@ static int probeMain(int argc, char **argv, const std::string &runDir) {
   // first use. The runtime does the same for the VM, so only the classes this
   // probe reads directly are named here.
   ClassRuntime runtime(
-      [&](const std::string &name, std::string &loadError) {
+      [&](const std::string& name, std::string& loadError) {
         return classes.findOrLoad(name, loadError);
       },
       arena, &resolve);
-  const auto loadGraph = [&](const std::string &name) {
+  const auto loadGraph = [&](const std::string& name) {
     return runtime.load(name, error);
   };
-  const TufaClass *config = loadGraph("java.util.Config");
+  const TufaClass* config = loadGraph("java.util.Config");
   if (!config) {
     std::fprintf(stderr, "startup probe: class graph: %s\n", error.c_str());
     return 1;
   }
-  const TufaClass *stringClass = loadGraph("java.lang.String");
+  const TufaClass* stringClass = loadGraph("java.lang.String");
   if (!stringClass) {
     std::fprintf(stderr, "startup probe: String graph: %s\n", error.c_str());
     return 1;
   }
-  const TufaClass *fileClass = loadGraph("java.io.File");
+  const TufaClass* fileClass = loadGraph("java.io.File");
   if (!fileClass) {
     std::fprintf(stderr, "startup probe: File graph: %s\n", error.c_str());
     return 1;
   }
-  const TufaClass *soundClass =
+  const TufaClass* soundClass =
       constructor ? loadGraph("java.sound.Sound") : nullptr;
   if (constructor && !soundClass) {
     std::fprintf(stderr, "startup probe: Sound graph: %s\n", error.c_str());
     return 1;
   }
-  const TufaClass *systemClass =
+  const TufaClass* systemClass =
       constructor ? loadGraph("java.lang.System") : nullptr;
   if (constructor && !systemClass) {
     std::fprintf(stderr, "startup probe: System graph: %s\n", error.c_str());
     return 1;
   }
-  const TufaClass *gameInit = initProbe ? loadGraph("java.game.Init") : nullptr;
+  const TufaClass* gameInit = initProbe ? loadGraph("java.game.Init") : nullptr;
   if (initProbe && !gameInit) {
     std::fprintf(stderr, "startup probe: Init graph: %s\n", error.c_str());
     return 1;
   }
-  const TufaClass *dummyClass =
+  const TufaClass* dummyClass =
       initProbe ? loadGraph("java.util.resource.Dummy") : nullptr;
   if (initProbe && !dummyClass) {
     std::fprintf(stderr, "startup probe: Dummy graph: %s\n", error.c_str());
     return 1;
   }
-  const TufaClass *gameRef =
+  const TufaClass* gameRef =
       initProbe ? loadGraph("java.util.resource.GameRef") : nullptr;
   if (initProbe && !gameRef) {
     std::fprintf(stderr, "startup probe: GameRef graph: %s\n", error.c_str());
     return 1;
   }
-  std::vector<const TufaClass *> extraClasses;
-  for (const auto &name : extraNames) {
-    const TufaClass *extra = loadGraph(name);
+  std::vector<const TufaClass*> extraClasses;
+  for (const auto& name : extraNames) {
+    const TufaClass* extra = loadGraph(name);
     if (!extra) {
       std::fprintf(stderr, "startup probe: %s graph: %s\n", name.c_str(),
                    error.c_str());
@@ -234,7 +236,7 @@ static int probeMain(int argc, char **argv, const std::string &runDir) {
     }
     extraClasses.push_back(extra);
   }
-  std::vector<VmStaticFields> &states = runtime.staticFields();
+  std::vector<VmStaticFields>& states = runtime.staticFields();
   arena.hotkeys = &hotkeys;
   arena.timers = &timers;
   VmMeasurementState measurement{};
@@ -257,16 +259,15 @@ static int probeMain(int argc, char **argv, const std::string &runDir) {
   std::unique_ptr<Render2D> diagnosticRenderer;
   std::unique_ptr<VideoPlayer> videoPlayer;
   GameWorld world;
-  world.setClassResolver([&](const std::string &name) {
+  world.setClassResolver([&](const std::string& name) {
     std::string ignored;
     return classes.findOrLoad(name, ignored) != nullptr;
   });
   ResourceWorld resources(world, packs);
   FrameVisibilityState frameVisibility;
-  VmGameState gameState{&packs,  &world,          {}, {}, &resources,
-                        nullptr, &frameVisibility};
+  VmGameState gameState{&packs, &world, {}, {}, &resources, nullptr, &frameVisibility};
   struct ObjectSoundBinding {
-    VmArena &arena;
+    VmArena& arena;
     std::unique_ptr<ObjectSoundState> state;
     ~ObjectSoundBinding() { arena.objectSound = nullptr; }
   } objectSound{arena, {}};
@@ -289,9 +290,9 @@ static int probeMain(int argc, char **argv, const std::string &runDir) {
     hotkeys.physicalKey = [&](int32_t key) {
       return platformInput->sample(0, key);
     };
-    hotkeys.virtualAxis = [&](const VmObject *controller,
+    hotkeys.virtualAxis = [&](const VmObject* controller,
                               int32_t axis) -> std::optional<float> {
-      const auto *link = nativeResourceState(controller, &arena);
+      const auto* link = nativeResourceState(controller, &arena);
       if (!link)
         return std::nullopt;
       const auto handle =
@@ -299,12 +300,12 @@ static int probeMain(int argc, char **argv, const std::string &runDir) {
       const auto binding = gameState.bindings.find(handle);
       if (binding == gameState.bindings.end() || !binding->second)
         return std::nullopt;
-      auto *player = world.nodeFor(binding->second->link.owner);
+      auto* player = world.nodeFor(binding->second->link.owner);
       if (!player || !player->playerInput)
         return std::nullopt;
       return player->playerInput->sampleAxis(axis);
     };
-    for (const auto &device : platformInput->names())
+    for (const auto& device : platformInput->names())
       std::printf("input device: %s\n", device.c_str());
     world.setInputDevices(platformInput->names());
     world.setInputReaders(
@@ -315,7 +316,7 @@ static int probeMain(int argc, char **argv, const std::string &runDir) {
           return platformInput->type(device, axis);
         });
     world.setCursorSelector([&](int32_t index, bool visible,
-                                std::string &cursorError) {
+                                std::string& cursorError) {
       return platformInput->selectStockCursor(
           "ref/raw/StreetLegal_Redline.bak.exe", index, visible, cursorError);
     });
@@ -334,8 +335,8 @@ static int probeMain(int argc, char **argv, const std::string &runDir) {
     objectSoundConfig.effects = soundEffects.get();
     objectSoundConfig.masterVolume = [&] { return sound.volumes[0]; };
     objectSoundConfig.randomState = &mainRandom.state;
-    objectSoundConfig.listener = [&](SoundEffects::Listener &listener,
-                                     std::string &detail) {
+    objectSoundConfig.listener = [&](SoundEffects::Listener& listener,
+                                     std::string& detail) {
       if (!world.audioListener(listener.position, listener.forward,
                                listener.up)) {
         detail = "object sound listener unavailable";
@@ -407,7 +408,7 @@ static int probeMain(int argc, char **argv, const std::string &runDir) {
     fileState.emplace(dataRoot, "ref", root);
     arena.fileState = &*fileState;
   }
-  const auto &loaded = runtime.classes();
+  const auto& loaded = runtime.classes();
   const auto clockStart = std::chrono::steady_clock::now();
   VmScheduler scheduler(arena, &nativeRegistry(), &loaded, &states, [&] {
     return std::chrono::duration<double>(std::chrono::steady_clock::now() -
@@ -473,7 +474,7 @@ static int probeMain(int argc, char **argv, const std::string &runDir) {
       return 1;
     }
   }
-  for (const auto *extra : extraClasses) {
+  for (const auto* extra : extraClasses) {
     const auto extraInit =
         vmInitializeClass(*extra, loaded, states, &resolve, &arena);
     if (!extraInit.ok) {
@@ -492,12 +493,12 @@ static int probeMain(int argc, char **argv, const std::string &runDir) {
     std::fputc('\n', stderr);
     return 1;
   }
-  for (const auto &state : states)
+  for (const auto& state : states)
     if (state.owner == config)
-      for (const auto &field : state.fields) {
+      for (const auto& field : state.fields) {
         if (field.name != "init")
           continue;
-        const auto *value = std::get_if<int32_t>(&field.value);
+        const auto* value = std::get_if<int32_t>(&field.value);
         if (!value) {
           std::fprintf(stderr,
                        "startup probe: Config.init is not an integer\n");
@@ -512,7 +513,7 @@ static int probeMain(int argc, char **argv, const std::string &runDir) {
                        error.c_str());
           return 1;
         }
-        const auto &targetBytes = *target.packBytes;
+        const auto& targetBytes = *target.packBytes;
         const std::string script(
             targetBytes.begin() + target.entry.payloadOffset,
             targetBytes.begin() + target.entry.payloadOffset +
@@ -533,17 +534,17 @@ static int probeMain(int argc, char **argv, const std::string &runDir) {
                        allocation.error.c_str());
           return 1;
         }
-        const auto *object = std::get_if<const VmObject *>(&allocation.value);
+        const auto* object = std::get_if<const VmObject*>(&allocation.value);
         if (!object || !*object || (*object)->runtimeClass != config) {
           std::fprintf(
               stderr,
               "startup probe: Config allocation returned invalid object\n");
           return 1;
         }
-        const TufaMethod *constructorMethod = nullptr;
-        for (const auto &list : config->methods)
-          for (const auto &method : list) {
-            const auto &words = method.words;
+        const TufaMethod* constructorMethod = nullptr;
+        for (const auto& list : config->methods)
+          for (const auto& method : list) {
+            const auto& words = method.words;
             if (words[1] < config->constants.size() &&
                 words[2] < config->constants.size() &&
                 config->constants[words[1]].text == "<init>" &&
@@ -565,7 +566,7 @@ static int probeMain(int argc, char **argv, const std::string &runDir) {
         }
         InstanceIds diagnosticIds;
         std::optional<uint32_t> instanceId;
-        WorldNode *configNode = nullptr;
+        WorldNode* configNode = nullptr;
         if (initProbe) {
           uint32_t parentId = 0;
           if (!packs.resolveLiteral("system.rpk", 4, parentId, error)) {
@@ -587,7 +588,7 @@ static int probeMain(int argc, char **argv, const std::string &runDir) {
                          "startup probe: global game parent link failed\n");
             return 1;
           }
-          ScriptNode *configScript = world.findScript(configId);
+          ScriptNode* configScript = world.findScript(configId);
           if (!configScript) {
             std::fprintf(stderr,
                          "startup probe: Config script resource unavailable\n");
@@ -619,7 +620,7 @@ static int probeMain(int argc, char **argv, const std::string &runDir) {
                 "startup probe: Config native link allocation failed\n");
             return 1;
           }
-          auto *resourceState = nativeResourceState(*object, &arena);
+          auto* resourceState = nativeResourceState(*object, &arena);
           if (!resourceState) {
             std::fprintf(stderr,
                          "startup probe: Config native link unavailable\n");
@@ -629,7 +630,7 @@ static int probeMain(int argc, char **argv, const std::string &runDir) {
               static_cast<int32_t>(resourceState -
                                    arena.resourceStates.data()) +
               1;
-          auto &binding = gameState.bindings[handle];
+          auto& binding = gameState.bindings[handle];
           binding = std::make_unique<ReceiverBinding>();
           setLinkOwner(binding->link, configNode);
           resourceState->words[2] = configNode->instanceId;
@@ -663,27 +664,27 @@ static int probeMain(int argc, char **argv, const std::string &runDir) {
           return 1;
         }
         if (initProbe) {
-          for (const auto &state : states) {
+          for (const auto& state : states) {
             if (!state.owner || state.owner->name != "java.util.Config")
               continue;
-            for (const auto &field : state.fields) {
+            for (const auto& field : state.fields) {
               if (field.name == "MouseHelp") {
-                if (const auto *value = std::get_if<int32_t>(&field.value))
+                if (const auto* value = std::get_if<int32_t>(&field.value))
                   gameState.mouseHelp = *value;
               } else if (field.name == "resource_loadrate") {
-                if (const auto *value = std::get_if<int32_t>(&field.value))
+                if (const auto* value = std::get_if<int32_t>(&field.value))
                   resourceLoadRate = *value;
               } else if (field.name == "mem_instance_max") {
-                if (const auto *value = std::get_if<int32_t>(&field.value))
+                if (const auto* value = std::get_if<int32_t>(&field.value))
                   instanceMax = *value;
               } else if (field.name == "mem_sound_max") {
-                if (const auto *value = std::get_if<int32_t>(&field.value))
+                if (const auto* value = std::get_if<int32_t>(&field.value))
                   soundMax = *value;
               } else if (field.name == "mem_texture_max") {
-                if (const auto *value = std::get_if<int32_t>(&field.value))
+                if (const auto* value = std::get_if<int32_t>(&field.value))
                   textureMax = *value;
               } else if (field.name == "mem_vertex_max") {
-                if (const auto *value = std::get_if<int32_t>(&field.value))
+                if (const auto* value = std::get_if<int32_t>(&field.value))
                   meshMax = *value;
               }
             }
@@ -695,11 +696,11 @@ static int probeMain(int argc, char **argv, const std::string &runDir) {
           return 1;
         }
         if (diagnosticRenderer) {
-          gameState.forceRendering = [&](std::string &renderError) {
+          gameState.forceRendering = [&](std::string& renderError) {
             const auto initialFrame = world.frameCounter();
             const auto viewports = world.activeViewports();
             size_t cameras = 0;
-            for (const auto *viewport : viewports)
+            for (const auto* viewport : viewports)
               if (viewport->viewport && viewport->viewport->renderAttachments)
                 cameras +=
                     viewport->viewport->renderAttachments->active().size();
@@ -708,7 +709,7 @@ static int probeMain(int argc, char **argv, const std::string &runDir) {
                     videoPlayer && videoPlayer->playing(), instanceMax,
                     soundMax, textureMax, meshMax, resourceLoadRate,
                     &frameVisibility, renderError,
-                    [&](std::string &videoError) {
+                    [&](std::string& videoError) {
                       return videoPlayer->draw(
                           arena.performanceMilliseconds() / 1000.0, videoError);
                     },
@@ -737,7 +738,7 @@ static int probeMain(int argc, char **argv, const std::string &runDir) {
             }
             return false;
           };
-          gameState.flush = [&](std::string &flushError) {
+          gameState.flush = [&](std::string& flushError) {
             if (!gameState.forceRendering(flushError))
               return false;
             // Stock 0047c2d0 appends 00537ed0(1): the aging sweep with the
@@ -748,14 +749,14 @@ static int probeMain(int argc, char **argv, const std::string &runDir) {
         }
         if (configNode) {
           // Stock registers getInfo hooks after the script constructor.
-          const TufaClass *gameType = nullptr;
-          for (const auto *candidate : loaded)
+          const TufaClass* gameType = nullptr;
+          for (const auto* candidate : loaded)
             if (candidate && candidate->name == "java.lang.GameType")
               gameType = candidate;
-          const TufaMethod *getInfo = nullptr;
+          const TufaMethod* getInfo = nullptr;
           if (gameType)
-            for (const auto &list : gameType->methods)
-              for (const auto &method : list)
+            for (const auto& list : gameType->methods)
+              for (const auto& method : list)
                 if (gameType->constants[method.words[1]].text == "getInfo" &&
                     gameType->constants[method.words[2]].text == "(I)I")
                   getInfo = &method;
@@ -768,7 +769,7 @@ static int probeMain(int argc, char **argv, const std::string &runDir) {
             const auto answer = vmExecute(
                 *gameType, gameType->trees[getInfo->words[3]], {*object, kind},
                 &nativeRegistry(), &loaded, &states, &arena);
-            const auto *value = std::get_if<int32_t>(&answer.value);
+            const auto* value = std::get_if<int32_t>(&answer.value);
             if (!answer.ok || !value || *value != 0) {
               std::fprintf(stderr,
                            "startup probe: Config getInfo hook unsupported\n");
@@ -783,11 +784,11 @@ static int probeMain(int argc, char **argv, const std::string &runDir) {
               "Config attached to system.rpk 0x00000004; global link 0x%08x\n",
               world.configNode()->instanceId);
         }
-        for (const auto &state : states)
+        for (const auto& state : states)
           if (state.owner == config)
-            for (const auto &setting : state.fields) {
+            for (const auto& setting : state.fields) {
               if (setting.name == "video_x" || setting.name == "video_y") {
-                const auto *dimension = std::get_if<int32_t>(&setting.value);
+                const auto* dimension = std::get_if<int32_t>(&setting.value);
                 if (dimension) {
                   if (setting.name == "video_x")
                     displaySize.width = *dimension;
@@ -797,7 +798,7 @@ static int probeMain(int argc, char **argv, const std::string &runDir) {
               }
               if (setting.name != "video_gamma")
                 continue;
-              const auto *gamma = std::get_if<float>(&setting.value);
+              const auto* gamma = std::get_if<float>(&setting.value);
               if (!gamma) {
                 std::fprintf(stderr, "startup probe: invalid gamma field\n");
                 return 1;
@@ -822,17 +823,17 @@ static int probeMain(int argc, char **argv, const std::string &runDir) {
                        allocatedInit.error.c_str());
           return 1;
         }
-        const auto *initObject =
-            std::get_if<const VmObject *>(&allocatedInit.value);
+        const auto* initObject =
+            std::get_if<const VmObject*>(&allocatedInit.value);
         if (!initObject || !*initObject ||
             (*initObject)->runtimeClass != gameInit) {
           std::fprintf(stderr, "startup probe: invalid Init object\n");
           return 1;
         }
-        const TufaMethod *initConstructor = nullptr;
-        for (const auto &list : gameInit->methods)
-          for (const auto &method : list) {
-            const auto &words = method.words;
+        const TufaMethod* initConstructor = nullptr;
+        for (const auto& list : gameInit->methods)
+          for (const auto& method : list) {
+            const auto& words = method.words;
             if (words[1] < gameInit->constants.size() &&
                 words[2] < gameInit->constants.size() &&
                 gameInit->constants[words[1]].text == "<init>" &&
@@ -865,11 +866,11 @@ static int probeMain(int argc, char **argv, const std::string &runDir) {
                        "startup probe: Init resource or parent unavailable\n");
           return 1;
         }
-        ScriptNode *initScript = initScriptLookup.node.script;
+        ScriptNode* initScript = initScriptLookup.node.script;
         initScript->className = gameInit->name;
         initScript->loaded = true;
         resources.noteScriptLoaded(id);
-        WorldNode *initNode =
+        WorldNode* initNode =
             resources.addGameChild(*initParent.node.packNode, "GameInit", 0x21);
         if (!initNode) {
           std::fprintf(stderr, "startup probe: Init world node unavailable\n");
@@ -890,7 +891,7 @@ static int probeMain(int argc, char **argv, const std::string &runDir) {
                        "startup probe: Init native link allocation failed\n");
           return 1;
         }
-        auto *initResource = nativeResourceState(*initObject, &arena);
+        auto* initResource = nativeResourceState(*initObject, &arena);
         if (!initResource) {
           std::fprintf(stderr, "startup probe: Init native link unavailable\n");
           return 1;
@@ -898,7 +899,7 @@ static int probeMain(int argc, char **argv, const std::string &runDir) {
         const int32_t initHandle =
             static_cast<int32_t>(initResource - arena.resourceStates.data()) +
             1;
-        auto &initBinding = gameState.bindings[initHandle];
+        auto& initBinding = gameState.bindings[initHandle];
         initBinding = std::make_unique<ReceiverBinding>();
         setLinkOwner(initBinding->link, initNode);
         initResource->words[2] = initNode->instanceId;
@@ -912,8 +913,8 @@ static int probeMain(int argc, char **argv, const std::string &runDir) {
                       &states, &arena);
         // These lines show what the scripts asked the host world to create.
         // Pack-mounted nodes are in the resource world.
-        std::function<void(const WorldNode &, int)> printNode =
-            [&](const WorldNode &node, int depth) {
+        std::function<void(const WorldNode&, int)> printNode =
+            [&](const WorldNode& node, int depth) {
               std::printf(
                   "world node%*s'%s' type %u instance 0x%08x flags 0x%x%s\n",
                   depth * 2 + 1, "", node.name.c_str(), node.type,
@@ -929,7 +930,7 @@ static int probeMain(int argc, char **argv, const std::string &runDir) {
                     const auto kids = world.childOwners(parent);
                     if (!kids)
                       return;
-                    for (const auto *owner : *kids) {
+                    for (const auto* owner : *kids) {
                       const auto resolved = resources.resolve(owner);
                       if (resolved.worldNode)
                         printNode(*resolved.worldNode, depth + 1);
@@ -939,7 +940,7 @@ static int probeMain(int argc, char **argv, const std::string &runDir) {
                   };
               printChildren(node.handle);
             };
-        if (const WorldNode *root = world.defaultParent())
+        if (const WorldNode* root = world.defaultParent())
           printNode(*root, 0);
         std::printf("world: %zu nodes, %u game instances created; resource "
                     "world: %zu pack nodes, %zu missing ids\n",
@@ -947,16 +948,16 @@ static int probeMain(int argc, char **argv, const std::string &runDir) {
                     resources.nodeCount(), resources.missingIds().size());
         // The ResourceRef statics that Frontend's initializers and setFonts
         // made, with the node each one links to.
-        for (const auto &state : states) {
+        for (const auto& state : states) {
           if (state.owner->name != "java.render.Frontend")
             continue;
-          for (const auto &field : state.fields) {
-            const auto *object = std::get_if<const VmObject *>(&field.value);
+          for (const auto& field : state.fields) {
+            const auto* object = std::get_if<const VmObject*>(&field.value);
             if (!object || !*object ||
                 (*object)->runtimeClass->name !=
                     "java.util.resource.ResourceRef")
               continue;
-            const VmResourceState *ref = nativeResourceState(*object, &arena);
+            const VmResourceState* ref = nativeResourceState(*object, &arena);
             const auto binding =
                 ref ? gameState.bindings.find(
                           static_cast<int32_t>(ref -
@@ -974,12 +975,12 @@ static int probeMain(int argc, char **argv, const std::string &runDir) {
               std::printf("Frontend.%s = no node\n", field.name.c_str());
           }
         }
-        for (const auto &name : scheduler.threadNames())
+        for (const auto& name : scheduler.threadNames())
           std::printf("script thread: %s\n", name.c_str());
         if (!gameResult.ok) {
           std::fprintf(stderr, "startup probe: Init constructor: %s\n",
                        gameResult.error.c_str());
-          for (const auto &frame : arena.failureTrace)
+          for (const auto& frame : arena.failureTrace)
             std::fprintf(stderr, "  in %s\n", frame.c_str());
         }
         if (gameResult.ok)
@@ -1022,54 +1023,142 @@ static int probeMain(int argc, char **argv, const std::string &runDir) {
             else
               cursorInput.reset();
           };
-          // --script FILE: one action per line, "<seconds since loop start>
-          // <action> [args]". Actions: move X Y (window points), down, up,
-          // keydown NAME, keyup NAME, shot PATH, quit, fail
-          // error|segv|abort|throw (fails on purpose, to test the run log), and
-          // the test hooks sdl_move X Y, sdl_down, sdl_up, sdl_keydown NAME,
-          // sdl_keyup NAME (see docs/run-log.md).
-          struct ScriptAction {
-            double at;
-            std::string verb, a, b;
-          };
-          std::vector<ScriptAction> script;
+          ProbeScript script;
           if (!scriptPath.empty()) {
             std::ifstream in(scriptPath);
-            if (!in) {
-              std::fprintf(stderr, "startup probe: cannot read script %s\n",
-                           scriptPath.c_str());
+            if (!in || !script.read(in, error)) {
+              std::fprintf(stderr, "startup probe: script %s: %s\n",
+                           scriptPath.c_str(),
+                           in ? error.c_str() : "cannot open file");
               return 2;
             }
-            for (std::string line; std::getline(in, line);) {
-              std::istringstream fields(line);
-              ScriptAction action{};
-              if (!(fields >> action.at >> action.verb) || action.at < 0)
-                continue;
-              if (action.verb == "keydown" || action.verb == "keyup" ||
-                  action.verb == "sdl_keydown" || action.verb == "sdl_keyup" ||
-                  action.verb == "sdl_type") {
-                std::getline(
-                    fields >> std::ws,
-                    action.a); // names such as "Left Shift" hold a space
-                while (!action.a.empty() &&
-                       (action.a.back() == ' ' || action.a.back() == '\r'))
-                  action.a.pop_back();
-              } else {
-                fields >> action.a >> action.b;
-              }
-              script.push_back(action);
-            }
-            std::stable_sort(
-                script.begin(), script.end(),
-                [](const auto &l, const auto &r) { return l.at < r.at; });
           }
-          size_t nextAction = 0;
           std::string pendingShot;
           const auto loopStarted = std::chrono::steady_clock::now();
           const auto sinceLoopStart = [&] {
             return std::chrono::duration<double>(
                        std::chrono::steady_clock::now() - loopStarted)
                 .count();
+          };
+          // Camera instances attached to an active viewport in the last
+          // presented frame.
+          std::vector<LinkOwner*> lastFrameCameras;
+          const auto fieldObject = [](const VmValue* value) -> const VmObject* {
+            const auto object =
+                value ? std::get_if<const VmObject*>(value) : nullptr;
+            return object ? *object : nullptr;
+          };
+          const auto objectField = [](const VmObject* object,
+                                      std::string_view name) -> const VmValue* {
+            if (object)
+              for (const auto& field : object->fields)
+                if (field.name == name)
+                  return &field.value;
+            return nullptr;
+          };
+          const auto staticField = [&](std::string_view owner,
+                                       std::string_view name) -> const VmValue* {
+            for (const auto& state : states)
+              if (state.owner->name == owner)
+                for (const auto& field : state.fields)
+                  if (field.name == name)
+                    return &field.value;
+            return nullptr;
+          };
+          const auto shown = [&](const VmObject* dialog) {
+            const auto value = objectField(dialog, "shown");
+            const auto flag = value ? std::get_if<int32_t>(value) : nullptr;
+            return flag && *flag != 0;
+          };
+          // nullptr when ready; otherwise the first condition still blocking.
+          const auto scriptReady =
+              [&](std::string_view condition) -> const char* {
+            const auto* section =
+                fieldObject(staticField("java.game.GameLogic", "actualState"));
+            const auto* loading = fieldObject(
+                staticField("java.render.Frontend", "loadingScreen"));
+            if (!section || !section->runtimeClass)
+              return "no GameLogic.actualState";
+            if (!loading)
+              return "no Frontend.loadingScreen";
+            if (resources.isLoading())
+              return "resource load pending";
+            if (shown(fieldObject(objectField(loading, "loadingDialog"))))
+              return "loading dialog shown";
+            if (condition == "menu") {
+              if (section->runtimeClass->name != "java.game.MainMenu")
+                return "active state is not java.game.MainMenu";
+              return shown(fieldObject(objectField(section, "mmd")))
+                         ? nullptr
+                         : "main menu dialog not shown";
+            }
+            // A background/menu car is not a driving scene. Observe the real
+            // stock Track ancestry and player's chassis without changing either.
+            const TufaClass* cls = section->runtimeClass;
+            bool track = false;
+            for (size_t depth = 0; cls && depth < loaded.size(); ++depth) {
+              if (cls->name == "java.game.Track") {
+                track = true;
+                break;
+              }
+              const auto parent = cls->classHeader[3];
+              if (parent >= cls->constants.size() ||
+                  cls->constants[parent].kind != 4 ||
+                  cls->constants[parent].a >= cls->constants.size())
+                break;
+              const auto& name = cls->constants[cls->constants[parent].a].text;
+              const auto found = std::find_if(
+                  loaded.begin(), loaded.end(),
+                  [&](const TufaClass* candidate) {
+                    return candidate->name == name;
+                  });
+              cls = found == loaded.end() ? nullptr : *found;
+            }
+            if (!track)
+              return "active state is not a java.game.Track";
+            const auto* player =
+                fieldObject(staticField("java.game.GameLogic", "player"));
+            const auto* vehicle = fieldObject(objectField(player, "car"));
+            const auto* chassis = fieldObject(objectField(vehicle, "chassis"));
+            const auto* node = chassis ? world.findByReceiver(chassis) : nullptr;
+            if (!node || !node->carInstance || !node->carInstance->isCar ||
+                !node->carInstance->carPhysics)
+              return "player car chassis has no physical car";
+            // The native player device must control that car and view it
+            // through a camera that was attached in the last presented frame.
+            for (const auto* input : world.playerInputs()) {
+              if (!input->player ||
+                  world.nodeFor(input->player->controllable.owner) != node)
+                continue;
+              // Player.camera is the camera device; its render instance is
+              // what the viewport attaches and the frame draws.
+              const auto* device =
+                  world.nodeFor(input->player->camera.owner);
+              const auto* render = device && device->cameraDevice
+                                       ? device->cameraDevice->renderNode()
+                                       : nullptr;
+              if (!render)
+                return "player has no camera render instance";
+              for (auto* attached : lastFrameCameras)
+                if (world.nodeFor(attached) == render)
+                  return nullptr;
+              return "player camera not in last presented frame";
+            }
+            return "no player device controls the player car";
+          };
+          const auto waitComplete = [&](std::string_view condition, double real,
+                                        double logical, double waited) {
+            std::printf("startup probe: wait %.*s ready (loop=%.3fs "
+                        "script=%.3fs waited=%.3fs frame=%u)\n",
+                        static_cast<int>(condition.size()), condition.data(),
+                        real, logical, waited,
+                        static_cast<unsigned>(world.frameCounter()));
+            runlog::event(runlog::EventKind::Note,
+                          "script wait %.*s ready real=%.3f script=%.3f "
+                          "waited=%.3f frame=%u",
+                          static_cast<int>(condition.size()), condition.data(),
+                          real, logical, waited,
+                          static_cast<unsigned>(world.frameCounter()));
           };
           // Fires for a real key-down and for a replayed one, so a replay can
           // reproduce an input-triggered crash.
@@ -1086,7 +1175,7 @@ static int probeMain(int argc, char **argv, const std::string &runDir) {
             }
             if (crashMode == "abort")
               std::abort();
-            *static_cast<volatile int *>(nullptr) = 1;
+            *static_cast<volatile int*>(nullptr) = 1;
             return 1;
           };
           double lastWorldSummary = -5.0;
@@ -1097,7 +1186,7 @@ static int probeMain(int argc, char **argv, const std::string &runDir) {
             bool valid = false;
           };
           static CarSample lastCar;
-          const auto recordCarDelta = [&](const PlayerCarNote &cars) {
+          const auto recordCarDelta = [&](const PlayerCarNote& cars) {
             if (cars.count != 1)
               return;
             if (lastCar.valid) {
@@ -1120,7 +1209,7 @@ static int probeMain(int argc, char **argv, const std::string &runDir) {
                 sinceLoopStart(), static_cast<unsigned>(world.frameCounter()),
                 resources.isLoading() ? 1 : 0);
             text += head;
-            for (const auto &t : scheduler.snapshot(10)) {
+            for (const auto& t : scheduler.snapshot(10)) {
               char line[400];
               std::snprintf(
                   line, sizeof line,
@@ -1135,17 +1224,17 @@ static int probeMain(int argc, char **argv, const std::string &runDir) {
                               t.sleepRemaining);
                 text += line;
               }
-              for (const auto &frame : t.stack)
+              for (const auto& frame : t.stack)
                 text += "    at " + frame + "\n";
             }
             return text;
           };
-          const auto logThreadDump = [&](const char *why) {
+          const auto logThreadDump = [&](const char* why) {
             runlog::event(runlog::EventKind::Note, "world threads dump (%s)",
                           why);
-            for (const auto &t : scheduler.snapshot(4)) {
+            for (const auto& t : scheduler.snapshot(4)) {
               std::string stack;
-              for (const auto &frame : t.stack)
+              for (const auto& frame : t.stack)
                 stack += (stack.empty() ? "" : " < ") + frame;
               runlog::event(runlog::EventKind::Note,
                             "world thread \"%s\" %s on=%s slices=%zu f%u %s",
@@ -1170,7 +1259,7 @@ static int probeMain(int argc, char **argv, const std::string &runDir) {
             const auto threads = scheduler.snapshot(10);
             std::set<std::string> live;
             bool newStall = false;
-            for (const auto &t : threads) {
+            for (const auto& t : threads) {
               if (t.state != "waiting")
                 continue;
               const std::string key = t.name + "|" + t.waitingOn;
@@ -1206,7 +1295,7 @@ static int probeMain(int argc, char **argv, const std::string &runDir) {
             runlog::setSnapshot("world", worldText);
           };
           const auto recordFailureContext =
-              [&](const std::vector<std::string> &trace) {
+              [&](const std::vector<std::string>& trace) {
                 logThreadDump("failure");
                 if (trace.empty())
                   return;
@@ -1216,7 +1305,7 @@ static int probeMain(int argc, char **argv, const std::string &runDir) {
                   cls.resize(cut);
                 if (cls.size() > 72)
                   cls.resize(72);
-                for (char &ch : cls)
+                for (char& ch : cls)
                   if (ch == '"' || ch == '\\')
                     ch = '?';
                 runlog::event(runlog::EventKind::Note,
@@ -1278,7 +1367,7 @@ static int probeMain(int argc, char **argv, const std::string &runDir) {
             logThreadDump("loop exit");
             recordWorldSummary();
           }};
-          CarWorldStepper carStepper(world, resources);
+          CarWorldStepper carStepper(world, resources, &measurement);
           for (;;) {
             const auto frameStarted = std::chrono::steady_clock::now();
             if (sinceLoopStart() - lastWorldSummary >= 5.0) {
@@ -1287,10 +1376,13 @@ static int probeMain(int argc, char **argv, const std::string &runDir) {
             }
             watchStalls();
             runlog::frameTick(static_cast<uint32_t>(world.frameCounter()));
-            while (nextAction < script.size() &&
-                   std::chrono::duration<double>(frameStarted - loopStarted)
-                           .count() >= script[nextAction].at) {
-              const auto &action = script[nextAction++];
+            std::string scriptError;
+            const double scriptNow =
+                std::chrono::duration<double>(frameStarted - loopStarted).count();
+            while (const auto* next = script.poll(
+                       scriptNow, scriptReady, waitComplete, scriptError)) {
+              const auto& action = *next;
+              script.consume();
               runlog::event(runlog::EventKind::Input, "script %.1fs %s %s %s",
                             action.at, action.verb.c_str(), action.a.c_str(),
                             action.b.c_str());
@@ -1300,7 +1392,7 @@ static int probeMain(int argc, char **argv, const std::string &runDir) {
                   return 1;
                 }
                 if (action.a == "segv") {
-                  *static_cast<volatile int *>(nullptr) = 1;
+                  *static_cast<volatile int*>(nullptr) = 1;
                 }
                 if (action.a == "abort")
                   std::abort();
@@ -1335,11 +1427,12 @@ static int probeMain(int argc, char **argv, const std::string &runDir) {
                          platformInput) {
                 const SDL_Scancode code =
                     SDL_GetScancodeFromName(action.a.c_str());
-                if (code == SDL_SCANCODE_UNKNOWN)
+                if (code == SDL_SCANCODE_UNKNOWN) {
                   std::fprintf(stderr,
                                "startup probe: script: unknown key %s\n",
                                action.a.c_str());
-                else {
+                  return 2;
+                } else {
                   if (action.verb == "keydown") {
                     const int fail = crashIfKey(code);
                     if (fail >= 0)
@@ -1379,13 +1472,14 @@ static int probeMain(int argc, char **argv, const std::string &runDir) {
                   pushed.key.windowID = windowId;
                   pushed.key.scancode = code;
                   pushed.key.down = down;
-                  if (code == SDL_SCANCODE_UNKNOWN)
+                  if (code == SDL_SCANCODE_UNKNOWN) {
                     std::fprintf(stderr,
                                  "startup probe: script: unknown key %s\n",
                                  action.a.c_str());
-                  else
-                    platformInput->setSyntheticKey(static_cast<uint32_t>(code),
-                                                   down);
+                    return 2;
+                  }
+                  platformInput->setSyntheticKey(static_cast<uint32_t>(code),
+                                                 down);
                 } else if (action.verb == "sdl_type") {
                   // Type a literal string into the focused text field by
                   // pushing key down/up pairs with a real keycode, which is
@@ -1416,6 +1510,7 @@ static int probeMain(int argc, char **argv, const std::string &runDir) {
                   std::fprintf(stderr,
                                "startup probe: script: unknown action %s\n",
                                action.verb.c_str());
+                  return 2;
                 }
                 if (pushed.type)
                   SDL_PushEvent(&pushed);
@@ -1460,9 +1555,15 @@ static int probeMain(int argc, char **argv, const std::string &runDir) {
                 }
               } else {
                 std::fprintf(stderr,
-                             "startup probe: script: unknown action %s\n",
+                             "startup probe: script: cannot perform %s\n",
                              action.verb.c_str());
+                return 2;
               }
+            }
+            if (!scriptError.empty()) {
+              std::fprintf(stderr, "startup probe: script: %s\n",
+                           scriptError.c_str());
+              return 2;
             }
             if (scriptPath.empty() &&
                 SDL_GetMouseFocus() == diagnosticWindow.get()) {
@@ -1496,7 +1597,7 @@ static int probeMain(int argc, char **argv, const std::string &runDir) {
               if ((event.type == SDL_EVENT_KEY_DOWN ||
                    event.type == SDL_EVENT_KEY_UP) &&
                   !event.key.repeat) {
-                const char *keyName = SDL_GetScancodeName(event.key.scancode);
+                const char* keyName = SDL_GetScancodeName(event.key.scancode);
                 if (runlog::active() && keyName && *keyName)
                   runlog::inputKey(sinceLoopStart(), keyName, event.key.down);
                 if (event.key.down) {
@@ -1510,33 +1611,33 @@ static int probeMain(int argc, char **argv, const std::string &runDir) {
             platformInput->beginFrame(animationDispatch == nullptr);
             if (const auto position = platformInput->frameButtonPosition())
               updateCursorPosition((*position)[0], (*position)[1]);
-            for (auto *player : world.playerInputs())
+            for (auto* player : world.playerInputs())
               if (player && player->playerInput)
                 player->playerInput->beginFrame(previousFrameSeconds);
             if (!timers.advanceFrame(
                     previousFrameSeconds, timers.timeScale(), 0.1f, 0.02f,
-                    [&](float seconds, std::string &detail) {
+                    [&](float seconds, std::string& detail) {
                       return carStepper.step(seconds, detail);
                     },
-                    [&](LinkOwner &target, int32_t id, uint32_t event,
-                        int32_t param, std::string &detail) {
+                    [&](LinkOwner& target, int32_t id, uint32_t event,
+                        int32_t param, std::string& detail) {
                       return dispatchTimerEvent(arena, target, id, event, param,
                                                 loaded, states, detail);
                     },
-                    [&](std::string &detail) {
+                    [&](std::string& detail) {
                       return world.drainDeferredDestroy(detail);
                     },
                     error)) {
               std::fprintf(stderr, "startup probe: simulation step: %s\n",
                            error.c_str());
-              for (const auto &frame : arena.failureTrace)
+              for (const auto& frame : arena.failureTrace)
                 std::fprintf(stderr, "  in %s\n", frame.c_str());
               return 1;
             }
             if (!runFrameSchedulerSlice(scheduler, error)) {
               std::fprintf(stderr, "startup probe: frame scheduler: %s\n",
                            error.c_str());
-              for (const auto &frame : arena.failureTrace)
+              for (const auto& frame : arena.failureTrace)
                 std::fprintf(stderr, "  in %s\n", frame.c_str());
               return 1;
             }
@@ -1549,7 +1650,7 @@ static int probeMain(int argc, char **argv, const std::string &runDir) {
               recordFailureContext(arena.failureTrace);
               std::fprintf(stderr, "startup probe: animation callbacks: %s\n",
                            error.c_str());
-              for (const auto &frame : arena.failureTrace)
+              for (const auto& frame : arena.failureTrace)
                 std::fprintf(stderr, "  in %s\n", frame.c_str());
               if (captureOnError && !captureFrame.empty()) {
                 std::string captureError;
@@ -1560,7 +1661,7 @@ static int probeMain(int argc, char **argv, const std::string &runDir) {
                   captured = videoPlayer->draw(
                       arena.performanceMilliseconds() / 1000.0, captureError);
                 if (captured)
-                  for (auto *viewport : world.activeViewports()) {
+                  for (auto* viewport : world.activeViewports()) {
                     if (!renderActiveViewport(
                             world, *viewport, controls->worldScale,
                             controls->threshold, controls->frustumChecks,
@@ -1618,11 +1719,13 @@ static int probeMain(int argc, char **argv, const std::string &runDir) {
               return 1;
             }
             const auto viewports = world.activeViewports();
-            size_t cameras = 0;
-            for (const auto *viewport : viewports)
+            std::vector<LinkOwner*> frameCameras;
+            for (const auto* viewport : viewports)
               if (viewport->viewport && viewport->viewport->renderAttachments)
-                cameras +=
-                    viewport->viewport->renderAttachments->active().size();
+                for (auto* camera :
+                     viewport->viewport->renderAttachments->active())
+                  frameCameras.push_back(camera);
+            const size_t cameras = frameCameras.size();
             if (!cameras) {
               // Between scene switches (e.g. garage -> dealer) no camera is
               // attached for a few frames; nothing is drawn but the frame
@@ -1649,7 +1752,7 @@ static int probeMain(int argc, char **argv, const std::string &runDir) {
                            error.c_str());
               return 1;
             }
-            for (auto *viewport : viewports) {
+            for (auto* viewport : viewports) {
               if (!cameras)
                 break;
               if (!renderActiveViewport(world, *viewport, controls->worldScale,
@@ -1693,6 +1796,7 @@ static int probeMain(int argc, char **argv, const std::string &runDir) {
                            error.c_str());
               return 1;
             }
+            lastFrameCameras = std::move(frameCameras);
             world.setFrameCounter(world.frameCounter() + 1);
             if (!notifyFrontendAfterFrame(scheduler, states, error)) {
               std::fprintf(stderr, "startup probe: frame notification: %s\n",
@@ -1716,7 +1820,7 @@ static int probeMain(int argc, char **argv, const std::string &runDir) {
           } else {
             const auto viewports = world.activeViewports();
             size_t cameraCount = 0;
-            for (const auto *viewport : viewports)
+            for (const auto* viewport : viewports)
               if (viewport->viewport && viewport->viewport->renderAttachments)
                 cameraCount +=
                     viewport->viewport->renderAttachments->active().size();
@@ -1732,7 +1836,7 @@ static int probeMain(int argc, char **argv, const std::string &runDir) {
                            error.c_str());
             } else {
               bool drawn = true;
-              for (auto *viewport : viewports)
+              for (auto* viewport : viewports)
                 if (!renderActiveViewport(
                         world, *viewport, controls->worldScale,
                         controls->threshold, controls->frustumChecks, error,
@@ -1772,11 +1876,11 @@ static int probeMain(int argc, char **argv, const std::string &runDir) {
           }
         }
         const auto printProgress = [&] {
-          for (const auto &progress : scheduler.threadProgress())
+          for (const auto& progress : scheduler.threadProgress())
             std::printf("script thread slices: %s = %zu\n",
                         progress.first.c_str(), progress.second);
-          for (const auto &wait : scheduler.threadWaits()) {
-            const auto *object = wait.second;
+          for (const auto& wait : scheduler.threadWaits()) {
+            const auto* object = wait.second;
             std::printf("script thread waiting: %s on %s\n", wait.first.c_str(),
                         object && object->runtimeClass
                             ? object->runtimeClass->name.c_str()
@@ -1788,7 +1892,7 @@ static int probeMain(int argc, char **argv, const std::string &runDir) {
           if (!result.ok) {
             std::fprintf(stderr, "startup probe: scheduler: %s\n",
                          result.error.c_str());
-            for (const auto &frame : arena.failureTrace)
+            for (const auto& frame : arena.failureTrace)
               std::fprintf(stderr, "  in %s\n", frame.c_str());
             printProgress();
             return 1;
@@ -1807,7 +1911,7 @@ static int probeMain(int argc, char **argv, const std::string &runDir) {
 
 // The recorder must exist before probeMain prints anything, so main pulls out
 // the few arguments it needs for meta.txt and leaves real parsing to probeMain.
-int main(int argc, char **argv) {
+int main(int argc, char** argv) {
   runlog::RunOptions options;
   options.gameRoot = "ref/raw";
   bool enabled = true, haveRoot = false;

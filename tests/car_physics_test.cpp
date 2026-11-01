@@ -394,5 +394,143 @@ int main() {
                 .at(registered->wheels[0]->suspensionBody.get())
                 ->resource.owner);
   }
+  {
+    // 0044c460 ride-height placement. Static compression is
+    // (|g| * mass / wheels) / springForce = 0.1 m, so each wheel centre sits at
+    // anchor.y - (initialLength - 0.1) = anchor.y - 0.5.
+    CarPhysics ride;
+    ride.mass = 1000;
+    const float xs[4] = {-0.8f, 0.8f, -0.8f, 0.8f};
+    const float zs[4] = {-1.3f, -1.3f, 1.3f, 1.3f};
+    for (int i = 0; i < 4; ++i) {
+      auto wheel = std::make_unique<CarWheelRuntime>();
+      wheel->anchor = {xs[i], 0.2f, zs[i]};
+      wheel->initialLength = 0.6f;
+      wheel->springForce = 9.81f * 1000 / 4 / 0.1f;
+      ride.wheels.push_back(std::move(wheel));
+    }
+    std::array<float, 3> pos{}, ypr{};
+    // The `center` clamp wins: root rises by -(R*center).y = 0.5.
+    ride.center = {0, 0.5f, 0};
+    assert(carRideHeightPlacement(ride, {10, 20, 30}, {0, 0, 0}, pos, ypr));
+    assert(near(pos[0], 10) && near(pos[1], 20.5f) && near(pos[2], 30));
+    assert(near(ypr[0], 0) && near(ypr[1], 0) && near(ypr[2], 0));
+    // The mean wheel centre (y = -0.3) wins: root rises by 0.3.
+    ride.center = {0, 0.1f, 0};
+    assert(carRideHeightPlacement(ride, {10, 20, 30}, {0, 0, 0}, pos, ypr));
+    assert(near(pos[1], 20.3f));
+    // Rear wheels 0.26 m higher than front: pitch += atan(0.26 / 2.6).
+    ride.wheels[2]->anchor[1] += 0.26f;
+    ride.wheels[3]->anchor[1] += 0.26f;
+    assert(carRideHeightPlacement(ride, {0, 0, 0}, {0.5f, 0, 0}, pos, ypr));
+    assert(near(ypr[0], 0.5f) && near(ypr[1], std::atan(0.1f)) &&
+           near(ypr[2], 0));
+    // Fewer than four wheels: position += R * center.
+    ride.wheels.resize(3);
+    assert(carRideHeightPlacement(ride, {10, 20, 30}, {0, 0, 0}, pos, ypr));
+    assert(near(pos[1], 20.1f) && near(ypr[1], 0));
+  }
+  {
+    // 00458c00 `reset` (resetCarToRest): zero the root's linear/angular
+    // velocity and accumulated force/torque, return each wheel's suspension
+    // to its static preload length = initialLength - (|g| * mass / wheels) /
+    // springForce, zero the live wheel slip state, then put the whole body
+    // tree to sleep (004a7a80).
+    auto restPart =
+        buildPartPhysics(config, geometry, "0,0,0,0,0,0,0", error);
+    auto restCar = buildCarPhysics(std::move(restPart), 0, error);
+    assert(restCar && error.empty());
+    std::vector<CarWheelPrototype> restWheels(1);
+    restWheels[0].position = {3, 1, -2};
+    auto restWheelProto =
+        physics::createBodyProto(1, 1, 0.3f, 0, 0, nullptr, error);
+    assert(restWheelProto);
+    restWheels[0].wheelBody = *restWheelProto;
+    restWheels[0].spring = {0.5f, 0.3f, 0.05f};
+    restWheels[0].friction = {1.5f, 1.5f};
+    restWheels[0].hasWheel = true;
+    const auto* restMainBody = restCar->part->rootGeometryBody();
+    assert(restMainBody);
+    const auto& restCenter = restCar->part->rootPrototype.shape.centerOffset;
+    restCar->wheels = buildCarWheelRuntime(restWheels, *restCar->root,
+                                           *restMainBody, {restCenter[0], restCenter[1], restCenter[2]},
+                                           restMainBody->attachment->relative.position, restCar->mass,
+                                           {0, physics::k::gravityY, 0}, error);
+    assert(restCar->wheels.size() == 1 && error.empty());
+    assert(finalizeCarPhysics(*restCar, error) &&
+           indexCarBodies(*restCar, error));
+
+    // Every body the car owns: root, part bodies, and wheel bodies.
+    std::vector<physics::Body*> treeBodies{restCar->root.get(),
+                                           restCar->part->root.get()};
+    for (const auto& childEntry : restCar->part->children)
+      treeBodies.push_back(childEntry.body.get());
+    for (const auto& wheel : restCar->wheels) {
+      treeBodies.push_back(wheel->suspensionBody.get());
+      if (wheel->boneBody) treeBodies.push_back(wheel->boneBody.get());
+      treeBodies.push_back(wheel->hubBody.get());
+      treeBodies.push_back(wheel->armBody.get());
+    }
+
+    // wakeCar (00458c00 `wakeup`) wakes the whole tree via
+    // wakeDetachedCompound.
+    wakeCar(*restCar);
+    for (auto* body : treeBodies)
+      assert(!(body->flags & physics::kBodyAsleep));
+
+    // Disturb the car: root motion state, wheel suspension and slip state.
+    auto& restState = restCar->root->state[restCar->root->current];
+    restState.vel = {3, -2, 1};
+    restState.omega = {0.5f, 1, -0.25f};
+    restState.angMom = {1, 2, 3};
+    restState.force = {4, -5, 6};
+    restState.torque = {-1, 0.5f, 2};
+    auto& restWheel = *restCar->wheels[0];
+    restWheel.suspension.length = restWheel.initialLength + 0.2f;
+    restWheel.suspension.force = 123;
+    restWheel.angularSpeed = 40;
+    restWheel.longitudinalVelocity = 12;
+    restWheel.longitudinalSlip = 0.7f;
+    restWheel.slipAngle = 0.3f;
+
+    resetCarToRest(*restCar);
+    assert(near(restState.vel[0], 0) && near(restState.vel[1], 0) &&
+           near(restState.vel[2], 0));
+    assert(near(restState.omega[0], 0) && near(restState.omega[1], 0) &&
+           near(restState.omega[2], 0));
+    assert(near(restState.angMom[0], 0) && near(restState.angMom[1], 0) &&
+           near(restState.angMom[2], 0));
+    assert(near(restState.force[0], 0) && near(restState.force[1], 0) &&
+           near(restState.force[2], 0));
+    assert(near(restState.torque[0], 0) && near(restState.torque[1], 0) &&
+           near(restState.torque[2], 0));
+    // Static preload: length = initialLength - (|g| * mass / wheels) /
+    // springForce, and the live wheel state is zeroed.
+    const float restWeightPerWheel =
+        std::fabs(physics::k::gravityY) * restCar->mass /
+        static_cast<float>(restCar->wheels.size());
+    assert(near(restWheel.suspension.length,
+                restWheel.initialLength -
+                    restWeightPerWheel / restWheel.springForce));
+    assert(near(restWheel.suspension.force, 0));
+    assert(near(restWheel.angularSpeed, 0));
+    assert(near(restWheel.longitudinalVelocity, 0));
+    assert(near(restWheel.longitudinalSlip, 0));
+    assert(near(restWheel.slipAngle, 0));
+    for (auto* body : treeBodies)
+      assert(body->flags & physics::kBodyAsleep);
+
+    // suspendCar (00458c00 `suspend`) sleeps the whole tree; a second call
+    // is a no-op on an already-sleeping tree.
+    wakeCar(*restCar);
+    for (auto* body : treeBodies)
+      assert(!(body->flags & physics::kBodyAsleep));
+    suspendCar(*restCar);
+    for (auto* body : treeBodies)
+      assert(body->flags & physics::kBodyAsleep);
+    suspendCar(*restCar);
+    for (auto* body : treeBodies)
+      assert(body->flags & physics::kBodyAsleep);
+  }
   std::cout << "car physics: ok\n";
 }

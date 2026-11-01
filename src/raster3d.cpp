@@ -299,6 +299,7 @@ inline bool topLeft(int64_t ax, int64_t ay, int64_t bx, int64_t by) {
 
 struct Shader {
   const Raster3DMaterial *m;
+  const Raster3DLight* light = nullptr;
   bool textured, needColor, needLight;
   float tw, th;
   const Raster3DFixedDraw *fixed;
@@ -577,9 +578,18 @@ void rasterize(Target &t, const Shader &s, const ScreenV<N> v[3],
         b = current[2] * 255.0f;
         alpha = current[3];
       } else {
-        r = texel[0] * m.diffuse[0] * cr * light;
-        gch = texel[1] * m.diffuse[1] * cg * light;
-        b = texel[2] * m.diffuse[2] * cb * light;
+        // Stock fixed-function lighting (FUN_004bb7f0's two-term vertex
+        // colour): texel * material * (ambient + diffuse * max(N.L, 0)).
+        // Without a light the factor is 1 (a[6] stays 1.0 per vertex).
+        const float lr =
+            s.light ? s.light->ambient[0] + s.light->diffuse[0] * light : 1.0f;
+        const float lg =
+            s.light ? s.light->ambient[1] + s.light->diffuse[1] * light : 1.0f;
+        const float lb =
+            s.light ? s.light->ambient[2] + s.light->diffuse[2] * light : 1.0f;
+        r = texel[0] * m.diffuse[0] * cr * lr;
+        gch = texel[1] * m.diffuse[1] * cg * lg;
+        b = texel[2] * m.diffuse[2] * cb * lb;
         alpha = (texel[3] * (1.0f / 255.0f)) * m.diffuse[3] * ca;
       }
       if (m.blend == Raster3DBlend::AlphaTest) {
@@ -1077,7 +1087,7 @@ bool Raster3D::drawImpl(const Raster3DDraw &d, std::string &error) {
       const float wz = nx * d.model[2] + ny * d.model[6] + nz * d.model[10];
       const float len = std::sqrt(wx * wx + wy * wy + wz * wz);
       const float dot = len > 0 ? (wx * lx + wy * ly + wz * lz) / len : 0.0f;
-      c.a[6] = d.light.ambient + d.light.diffuse * (dot > 0 ? dot : 0.0f);
+      c.a[6] = dot > 0 ? dot : 0.0f;
     }
     if constexpr (Fixed) {
       for (size_t stage = 0; stage < 8; ++stage) {
@@ -1134,7 +1144,7 @@ bool Raster3D::drawImpl(const Raster3DDraw &d, std::string &error) {
     target.y1 = std::min<int>(static_cast<int>(height_),
                               static_cast<int>(std::ceil(hi[1])));
   }
-  Shader shader{&m, m.texture != nullptr, useColor, useLight, 0, 0, d.fixed};
+  Shader shader{&m, useLight ? &d.light : nullptr, m.texture != nullptr, useColor, useLight, 0, 0, d.fixed};
   if (m.texture) {
     shader.tw = static_cast<float>(m.texture->levels[0].width);
     shader.th = static_cast<float>(m.texture->levels[0].height);

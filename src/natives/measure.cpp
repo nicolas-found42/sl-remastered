@@ -5,8 +5,7 @@ NativeResult setMeasure(const std::vector<VmValue>& args, const VmObject*, VmAre
 	if (!arena || !arena->measurementState || args.size() != 1 || !std::holds_alternative<float>(args[0]))
 		return std::string{"invalid setMeasure call"};
 	const float value = std::get<float>(args[0]);
-	// These two values are used by Config.loadConfig; general x87 parity is unverified.
-	if (value != 1000.0f && value != 1600.0f) return std::string{"unsupported setMeasure value"};
+	// FUN_0047c4b0 accepts the script float without restricting unit lengths.
 	auto& state = *arena->measurementState;
 	state.value = value;
 	state.product = static_cast<float>(static_cast<double>(value) * static_cast<double>(0x1.234568p-12f));

@@ -1315,6 +1315,9 @@ static VmResult executeTree(VmExecutionState &execution, VmFrame &frame) {
         const auto &condition = readValue(stack.back());
         if (const auto *value = std::get_if<int32_t>(&condition))
           truth = *value != 0;
+        // FUN_00420ff0's conditional branches call FUN_00417840 for floats too.
+        else if (const auto *number = std::get_if<float>(&condition))
+          truth = !std::isnan(*number) && *number != 0.0f;
         else if (const auto *object = std::get_if<const VmObject *>(&condition))
           truth = *object != nullptr;
         else
@@ -3988,8 +3991,8 @@ VmResult VmScheduler::startHostTask(const VmObject *receiver,
   task.reset();
   if (alive && !alive())
     return {false, int32_t{0}, "host task owner destroyed"};
-  if (impl_->arena.activeExecution)
-    return {false, int32_t{0}, "host task requires inactive VM"};
+  // vmStart only constructs frames; a task queued by a native callback runs
+  // when the scheduler reaches it, just like a script-started thread.
   const TufaClass *owner = nullptr;
   const std::vector<TufaNode> *tree = nullptr;
   std::vector<VmValue> locals;

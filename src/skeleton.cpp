@@ -1,4 +1,5 @@
 #include "skeleton.hpp"
+#include "car_config.hpp"
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -105,4 +106,276 @@ SkeletonResult parseSkeleton(std::string_view text) {
   }
   result.ok=true;
   return result;
+}
+
+
+SkeletonPose::SkeletonPose(std::vector<SkeletonBone> bones)
+    : bones_(std::move(bones)), local_(bones_.size()),
+      world_(bones_.size()), palette_(bones_.size()) {
+  // FUN_00532790: initialize independent instance transforms from bind locals.
+  std::vector<bool> visited(bones_.size());
+  std::function<void(size_t)> visit = [&](size_t i) {
+    if (visited[i]) return;
+    visited[i] = true;
+    if (bones_[i].parent >= 0) visit(static_cast<size_t>(bones_[i].parent));
+    local_[i] = bones_[i].local;
+    order_.push_back(i);
+  };
+  for (size_t i = 0; i < bones_.size(); ++i) visit(i);
+  refresh();
+}
+int SkeletonPose::findBone(std::string_view name) const {
+  for (size_t i = 0; i < bones_.size(); ++i) {
+    const auto &candidate = bones_[i].name;
+    if (candidate.size() != name.size()) continue;
+    bool match = true;
+    for (size_t j = 0; j < name.size(); ++j)
+      if (candidate[j] != name[j] && !(candidate[j] == ' ' && name[j] == '_')) {
+        match = false; break;
+      }
+    if (match) return static_cast<int>(i);
+  }
+  return -1;
+}
+void SkeletonPose::refresh() {
+  for (size_t i : order_) {
+    const int parent = bones_[i].parent;
+    world_[i] = parent < 0 ? local_[i] : multiply(world_[static_cast<size_t>(parent)], local_[i]);
+    palette_[i] = multiply(world_[i], bones_[i].inverseBind);
+  }
+}
+bool SkeletonPose::setLocal(size_t bone, const SkeletonMatrix &matrix) {
+  if (bone >= bones_.size() || !std::all_of(matrix.begin(), matrix.end(),
+      [](float v) { return std::isfinite(v); })) return false;
+  local_[bone] = matrix;
+  refresh();
+  return true;
+}
+int SkeletonPose::addConstraint(std::string_view name, std::string_view bone,
+                                unsigned ancestors, Point offset) {
+  // FUN_00531950: names are unique, and the chain ends at the Nth ancestor.
+  for (size_t i = 0; i < constraints_.size(); ++i)
+    if (constraints_[i].name == name) return static_cast<int>(i);
+  const int found = findBone(bone);
+  if (found < 0) return -1;
+  size_t root = static_cast<size_t>(found);
+  while (ancestors-- && bones_[root].parent >= 0)
+    root = static_cast<size_t>(bones_[root].parent);
+  constraints_.push_back({std::string(name), static_cast<size_t>(found), root, offset, {}, 0});
+  return static_cast<int>(constraints_.size() - 1);
+}
+bool SkeletonPose::setConstraintTarget(size_t i, Point target, float weight) {
+  if (i >= constraints_.size() || !std::isfinite(weight) || weight < 0 ||
+      !std::all_of(target.begin(), target.end(), [](float v) { return std::isfinite(v); })) return false;
+  constraints_[i].target = target;
+  constraints_[i].weight = weight;
+  auto frame = identity();
+  for (size_t k=0;k<3;++k) frame[12+k] = target[k];
+  setNamedFrame(constraints_[i].name, frame);
+  return true;
+}
+bool SkeletonPose::affects(size_t ancestor, size_t bone) const {
+  for (;;) {
+    if (ancestor == bone) return true;
+    if (bones_[bone].parent < 0) return false;
+    bone = static_cast<size_t>(bones_[bone].parent);
+  }
+}
+SkeletonPose::Point SkeletonPose::endpoint(const Constraint &c) const {
+  Point p{};
+  const auto &m = world_[c.bone];
+  for (size_t a = 0; a < 3; ++a)
+    p[a] = m[12+a] + m[a]*c.offset[0] + m[4+a]*c.offset[1] + m[8+a]*c.offset[2];
+  return p;
+}
+void SkeletonPose::solve(unsigned iterations) {
+  // FUN_00533450: weighted coordinate descent, Z/Y/X order, reject steps
+  // which increase squared target error. Unlike physical springs this solver
+  // changes joint angles, not target positions or linear velocities.
+  for (unsigned iteration = 0; iteration < iterations; ++iteration) {
+    for (auto it = order_.rbegin(); it != order_.rend(); ++it) {
+      const size_t joint = *it;
+      for (int axis = 2; axis >= 0; --axis) {
+        const auto parent = bones_[joint].parent;
+        const auto basis = parent < 0 ? identity() : world_[static_cast<size_t>(parent)];
+        Point direction{basis[axis*4], basis[axis*4+1], basis[axis*4+2]};
+        const Point pivot{world_[joint][12], world_[joint][13], world_[joint][14]};
+        float sine = 0, cosine = 0, before = 0;
+        for (const auto &c : constraints_) {
+          if (c.weight == 0 || !affects(c.root, joint) || !affects(joint, c.bone)) continue;
+          const auto p = endpoint(c);
+          Point a{}, b{};
+          float da = 0, db = 0;
+          for (size_t k = 0; k < 3; ++k) {
+            a[k] = p[k] - pivot[k]; b[k] = c.target[k] - pivot[k];
+            da += a[k]*direction[k]; db += b[k]*direction[k];
+            before += c.weight*(p[k]-c.target[k])*(p[k]-c.target[k]);
+          }
+          for (size_t k = 0; k < 3; ++k) { a[k] -= direction[k]*da; b[k] -= direction[k]*db; }
+          const Point cross{a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]};
+          for (size_t k = 0; k < 3; ++k) { sine += c.weight*cross[k]*direction[k]; cosine += c.weight*a[k]*b[k]; }
+        }
+        if (std::fabs(sine) + std::fabs(cosine) < 0.0001f) continue;
+        const float angle = std::atan2(sine, cosine);
+        SkeletonMatrix rotation = identity();
+        const size_t a = static_cast<size_t>((axis+1)%3), b = static_cast<size_t>((axis+2)%3);
+        rotation[a*4+a] = rotation[b*4+b] = std::cos(angle);
+        rotation[a*4+b] = std::sin(angle); rotation[b*4+a] = -std::sin(angle);
+        const auto previous = local_[joint];
+        local_[joint] = multiply(rotation, previous);
+        // FUN_00533450 uses wrapped angular intervals, including intervals
+        // crossing -pi/pi; project to the nearest boundary, not numeric clamp.
+        Point euler{std::atan2(local_[joint][6], local_[joint][10]),
+                    std::asin(std::clamp(-local_[joint][2], -1.0f, 1.0f)),
+                    std::atan2(local_[joint][1], local_[joint][0])};
+        auto wrap = [](float value) {
+          while (value < -pi) value += 2*pi;
+          while (value > pi) value -= 2*pi;
+          return value;
+        };
+        for (size_t k = 0; k < 3; ++k) {
+          const float lo = bones_[joint].minimum[k], hi = bones_[joint].maximum[k];
+          const float value = wrap(euler[k]);
+          const bool inside = lo <= hi ? value >= lo && value <= hi : value >= lo || value <= hi;
+          if (!inside) euler[k] = std::fabs(wrap(value-lo)) < std::fabs(wrap(value-hi)) ? lo : hi;
+        }
+        const float sx = std::sin(euler[0]), cx = std::cos(euler[0]);
+        const float sy = std::sin(euler[1]), cy = std::cos(euler[1]);
+        const float sz = std::sin(euler[2]), cz = std::cos(euler[2]);
+        local_[joint] = {{cz*cy, sz*cy, -sy, 0,
+          cz*sy*sx-sz*cx, sz*sy*sx+cz*cx, cy*sx, 0,
+          cz*sy*cx+sz*sx, sz*sy*cx-cz*sx, cy*cx, 0, 0, 0, 0, 1}};
+        // Rotation is about the joint, not about the parent's origin.
+        for (size_t k = 0; k < 3; ++k) local_[joint][12+k] = previous[12+k];
+        refresh();
+        float after = 0;
+        for (const auto &c : constraints_) {
+          if (c.weight == 0 || !affects(c.root, joint) || !affects(joint, c.bone)) continue;
+          const auto p = endpoint(c);
+          for (size_t k = 0; k < 3; ++k) after += c.weight*(p[k]-c.target[k])*(p[k]-c.target[k]);
+        }
+        if (after > before) { local_[joint] = previous; refresh(); }
+      }
+    }
+  }
+}
+
+std::vector<std::string> configureSeatedDriver(SkeletonPose &pose, const CarConfig &config) {
+  // FUN_00448f20: head/neck chain length 2; feet 2; hands 3. Offsets
+  // and wheel contact points are stock constants, not a canned seated clip.
+  std::vector<std::string> missing;
+  const auto target = [&](std::string_view name, std::string_view bone,
+                          unsigned chain, SkeletonPose::Point offset,
+                          SkeletonPose::Point point) {
+    const int constraint = pose.addConstraint(name, bone, chain, offset);
+    if (constraint < 0) { missing.emplace_back(bone); return; }
+    pose.setConstraintTarget(static_cast<size_t>(constraint), point);
+  };
+  pose.setNamedFrame("bone00", identity());
+  const auto &seat = config.seat;
+  // Targets are expressed in the driver's seat-local coordinates.
+  // Seat orientation conversion mirrors the render instance's YPR basis.
+  const float cy=std::cos(seat[3]), sy=std::sin(seat[3]);
+  const float cp=std::cos(seat[4]), sp=std::sin(seat[4]);
+  const float cr=std::cos(seat[5]), sr=std::sin(seat[5]);
+  const float basis[9]{cy*cr+sy*sp*sr, cp*sr, -sy*cr+cy*sp*sr,
+                       -cy*sr+sy*sp*cr, cp*cr, sy*sr+cy*sp*cr,
+                       sy*cp, -sp, cy*cp};
+  const auto local = [&](SkeletonPose::Point point) {
+    SkeletonPose::Point out{};
+    for (size_t i=0;i<3;++i)
+      for (size_t j=0;j<3;++j) out[i] += basis[i*3+j]*(point[j]-seat[j]);
+    return out;
+  };
+  const int head = pose.findBone("Bip01_Head");
+  if (head >= 0) {
+    const auto &matrix = pose.matrices()[static_cast<size_t>(head)];
+    target("head", "Bip01_Neck", 2, {0.7f,0,0}, {matrix[12],matrix[13],matrix[14]});
+  } else missing.emplace_back("Bip01_Head");
+  target("lfbone", "Bip01_L_Foot", 2, {}, local({config.pedals[0][0],config.pedals[0][1],config.pedals[0][2]}));
+  target("rfbone", "Bip01_R_Foot", 2, {}, local({config.pedals[2][0],config.pedals[2][1],config.pedals[2][2]}));
+  if (config.steeringBody >= 0 && static_cast<size_t>(config.steeringBody) < config.bodies.size()) {
+    const auto &wheel = config.bodies[static_cast<size_t>(config.steeringBody)].transform;
+    const float radius = config.steeringRadius[0]-0.015f;
+    const auto wheelPoint = [&](float angle) {
+      const SkeletonPose::Point contact{-std::sin(angle)*radius,
+                                         std::cos(angle)*radius,
+                                         config.steeringRadius[1]};
+      SkeletonPose::Point point = wheel.position;
+      for (size_t i=0;i<3;++i)
+        for (size_t j=0;j<3;++j) point[i] += wheel.rotation[i*3+j]*contact[j];
+      return local(point);
+    };
+    target("lhbone", "Bip01_L_Hand", 3, {0.6f,0,-0.3f}, wheelPoint(1));
+    target("rhbone", "Bip01_R_Hand", 3, {0.6f,0,-0.3f}, wheelPoint(-1));
+    const float extendedRadius = (config.steeringRadius[0]+0.015f)/std::cos(1.0f);
+    const float handDirection = std::sin(1.0f)*extendedRadius*10.0f;
+    target("sthbone_left", "Bip01_L_Hand", 0, {1.2f,-handDirection,0}, wheelPoint(0));
+    target("sthbone_right", "Bip01_R_Hand", 0, {1.2f,handDirection,0}, wheelPoint(0));
+    SkeletonMatrix mount = identity();
+    const auto origin = local(wheel.position);
+    for (size_t i=0;i<3;++i) {
+      mount[12+i] = origin[i];
+      for (size_t j=0;j<3;++j) {
+        mount[j*4+i] = 0;
+        for (size_t k=0;k<3;++k) mount[j*4+i] += basis[i*3+k]*wheel.rotation[k*3+j];
+      }
+    }
+    pose.setSteeringMount(mount, config.steeringRadius[0], config.steeringRadius[1]);
+    pose.updateSteering(0);
+  }
+  auto gearFrame = identity();
+  const auto gearPoint = local({config.shifter[0],config.shifter[1],config.shifter[2]});
+  for (size_t i=0;i<3;++i) gearFrame[12+i] = gearPoint[i];
+  pose.setNamedFrame("gsbone", gearFrame);
+  pose.solve(8);
+  return missing;
+}
+
+void SkeletonPose::setSteeringMount(const SkeletonMatrix &wheelToSeat, float radius, float depth) {
+  wheelToSeat_ = wheelToSeat;
+  steeringRadius_ = radius;
+  steeringDepth_ = depth;
+  steeringMounted_ = true;
+}
+void SkeletonPose::updateSteering(float angle) {
+  if (!steeringMounted_ || !std::isfinite(angle)) return;
+  // FUN_00448f20/FUN_00541da0: the three named wheel frames share a
+  // moving parent. Updating that parent moves both hand contacts and the
+  // secondary direction targets, not only the render root.
+  const float radius = steeringRadius_-0.015f;
+  const float extended = (steeringRadius_+0.015f)/std::cos(1.0f);
+  const float frameAngles[3]{1.0f+angle,-1.0f+angle,angle};
+  const char *names[3]{"lhbone","rhbone","sthbone"};
+  for (size_t i=0;i<3;++i) {
+    auto &frame = steeringFrames_[i];
+    auto local = identity();
+    const float contactRadius = i == 2 ? extended : radius;
+    local[12] = -std::sin(frameAngles[i])*contactRadius;
+    local[13] = std::cos(frameAngles[i])*contactRadius;
+    local[14] = steeringDepth_;
+    frame = multiply(wheelToSeat_,local);
+    const Point point{frame[12],frame[13],frame[14]};
+    for (auto &constraint : constraints_)
+      if (constraint.name == names[i] || (i == 2 &&
+          (constraint.name == "sthbone_left" || constraint.name == "sthbone_right")))
+        constraint.target = point;
+  }
+}
+const SkeletonMatrix *SkeletonPose::namedFrame(std::string_view name) const {
+  if (steeringMounted_) {
+    if (name == "lhbone") return &steeringFrames_[0];
+    if (name == "rhbone") return &steeringFrames_[1];
+    if (name == "sthbone") return &steeringFrames_[2];
+  }
+  for (const auto &frame : frames_) if (frame.first == name) return &frame.second;
+  const int bone = findBone(name);
+  return bone < 0 ? nullptr : &world_[static_cast<size_t>(bone)];
+}
+void SkeletonPose::setNamedFrame(std::string_view name, const SkeletonMatrix &matrix) {
+  for (auto &constraint : constraints_)
+    if (constraint.name == name)
+      constraint.target = {matrix[12],matrix[13],matrix[14]};
+  for (auto &frame : frames_) if (frame.first == name) { frame.second = matrix; return; }
+  frames_.emplace_back(std::string(name), matrix);
 }

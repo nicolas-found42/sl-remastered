@@ -7,6 +7,7 @@
 #include "render2d.hpp"
 #include "run_log.hpp"
 #include "scx.hpp"
+#include "scene_render_light.hpp"
 
 #include "resource_id.hpp"
 #include "resource_material.hpp"
@@ -54,6 +55,15 @@ ScenePassSelection scenePasses(uint32_t entryFlags, bool specialView,
     break;
   }
   result.customCollection = resourceFlag8 && hasCustomCollection;
+  return result;
+}
+
+static uint32_t sceneTint(uint32_t color, uint32_t tint) {
+  if (tint == 0xffffffffu)
+    return color;
+  uint32_t result = 0;
+  for (unsigned shift = 0; shift < 32; shift += 8)
+    result |= (((color >> shift & 255u) * (tint >> shift & 255u) + 127u) / 255u) << shift;
   return result;
 }
 
@@ -817,11 +827,12 @@ bool sceneDrawCameraMesh(Render2D &renderer, size_t textureId,
       vertices.push_back(
           {(viewport.left + (x + 1) * viewport.width * 0.5f) * width,
            (viewport.top + (1 - y) * viewport.height * 0.5f) * height,
-           vertex.uv[0], vertex.uv[1]});
+           vertex.uv[0], vertex.uv[1], instance.instanceColor()});
       if (fog) {
         const uint32_t f = static_cast<uint32_t>(
             std::clamp(factors[n], 0.0f, 1.0f) * 255.0f + 0.5f);
-        vertices.back().color = 0xff000000u | (f << 16) | (f << 8) | f;
+        vertices.back().color = sceneTint(0xff000000u | (f << 16) | (f << 8) | f,
+                                         instance.instanceColor());
         auto overlay = vertices.back();
         overlay.color = ((255u - f) << 24) |
                         (static_cast<uint32_t>(fog->color) & 0xffffffu);
@@ -899,7 +910,7 @@ bool sceneRefreshMaterial(ResourceWorld &world,
                           const SceneMaterialResources &material,
                           const std::filesystem::path &root,
                           SceneMaterialCache &cache, std::string &error,
-                          bool requireCached) {
+                          bool requireCached, bool textGeometry) {
   cache = {};
   if (material.textureCount() != 1) {
     error = "material texture count unsupported";
@@ -919,7 +930,7 @@ bool sceneRefreshMaterial(ResourceWorld &world,
     }
   }
   if (!sceneLoadMesh(world, material.meshId(), root, next.mesh, error,
-                     material.flags() == 4100))
+                     textGeometry || material.flags() == 4100))
     return false;
   if (!sceneRefreshTexture(world, material, root, next.texture, error,
                            requireCached))
@@ -933,17 +944,26 @@ bool sceneRefreshMaterial(ResourceWorld &world,
 
 static std::optional<bool>
 sceneOpaqueMaterial(const SceneMaterialResources &material,
-                    const ScxModel &model, std::string &error) {
+                    const ScxModel &model, std::string &error, bool cameraPlane) {
   if (material.textureCount() != 1 || model.meshes.size() != 1 ||
       model.materials.size() != 1 || !model.meshes[0].materialIndex ||
-      *model.meshes[0].materialIndex != 0 || model.materials[0].flags != 0) {
+      *model.meshes[0].materialIndex != 0) {
     error = "render material shape unsupported";
     return std::nullopt;
   }
+  const auto& mesh = model.meshes[0];
+  // The stock cluster uses ColorMixTex with neutral-white color/emissive
+  // streams. This reduces to its atlas layer, with the encoded alpha blend.
+  const bool neutralColorMix = cameraPlane && model.materials[0].flags == 3 &&
+      !mesh.color.empty() && !mesh.emissive.empty() &&
+      std::all_of(mesh.color.begin(), mesh.color.end(), [](uint8_t x) { return x == 255; }) &&
+      std::all_of(mesh.emissive.begin(), mesh.emissive.end(), [](uint8_t x) { return x == 255; });
   const auto function = model.materials[0].functionWord;
-  if (material.flags() == 4096 && function == 0x40000000u)
+  if (((cameraPlane && material.flags() == 0) || material.flags() == 4096) &&
+      ((model.materials[0].flags == 0 && function == 0x40000000u) ||
+       (neutralColorMix && function == 0xc0000000u)))
     return false;
-  if (material.flags() == 0 && function == 0)
+  if (material.flags() == 0 && model.materials[0].flags == 0 && function == 0)
     return true;
   error = "render material pass unsupported";
   return std::nullopt;
@@ -952,8 +972,9 @@ sceneOpaqueMaterial(const SceneMaterialResources &material,
 static bool sceneSpatialMesh(const ScxMesh &mesh, SceneRenderInstance &instance,
                              const std::array<float, 16> &view,
                              const std::array<float, 16> &projection) {
-  if (mesh.vertexCount != 4 || mesh.positions.size() != 12 ||
-      mesh.indices.size() != 6)
+  if ((!instance.cameraPlane() && (mesh.vertexCount != 4 || mesh.indices.size() != 6)) ||
+      mesh.vertexCount < 3 || mesh.positions.size() != size_t(mesh.vertexCount) * 3 ||
+      mesh.indices.empty() || mesh.indices.size() % 3 != 0)
     return true;
   instance.processRootBoneUpdate();
   instance.refreshSingleBoneDrawMatrix();
@@ -1078,7 +1099,7 @@ SceneMaterialRenderer::create(ResourceWorld &resources, Render2D &renderer,
   }
   SceneMaterialCache cache;
   if (!sceneRefreshMaterial(resources, *material, resources.packs().root(),
-                            cache, error, requireCached)) {
+                            cache, error, requireCached, instance->textState().has_value())) {
     if (instance->textState())
       error += " (font " + std::to_string(instance->typeId()) +
                ", text length " +
@@ -1089,8 +1110,8 @@ SceneMaterialRenderer::create(ResourceWorld &resources, Render2D &renderer,
     error = "multiple render meshes unsupported";
     return nullptr;
   }
-  if (material->flags() != 4100 &&
-      !sceneOpaqueMaterial(*material, cache.mesh, error))
+  if (!instance->textState() &&
+      !sceneOpaqueMaterial(*material, cache.mesh, error, instance->cameraPlane()))
     return nullptr;
   auto object = std::unique_ptr<SceneMaterialRenderer>(
       new SceneMaterialRenderer(resources, renderer));
@@ -1132,16 +1153,16 @@ bool SceneMaterialRenderer::draw(const std::array<float, 16> &view,
   }
   SceneMaterialCache cache;
   if (!sceneRefreshMaterial(resources_, *material, resources_.packs().root(),
-                            cache, error, requireCached))
+                            cache, error, requireCached, instance->textState().has_value()))
     return false;
   if (cache.mesh.meshes.size() != 1) {
     error = "multiple render meshes unsupported";
     return false;
   }
-  if (material->flags() != 4100 &&
-      !sceneOpaqueMaterial(*material, cache.mesh, error))
+  if (!instance->textState() &&
+      !sceneOpaqueMaterial(*material, cache.mesh, error, instance->cameraPlane()))
     return false;
-  if (material->flags() != 4100 && cache.flags == 0 &&
+  if (!instance->textState() && cache.flags == 0 &&
       sceneSpatialMesh(cache.mesh.meshes[0], *instance, view, projection)) {
     error = "spatial mesh requires a camera depth buffer";
     return false;
@@ -1164,7 +1185,9 @@ bool SceneMaterialRenderer::draw(const std::array<float, 16> &view,
   if (!texture)
     return false;
   bool drawn = false;
-  if (material->flags() == 4100) {
+  // FUN_0048c4b0/FUN_0048c670 select text on the instance, not material flags.
+  // Stock cars.rpk HUD fonts have material flags 4, unlike scripted fonts 4100.
+  if (instance->textState()) {
     const auto &text = instance->textState();
     {
       static std::vector<std::string> seenText;
@@ -1200,6 +1223,9 @@ bool SceneMaterialRenderer::draw(const std::array<float, 16> &view,
         if (fontGlyphGeometry(cache.mesh, text->text, x, y, text->alignment,
                               text->advanceScale, vertices, indices, error,
                               text->color)) {
+          if (instance->instanceColor() != 0xffffffffu)
+            for (auto& vertex : vertices)
+              vertex.color = sceneTint(vertex.color, instance->instanceColor());
           drawn = vertices.empty() ||
                   renderer_.drawMesh(*texture, vertices, indices, error);
         }
@@ -1249,7 +1275,7 @@ std::optional<bool> SceneMaterialRenderer::opaque(std::string &error,
   SceneMeshView mesh;
   if (!sceneMeshView(resources_, *material, requireCached, mesh, error))
     return std::nullopt;
-  return sceneOpaqueMaterial(*material, *mesh.model, error);
+  return sceneOpaqueMaterial(*material, *mesh.model, error, instance->cameraPlane());
 }
 
 std::optional<bool>
@@ -1275,7 +1301,7 @@ SceneMaterialRenderer::spatial(const std::array<float, 16> &view,
   SceneMeshView mesh;
   if (!sceneMeshView(resources_, *material, requireCached, mesh, error))
     return std::nullopt;
-  if (!sceneOpaqueMaterial(*material, *mesh.model, error))
+  if (!sceneOpaqueMaterial(*material, *mesh.model, error, instance->cameraPlane()))
     return std::nullopt;
   return material->flags() == 0 &&
          sceneSpatialMesh(mesh.model->meshes[0], *instance, view, projection);
@@ -1304,7 +1330,7 @@ bool SceneMaterialRenderer::drawSpatial(
   SceneMeshView model;
   if (!sceneMeshView(resources_, *material, requireCached, model, error))
     return false;
-  const auto opaque = sceneOpaqueMaterial(*material, *model.model, error);
+  const auto opaque = sceneOpaqueMaterial(*material, *model.model, error, instance->cameraPlane());
   if (!opaque || !*opaque) {
     if (opaque)
       error = "spatial transparent material unsupported";
@@ -1416,11 +1442,8 @@ std::optional<float> SceneMaterialRenderer::transparentDepth(
   if (!sceneRefreshMaterial(resources_, *material, resources_.packs().root(),
                             cache, error, requireCached))
     return std::nullopt;
-  if (cache.flags != 4096 || cache.mesh.meshes.size() != 1 ||
-      cache.mesh.materials.size() != 1 || cache.mesh.materials[0].flags != 0 ||
-      cache.mesh.materials[0].functionWord != 0x40000000u ||
-      !cache.mesh.meshes[0].materialIndex ||
-      *cache.mesh.meshes[0].materialIndex != 0) {
+  const auto opaque = sceneOpaqueMaterial(*material, cache.mesh, error, instance->cameraPlane());
+  if (!opaque || *opaque) {
     error = "multiple-object render pass unsupported";
     return std::nullopt;
   }
@@ -1615,11 +1638,54 @@ bool SceneCameraRenderer::draw(const std::array<float, 16> &view,
                     view[0] * (view[5] * view[10] - view[6] * view[9]) -
                         view[1] * (view[4] * view[10] - view[6] * view[8]) +
                         view[2] * (view[4] * view[9] - view[5] * view[8]));
-      (void)carX; (void)carY; (void)carZ;
+      (void)carX;
+      (void)carY;
+      (void)carZ;
+    }
+  }
+  // Feed the scene's directional light into the world raster pass. Stock
+  // lights every world vertex in software (FUN_004bb7f0: per-vertex ambient +
+  // N.L-scaled diffuse from the active light records) while the D3D
+  // fixed-function path multiplies it with the material/texture. Only a
+  // directional source (kind 3) is supported here; point/spot lights need
+  // per-light positions (logged gap above for kinds 0/4/5 selection).
+  Raster3DLight worldLight;
+  uint32_t kindScratch = 0;
+  for (auto& cameraLightPtr : lights_) {
+    auto& cameraLight = *cameraLightPtr;
+    const auto node = resources_.resolve(cameraLight.instance.owner);
+    const auto instance = node ? resources_.sceneRenderInstance(node) : nullptr;
+    if (!instance || !cameraLight.type.owner)
+      continue;
+    const auto type = resources_.resolve(cameraLight.type.owner);
+    const auto source = type ? resources_.sceneLight(type) : nullptr;
+    if (!source || source->sourceKind != 3)
+      continue;
+    worldLight = sceneWorldRasterLight(*source);
+    break;
+  }
+  if (!worldLight.enabled) {
+    // No camera light candidate carried a directional source; fall back to
+    // the first bound scene light (the cfg's RenderRef.setLight target). The
+    // camera-candidate path stays preferred because stock also positions
+    // point/spot lights per object there.
+    if (const auto* fallback = resources_.firstSceneLight(kindScratch)) {
+      worldLight = sceneWorldRasterLight(*fallback);
+      static bool fallbackLogged = false;
+      if (!fallbackLogged) {
+        fallbackLogged = true;
+        runlog::event(
+            runlog::EventKind::Note,
+            "world raster light fallback: light=0x%x kind=%u diffuse=(%.2f,"
+            "%.2f,%.2f) ambient=(%.2f,%.2f,%.2f)",
+            kindScratch, fallback->sourceKind, fallback->at10[0],
+            fallback->at10[1], fallback->at10[2], fallback->at30[0],
+            fallback->at30[1], fallback->at30[2]);
+      }
     }
   }
   worldRaster_.draw(resources_, renderer_, pendingGround_, view, projection,
-                    viewport, fog);
+                    viewport, fog, worldLight.enabled ? &worldLight : nullptr);
   pendingGround_.clear();
   for (size_t i = 0; i < objects_.size();) {
     bool stale = !objects_[i]->owner();

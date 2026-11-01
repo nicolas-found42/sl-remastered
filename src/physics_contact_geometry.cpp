@@ -202,19 +202,21 @@ ContactGeometryResult updateDirectContactGeometryWithSearch(
         t -= delta;
       delta *= 0.5f;
     }
-    if (pair.distance <= radii) {
-      poseA = &c.a->state[c.a->current];
-      poseB = &c.b->state[c.b->current];
-      auto evaluated = query(*poseA, *poseB);
-      if (!evaluated)
-        return ContactGeometryResult::Unsupported;
-      pair = *evaluated;
-      ++extraQueries;
+    // 0049c8f0 (all.c 116333-116345, 116420): after the ten-step time search
+    // the contact separation is the core distance minus both radii, and a pair
+    // whose cores still intersect (separation <= -(ra + rb), i.e. core
+    // distance <= 0) creates no contact. There is no fallback re-query at the
+    // step-start pose. Stock also latches pair+0x44 bit 0 so the pair stays
+    // rejected until the bodies separate (00497000/00497500); that latch is not
+    // ported. [INFERENCE] the latch only matters when a later step finds a
+    // clear time fraction for a pair that was once deeply overlapped.
+    if (pair.distance <= 0) {
+      world.queries += 1 + extraQueries;
+      return ContactGeometryResult::Dropped;
     }
   }
   DirectContact candidate = c;
   Vec3 ignored;
-  // The search branch can intentionally return an overlapping current pose.
   CorePair adjusted = pair;
   auto result =
       convert(candidate, adjusted, *poseA, *poseB, ra, rb, ignored, true);
@@ -363,6 +365,14 @@ ContactGeometryResult updateGroundFacePair(GroundFacePair &pair,
   // stores the face data on creation); a deviating closest-core normal means
   // the core query matched a non-ground feature and the pair is dropped.
   if (result == ContactGeometryResult::Updated) {
+    // FUN_004a2d10 uses fixed cached features through 004af970. Once a
+    // feature leaves its Voronoi region the old row is destroyed; the full
+    // walk above supplies a fresh pending contact, not a migrated state 7.
+    if (contact.resting && (bodyFeature != pair.bodyFeature ||
+                            triangleFeature != pair.triangleFeature)) {
+      contact.resting = false;
+      contact.normalImpulse = contact.normalForce = contact.frictionForce = 0;
+    }
     const auto oriented = groundFaceContactNormal(contact.normal,
                                                   pair.faceNormal);
     if (!oriented)
@@ -381,7 +391,7 @@ bool createDynamicBodyPair(Body &first, Body &second, DynamicBodyPair &out,
                            std::string &error) {
   const auto valid = [](const Body &body) {
     if (!body.proto || body.current > 1 ||
-        (body.flags & (0x20u | 0x40u | 0x400u | 0x800u | 0x10000u | 0x20000u)))
+        (body.flags & (0x20u | 0x400u | 0x10000u | 0x20000u)))
       return false;
     const Shape &shape = body.proto->shape;
     const bool sphere = shape.type == ShapeType::Sphere;
@@ -416,7 +426,7 @@ ContactGeometryResult updateDynamicBodyPair(DynamicBodyPair &pair,
   Body *a = pair.contact.a, *b = pair.contact.b;
   if (!a || !b || !a->proto || !b->proto || a->current > 1 || b->current > 1 ||
       ((a->flags | b->flags) &
-       (0x20u | 0x40u | 0x400u | 0x800u | 0x10000u | 0x20000u)))
+       (0x20u | 0x400u | 0x10000u | 0x20000u)))
     return ContactGeometryResult::Unsupported;
   const Shape &sa = a->proto->shape, &sb = b->proto->shape;
   const auto kind = [](ShapeType type) {
@@ -429,35 +439,204 @@ ContactGeometryResult updateDynamicBodyPair(DynamicBodyPair &pair,
       return 2;
     return -1;
   };
-  const int ka = kind(sa.type), kb = kind(sb.type);
-  if (ka < 0 || kb < 0 || (ka && !sa.core) || (kb && !sb.core))
+  // FUN_0049c8f0: swept flag 0x800 replaces the original core with the
+  // displacement segment in the predicted local frame, retaining its radius.
+  CollisionCore sweptA, sweptB;
+  const auto sweep = [](const Body& body) {
+    const State& pose = body.state[body.current ^ 1];
+    const Vec3& start = body.state[body.current].pos;
+    Vec3 local{};
+    for (unsigned i = 0; i < 3; ++i)
+      for (unsigned j = 0; j < 3; ++j)
+        local[i] += pose.rot[j * 4 + i] * (start[j] - pose.pos[j]);
+    return segmentCore({}, local);
+  };
+  const CollisionCore* ca = sa.core.get();
+  const CollisionCore* cb = sb.core.get();
+  if (a->flags & 0x800u) {
+    sweptA = sweep(*a);
+    ca = &sweptA;
+  }
+  if (b->flags & 0x800u) {
+    sweptB = sweep(*b);
+    cb = &sweptB;
+  }
+  const int ka = (a->flags & 0x800u) ? 1 : kind(sa.type);
+  const int kb = (b->flags & 0x800u) ? 1 : kind(sb.type);
+  if (ka < 0 || kb < 0 || (ka && !ca) || (kb && !cb))
     return ContactGeometryResult::Unsupported;
-  auto fa = pair.firstFeature, fb = pair.secondFeature;
-  const auto query = [&](const State &pa,
-                         const State &pb) -> std::optional<CorePair> {
+  // Swept geometry changes each prediction, so its feature cache must restart.
+  auto fa = (a->flags & 0x800u) ? std::optional<std::size_t>{} : pair.firstFeature;
+  auto fb = (b->flags & 0x800u) ? std::optional<std::size_t>{} : pair.secondFeature;
+  const auto query = [&](const State& pa,
+                         const State& pb) -> std::optional<CorePair> {
     if (ka == 0 && kb == 0)
       return sphereCoreClosest(pa, pb);
     if (ka == 0 && kb == 2)
-      return closestPointPolyhedron(pa, *sb.core, pb, fb, true);
+      return closestPointPolyhedron(pa, *cb, pb, fb, true);
     if (ka == 2 && kb == 0)
-      return closestPointPolyhedron(pb, *sa.core, pa, fa, false);
+      return closestPointPolyhedron(pb, *ca, pa, fa, false);
     if (ka == 1 && kb == 1)
-      return closestSegmentCores(*sa.core, pa, *sb.core, pb, fa, fb);
+      return closestSegmentCores(*ca, pa, *cb, pb, fa, fb);
     if (ka == 1 && kb == 2)
-      return closestSegmentPolyhedron(*sa.core, pa, *sb.core, pb, fa, fb, true);
+      return closestSegmentPolyhedron(*ca, pa, *cb, pb, fa, fb, true);
     if (ka == 2 && kb == 1)
-      return closestSegmentPolyhedron(*sb.core, pb, *sa.core, pa, fb, fa,
-                                      false);
+      return closestSegmentPolyhedron(*cb, pb, *ca, pa, fb, fa, false);
     if (ka == 2 && kb == 2)
-      return closestPolyhedronCores(*sa.core, pa, *sb.core, pb, fa, fb);
+      return closestPolyhedronCores(*ca, pa, *cb, pb, fa, fb);
     static const CollisionCore point = pointCore();
-    return closestPointSegmentCores(ka == 0 ? point : *sa.core, pa,
-                                    kb == 0 ? point : *sb.core, pb);
+    return closestPointSegmentCores(ka == 0 ? point : *ca, pa,
+                                    kb == 0 ? point : *cb, pb);
   };
   auto predicted = query(a->state[a->current ^ 1], b->state[b->current ^ 1]);
   if (!predicted)
     return ContactGeometryResult::Unsupported;
+  // The point/segment helper has no feature-cache output; recover its exact
+  // selected segment feature for the wheel-specific conversion below.
+  const auto pointFeature = [](const CollisionCore& core, const Vec3& point) {
+    if (point == core.vertices[0].position)
+      return std::size_t{0};
+    if (point == core.vertices[1].position)
+      return std::size_t{1};
+    return std::size_t{2};
+  };
+  if (ka == 1 && kb == 0)
+    fa = pointFeature(*ca, predicted->pointA);
+  if (ka == 0 && kb == 1)
+    fb = pointFeature(*cb, predicted->pointB);
   DirectContact contact = pair.contact;
+  // FUN_0049c540: wheel pairs bypass the generic ten-step time search.
+  // The wheel core point is retained; only the other body's rounding radius
+  // is removed from separation and from its local contact point.
+  if ((a->flags | b->flags) & 0x40u) {
+    ++world.queries;
+    if ((a->flags & b->flags & 0x40u) != 0)
+      return ContactGeometryResult::Dropped;
+    const bool wheelFirst = (a->flags & 0x40u) != 0;
+    const Body& wheel = wheelFirst ? *a : *b;
+    const CollisionCore* core = wheelFirst ? ca : cb;
+    const int wheelKind = wheelFirst ? ka : kb;
+    const auto feature = wheelFirst ? fa : fb;
+    const auto otherFeature = wheelFirst ? fb : fa;
+    const CollisionCore* otherCore = wheelFirst ? cb : ca;
+    const State& wheelPose = wheel.state[wheel.current ^ 1];
+    const float wheelRadius = wheelFirst ? sa.radius : sb.radius;
+    const float otherRadius = wheelFirst ? sb.radius : sa.radius;
+    const float radii = wheelRadius + otherRadius;
+    if (!(predicted->distance < radii))
+      return ContactGeometryResult::Dropped;
+    CorePair adjusted = *predicted;
+    Vec3 normal = adjusted.normal;
+    if (!wheelFirst)
+      for (float& value : normal)
+        value = -value;
+    if (wheelKind == 1 && core && feature && *feature < core->features.size()) {
+      const auto ref = core->features[*feature].ref;
+      const Vec3 direction = core->edges[0].direction;
+      Vec3 axis{};
+      for (unsigned i = 0; i < 3; ++i)
+        axis[i] = wheelPose.rot[i * 4] * direction[0] +
+                  wheelPose.rot[i * 4 + 1] * direction[1] +
+                  wheelPose.rot[i * 4 + 2] * direction[2];
+      const float dot = axis[0] * normal[0] + axis[1] * normal[1] +
+                        axis[2] * normal[2];
+      const bool face = otherCore && otherFeature &&
+                        *otherFeature < otherCore->features.size() &&
+                        otherCore->features[*otherFeature].ref.kind == CoreFeatureKind::Face;
+      if ((ref.kind == CoreFeatureKind::Edge && face && dot < 0) ||
+          (ref.kind == CoreFeatureKind::Vertex && ref.index != 0 && dot < 0)) {
+        // FUN_004b02e0: test the segment against the other convex faces,
+        // excluding the already selected face. Keep the first contained
+        // plane crossing in creation order, not a bounding-sphere fallback.
+        const Body& otherBody = wheelFirst ? *b : *a;
+        const State& otherPose = otherBody.state[otherBody.current ^ 1];
+        bool crossed = false;
+        if (otherCore) {
+          const auto toOther = [&](const Vec3& local) {
+            const Vec3 world = transformPoint(wheelPose.pos, wheelPose.rot, local);
+            Vec3 result{};
+            for (unsigned i = 0; i < 3; ++i)
+              for (unsigned j = 0; j < 3; ++j)
+                result[i] += otherPose.rot[j * 4 + i] *
+                             (world[j] - otherPose.pos[j]);
+            return result;
+          };
+          const Vec3 start = toOther(core->vertices[0].position);
+          const Vec3 end = toOther(core->vertices[1].position);
+          for (std::size_t fi = 0; fi < otherCore->faces.size(); ++fi) {
+            if (face && otherCore->features[*otherFeature].ref.index == fi)
+              continue;
+            const auto& plane = otherCore->faces[fi];
+            const Vec3& anchor = otherCore->vertices[plane.vertices[0]].position;
+            float d0 = 0, d1 = 0;
+            for (unsigned i = 0; i < 3; ++i) {
+              d0 += (start[i] - anchor[i]) * plane.normal[i];
+              d1 += (end[i] - anchor[i]) * plane.normal[i];
+            }
+            if (!(d0 * d1 < 0))
+              continue;
+            const float fraction = std::fabs(d0 / (d0 - d1));
+            Vec3 hit{};
+            for (unsigned i = 0; i < 3; ++i)
+              hit[i] = start[i] + (end[i] - start[i]) * fraction;
+            bool inside = true;
+            for (const auto& boundary : otherCore->faces) {
+              const Vec3& origin = otherCore->vertices[boundary.vertices[0]].position;
+              float distance = 0;
+              for (unsigned i = 0; i < 3; ++i)
+                distance += (hit[i] - origin[i]) * boundary.normal[i];
+              if (distance > 0.00001f) {
+                inside = false;
+                break;
+              }
+            }
+            if (!inside)
+              continue;
+            Vec3& wheelPoint = wheelFirst ? adjusted.pointA : adjusted.pointB;
+            Vec3& otherPoint = wheelFirst ? adjusted.pointB : adjusted.pointA;
+            for (unsigned i = 0; i < 3; ++i) {
+              wheelPoint[i] = core->vertices[0].position[i] +
+                             (core->vertices[1].position[i] -
+                              core->vertices[0].position[i]) * fraction;
+              normal[i] = otherPose.rot[i * 4] * plane.normal[0] +
+                          otherPose.rot[i * 4 + 1] * plane.normal[1] +
+                          otherPose.rot[i * 4 + 2] * plane.normal[2];
+            }
+            otherPoint = hit;
+            if (ref.kind == CoreFeatureKind::Edge && face)
+              adjusted.distance = 0;
+            crossed = true;
+            break;
+          }
+        }
+        if (!crossed)
+          return ContactGeometryResult::Dropped;
+      }
+      if (ref.kind == CoreFeatureKind::Edge && !face && otherRadius > 0) {
+        const float distance = adjusted.distance;
+        const float along = std::sqrt(std::max(0.0f, radii * radii - distance * distance));
+        Vec3& wheelPoint = wheelFirst ? adjusted.pointA : adjusted.pointB;
+        for (unsigned i = 0; i < 3; ++i) {
+          normal[i] = (axis[i] * along + normal[i] * distance) / radii;
+          wheelPoint[i] += direction[i] * along;
+        }
+      }
+    }
+    adjusted.normal = normal;
+    if (!wheelFirst)
+      for (float& value : adjusted.normal)
+        value = -value;
+    const auto result = convert(contact, adjusted,
+                                a->state[a->current ^ 1], b->state[b->current ^ 1],
+                                wheelFirst ? 0 : otherRadius,
+                                wheelFirst ? otherRadius : 0, worldPoint, true);
+    if (result == ContactGeometryResult::Updated) {
+      pair.contact = contact;
+      pair.firstFeature = fa;
+      pair.secondFeature = fb;
+    }
+    return result;
+  }
   const auto result = updateDirectContactGeometryWithSearch(
       contact, *predicted, sa.radius, sb.radius, worldPoint, world, query);
   if (result != ContactGeometryResult::Unsupported) {

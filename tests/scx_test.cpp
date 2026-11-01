@@ -249,9 +249,17 @@ static Bytes v4File(const std::vector<Chunk>& chunks, int offsetSkew = 0, bool d
 	return b;
 }
 
+static Bytes boneMapPayload(std::initializer_list<uint32_t> bones, bool counted) {
+	Bytes b;
+	put32(b, 0);
+	if (counted) put32(b, static_cast<uint32_t>(bones.size()));
+	for (uint32_t bone : bones) put32(b, bone);
+	return b;
+}
+
 static std::vector<Chunk> goodChunks() {
 	return {{0, materialPayload()},
-		{2, {1, 2, 3, 4, 5}},
+		{2, boneMapPayload({7, 3}, false)},
 		{4, vertexPayload(2, kFullFlags, fullVertexRecords())},
 		{5, indexPayload({0, 1, 0})}};
 }
@@ -434,13 +442,39 @@ static void testV3MaterialFields() {
 	}
 }
 
+static void testV4BoneMaps() {
+	auto chunks = goodChunks();
+	chunks[1] = {3, boneMapPayload({9, 2, 7, 1}, true)};
+	chunks.push_back({2, boneMapPayload({4, 8}, false)});
+	chunks.push_back(chunks[2]);
+	chunks.push_back(chunks[3]);
+	const auto parsed = parseAll(v4File(chunks));
+	CHECK(parsed.ok && parsed.model.meshes.size() == 2);
+	if (parsed.ok && parsed.model.meshes.size() == 2) {
+		CHECK((parsed.model.meshes[0].bonePalette == std::vector<uint32_t>{9, 2, 7, 1}));
+		CHECK((parsed.model.meshes[1].bonePalette == std::vector<uint32_t>{4, 8}));
+	}
+	for (Bytes bad : {Bytes{}, boneMapPayload({}, true), boneMapPayload({2}, true)}) {
+		if (bad.size() > 8) set32(bad, 4, 2);
+		auto broken = goodChunks();
+		broken[1] = {3, bad};
+		CHECK(!parseAll(v4File(broken)).ok);
+	}
+	chunks = goodChunks();
+	chunks.erase(chunks.begin() + 1);
+	CHECK(!parseAll(v4File(chunks)).ok);
+	chunks = goodChunks();
+	chunks.insert(chunks.begin() + 2, {0, materialPayload()});
+	CHECK(!parseAll(v4File(chunks)).ok); // New material must not inherit the preceding map.
+}
+
 static void testV4Good() {
 	const Bytes good = v4File(goodChunks());
 	ScxResult r = parseAll(good);
 	CHECK(r.ok);
 	CHECK(r.model.version == 4 && r.model.directoryMismatches == 0 && r.model.trailingBytes == 0);
-	CHECK(r.model.materials.size() == 1 && r.model.meshes.size() == 1 && r.model.rawChunks.size() == 1);
-	if (!r.ok || r.model.materials.size() != 1 || r.model.meshes.size() != 1 || r.model.rawChunks.size() != 1) {
+	CHECK(r.model.materials.size() == 1 && r.model.meshes.size() == 1 && r.model.rawChunks.empty());
+	if (!r.ok || r.model.materials.size() != 1 || r.model.meshes.size() != 1 || !r.model.rawChunks.empty()) {
 		return;
 	}
 	const ScxMaterial& mat = r.model.materials[0];
@@ -472,8 +506,7 @@ static void testV4Good() {
 	CHECK((m.tangents == std::vector<float>{13, 14, 15, 113, 114, 115}));
 	CHECK(m.color.empty() && m.emissive.empty());
 	CHECK((m.indices == std::vector<uint32_t>{0, 1, 0}));
-	CHECK(r.model.rawChunks[0].type == 2 && r.model.rawChunks[0].payloadSize == 5);
-	CHECK(r.model.rawChunks[0].payloadOffset == 12 + 8 * 4 + goodChunks()[0].payload.size() + 8 + 8);
+	CHECK((m.bonePalette == std::vector<uint32_t>{7, 3}));
 
 	for (size_t len = 0; len < good.size(); ++len) {
 		const ScxResult t = parseCopy(good, len);
@@ -618,6 +651,7 @@ int main() {
 	testV3();
 	testV3MaterialFields();
 	testV4Good();
+	testV4BoneMaps();
 	testV4Failures();
 	testCounters();
 

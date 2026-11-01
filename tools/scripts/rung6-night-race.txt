@@ -1,0 +1,55 @@
+# Buy a used car, advance the stock garage clock to night and enter the city.
+8 move 320 240
+9.5 move 250 96
+10.5 down
+11 up
+14 sdl_type Tester
+16 move 256 378
+16.5 down
+17 up
+19 move 318 376
+19.5 down
+20 up
+24.5 move 318 378
+25 down
+25.5 up
+28 move 208 38
+28.5 down
+29 up
+42 move 565 42
+42.5 down
+43 up
+48 move 220 378
+48.5 down
+49 up
+60 shot @run/garage-before-time.bmp
+61 move 497 38
+61.5 down
+61.8 up
+63 down
+63.3 up
+64.5 down
+64.8 up
+66 down
+66.3 up
+67.5 down
+67.8 up
+69 down
+69.3 up
+70.5 down
+70.8 up
+72 down
+72.3 up
+73.5 down
+73.8 up
+75 down
+75.3 up
+78 shot @run/garage-night.bmp
+80 move 20 38
+80.5 down
+81 up
+90 shot @run/night-city-prompt.bmp
+92 sdl_keydown Return
+92.2 sdl_keyup Return
+105 shot @run/night-city.bmp
+108 quit

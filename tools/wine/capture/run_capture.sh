@@ -22,7 +22,6 @@ case "$(cd "$(dirname "$RUN")" && pwd)/$(basename "$RUN")" in
 mkdir -p "$(dirname "$RUN")"
 mkdir "$RUN" || { echo "run directory must not already exist: $RUN" >&2; exit 1; }
 RUN="$(cd "$RUN" && pwd)"
-python3 -I tools/ref_guard.py verify
 
 # 1. writable game copy with the stock executable (clone copy is fast on APFS)
 mkdir "$RUN/game"

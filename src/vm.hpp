@@ -55,9 +55,10 @@ struct VmResourceState {
   std::shared_ptr<VmResourceAttachment> attachment{};
 };
 struct VmMeasurementState {
-  float value = 0.0f;
-  float product = 0.0f;
-  float quotient = 0.0f;
+  // 0060e04c; FUN_0043b6e0/0043b700 initialize the derived globals.
+  float value = 1610.0f;
+  float product = static_cast<float>(1610.0 * static_cast<double>(0x1.234568p-12f));
+  float quotient = static_cast<float>(10.0 / 1610.0);
 };
 // The music player the Sound natives drive. The host owns it and keeps it alive
 // during execution.

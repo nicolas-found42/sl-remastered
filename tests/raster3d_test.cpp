@@ -1,6 +1,8 @@
 #include "raster3d.hpp"
 #include "resource_world.hpp"
 #include "scene_raster3d.hpp"
+#include "car_tint.hpp"
+#include "scene_render_light.hpp"
 
 #include "render2d.hpp"
 #include "world_model.hpp"
@@ -289,6 +291,56 @@ void testDepth() {
   d.material.depthWrite = false;
   CHECK(e.draw(d, error));
   CHECK(e.depth()[(H / 2) * W + W / 2] == 1.0f);
+}
+
+// Stock draws the skydome (material flags bit 0) with a rotation-only view, no
+// depth test or write and no fog (FUN_004bb050), so it surrounds the camera
+// wherever the camera is and never hides later geometry.
+void testBackgroundPass() {
+  CHECK(sceneBackgroundMaterial(1) && sceneBackgroundMaterial(0x1001));
+  CHECK(!sceneBackgroundMaterial(0) && !sceneBackgroundMaterial(0x1000));
+  // Camera 1 km above the origin, looking down -Z: the dome triangle around
+  // the origin is far below the view.
+  const auto camera = makeCamera(1000.0f, 60.0f, W, H);
+  const float dome[9] = {-3, -3, -6, 3, -3, -6, 0, 4.5f, -6};
+  const float behind[9] = {-1, -1, -8, 1, -1, -8, 0, 1.5f, -8};
+  const uint32_t idx[3] = {0, 1, 2};
+  std::string error;
+  Raster3D r;
+  CHECK(r.resize(W, H, error));
+  r.clear(0, 0, 0);
+  Raster3DDraw sky;
+  sky.positions = dome;
+  sky.vertexCount = 3;
+  sky.indices = idx;
+  sky.indexCount = 3;
+  sky.view = camera.view;
+  sky.projection = camera.projection;
+  sky.material.diffuse = {0, 0, 1, 1};
+  sky.material.fogNear = 0.1f;
+  sky.material.fogFar = 0.2f;
+  sky.material.fogColor = {1, 1, 1};
+  sky.light.enabled = true;
+  sceneApplyBackgroundPass(sky);
+  CHECK(sky.view[0] == camera.view[0] && sky.view[5] == camera.view[5] &&
+        sky.view[10] == camera.view[10]);
+  CHECK(!sky.light.enabled);
+  CHECK(r.draw(sky, error));
+  CHECK(r.stats().trianglesRejectedOutside == 0 &&
+        r.stats().trianglesRasterized > 0);
+  // Unfogged: the full-fog range would have turned it white.
+  CHECK(near(pixelAt(r, W / 2, H / 2), {0, 0, 255}, 0));
+  // No depth write: the depth buffer stays clear for the scene drawn after.
+  CHECK(r.depth()[(H / 2) * W + W / 2] == 1.0f);
+  // A later scene triangle behind the dome still covers it.
+  Raster3DDraw scene = sky;
+  scene.positions = behind;
+  scene.view = camera.view;
+  scene.material = {};
+  scene.material.diffuse = {1, 0, 0, 1};
+  scene.view[12] = scene.view[13] = scene.view[14] = 0;
+  CHECK(r.draw(scene, error));
+  CHECK(near(pixelAt(r, W / 2, H / 2), {255, 0, 0}, 0));
 }
 
 void testAlpha() {
@@ -1259,12 +1311,209 @@ void testGroundSubmission() {
   CHECK(!sceneGroundMesh(group, mesh, error));
 }
 
+void testWorldLighting() {
+  // Stock lights world vertices per channel: ambient + diffuse *
+  // max(N.L, 0) (FUN_004bb7f0's two-term vertex colour; the D3D
+  // fixed-function result then modulates the material/texture).
+  std::string error;
+  Raster3D r;
+  CHECK(r.resize(W, H, error));
+  r.clear(0, 0, 0);
+  const float positions[9] = {-1, -1, 0.5f, 1, -1, 0.5f, 0, 1, 0.5f};
+  const float normals[9] = {0, 0, 1, 0, 0, 1, 0, 0, 1};
+  const uint32_t idx[3] = {0, 1, 2};
+  Raster3DDraw d;
+  d.positions = positions;
+  d.normals = normals;
+  d.vertexCount = 3;
+  d.indices = idx;
+  d.indexCount = 3;
+  d.material.diffuse = {1, 1, 1, 1};
+  d.light.enabled = true;
+  // To-light along +Z: the face is fully lit (dot = 1).
+  d.light.toLight = {0, 0, 1};
+  d.light.ambient = {1, 0, 0};
+  d.light.diffuse = {0, 1, 0};
+  CHECK(r.draw(d, error));
+  // Ambient red + full diffuse green over white material.
+  CHECK(near(pixelAt(r, W / 2, H / 2), {255, 255, 0}));
+  // Away-facing: only ambient remains.
+  r.clear(0, 0, 0);
+  d.light.toLight = {0, 0, -1};
+  CHECK(r.draw(d, error));
+  CHECK(near(pixelAt(r, W / 2, H / 2), {255, 0, 0}));
+  // Light colour multiplies the texel (D3D MODULATE): grey ambient halves
+  // the green texel; a red ambient would leave it black (no red in the texel).
+  r.clear(0, 0, 0);
+  const Raster3DTexture tex = checker(2, 2, {0, 255, 0}, {0, 255, 0});
+  const float uvs[6] = {0, 0, 1, 0, 0, 1};
+  d.material.texture = &tex;
+  d.material.filter = Raster3DFilter::Point;
+  d.uvs = uvs;
+  d.light.toLight = {0, 0, 1};
+  d.light.ambient = {0.5f, 0.5f, 0.5f};
+  d.light.diffuse = {0, 0, 0};
+  CHECK(r.draw(d, error));
+  CHECK(near(pixelAt(r, W / 2, H / 2), {0, 127, 0}, 2));
+  // Disabling the light restores the unshaded result.
+  r.clear(0, 0, 0);
+  d.light.enabled = false;
+  CHECK(r.draw(d, error));
+  CHECK(near(pixelAt(r, W / 2, H / 2), {0, 255, 0}));
+}
+
+void testPaintTexture() {
+  // Real texture samples, not RGB extracted from a CARCOLORS resource ID.
+  std::map<uint32_t, Raster3DTexture> textures;
+  textures.emplace(0x20025, checker(1, 1, {180, 180, 180}, {180, 180, 180}));
+  textures.emplace(0x303002a, checker(1, 1, {200, 16, 70}, {200, 16, 70}));
+  textures.emplace(0x20026, checker(1, 1, {20, 40, 60}, {20, 40, 60}));
+  std::string error;
+  Raster3D r;
+  CHECK(r.resize(W, H, error));
+  const float positions[9] = {-1, -1, 0.5f, 1, -1, 0.5f, 0, 1, 0.5f};
+  const float uv[6] = {0, 0, 1, 0, 0.5f, 1};
+  const uint32_t indices[3] = {0, 1, 2};
+  Raster3DDraw d;
+  d.positions = positions; d.vertexCount = 3;
+  d.indices = indices; d.indexCount = 3; d.uvs = uv;
+  for (const uint32_t original : {0x20025u, 0x20026u}) {
+    r.clear(0, 0, 0);
+    d.material.texture = &textures.at(bodyPaintTexture(original, 0x20025, 0x303002a));
+    CHECK(r.draw(d, error));
+    CHECK(near(pixelAt(r, W / 2, H / 2), Px{200, 16, 70}));
+  }
+}
+
+void testSceneWorldLight() {
+  // config6 free-ride sun (RenderRef.setLight 0xc4dfe3 / 0x2e3f56 / white)
+  // reaching the raster draw: ambient + N.L diffuse (FUN_004bb7f0 terms).
+  SceneRenderLight light = SceneRenderLight::stockDefaults();
+  light.applySetLight(0xc4dfe3, 0x2e3f56, 0xffffff);
+  light.direction = {0, 0, 1}; // shines down -Z: the test quad faces it.
+  const Raster3DLight world = sceneWorldRasterLight(light);
+  CHECK(world.enabled);
+  const float d255 = 255.0f;
+  CHECK(std::abs(world.diffuse[0] - 196.0f / d255) < 0.01f &&
+        std::abs(world.diffuse[2] - 227.0f / d255) < 0.01f);
+  CHECK(std::abs(world.ambient[0] - 46.0f / d255) < 0.01f &&
+        std::abs(world.ambient[1] - 63.0f / d255) < 0.01f &&
+        std::abs(world.ambient[2] - 86.0f / d255) < 0.01f);
+  // Direction inverts towards the light (D3DLIGHT9 convention): shines
+  // down -Z means the light sits at -Z from the quad.
+  CHECK(world.toLight[0] > -1e-6f && world.toLight[1] > -1e-6f &&
+        world.toLight[2] < -0.999f);
+  std::string error;
+  Raster3D r;
+  CHECK(r.resize(W, H, error));
+  const float positions[9] = {-2, -2, 0.5f, 2, -2, 0.5f, 0, 2, 0.5f};
+  const uint32_t indices[3] = {0, 1, 2};
+  const float normals[9] = {0, 0, -1, 0, 0, -1, 0, 0, -1};
+  Raster3DDraw d;
+  d.positions = positions; d.vertexCount = 3;
+  d.indices = indices; d.indexCount = 3;
+  d.normals = normals;
+  d.material.diffuse = {1, 1, 1, 1};
+  d.light = world;
+  d.light.enabled = true;
+  r.clear(0, 0, 0);
+  CHECK(r.draw(d, error));
+  const auto px = pixelAt(r, W / 2, H / 2);
+  // Facing the sun (N.L=1): ambient (46,63,86) + diffuse (196,223,227).
+  CHECK(near(px, {242, 255, 255}));
+}
+
+void testPaintDrawPath() {
+  // The draw path must sample the swapped texture: bypassing the call-site
+  // substitution (scenePaintTexture) leaves the cfg texture and fails here.
+  std::map<uint32_t, Raster3DTexture> textures;
+  textures.emplace(0x20025, checker(1, 1, {180, 180, 180}, {180, 180, 180}));
+  textures.emplace(0x303002a, checker(1, 1, {200, 16, 70}, {200, 16, 70}));
+  // A painted record swaps its texture; an unpainted one (glass, trim, which
+  // never received Part.setTexture) keeps its material texture.
+  CHECK(scenePaintTexture(0x20025, 0x20025, 0x303002a) == 0x303002a);
+  CHECK(scenePaintTexture(0x20026, 0x20025, 0) == 0x20026);
+  std::string error;
+  Raster3D r;
+  CHECK(r.resize(W, H, error));
+  const float positions[9] = {-1, -1, 0.5f, 1, -1, 0.5f, 0, 1, 0.5f};
+  const float uv[6] = {0, 0, 1, 0, 0.5f, 1};
+  const uint32_t indices[3] = {0, 1, 2};
+  Raster3DDraw d;
+  d.positions = positions; d.vertexCount = 3;
+  d.indices = indices; d.indexCount = 3; d.uvs = uv;
+  for (const auto &[slot, painted, expected] :
+       {std::tuple<uint32_t, uint32_t, Px>{0x20025u, 0x303002a, {200, 16, 70}},
+        std::tuple<uint32_t, uint32_t, Px>{0x20026u, 0u, {20, 40, 60}}}) {
+    if (slot == 0x20026u)
+      textures.emplace(0x20026, checker(1, 1, {20, 40, 60}, {20, 40, 60}));
+    r.clear(0, 0, 0);
+    const auto sample = [&](uint32_t id) -> const Raster3DTexture * {
+      const auto found = textures.find(id);
+      return found == textures.end() ? nullptr : &found->second;
+    };
+    d.material.texture = sceneBodyTexture(sample, slot, 0x20025, painted);
+    if (!d.material.texture)
+      CHECK(false);
+    CHECK(r.draw(d, error));
+    CHECK(near(pixelAt(r, W / 2, H / 2), expected));
+  }
+}
+
+void testBodyTint() {
+  // FUN_0048c8c0 stores colors[scheme % count] on the render resource; the
+  // draw multiplies the material diffuse with its RGB (0x00RRGGBB palette
+  // entries carry no alpha).
+  std::map<uint32_t, uint32_t> tints;
+  tints[0x1234] = 0x00f3be00;
+  CHECK(lookupBodyTint(tints, 0x1234) == std::optional<uint32_t>{0x00f3be00});
+  CHECK(lookupBodyTint(tints, 0x9999) == std::nullopt);
+  // The render instance's +0xcc (RenderRef.setColor) is the fallback source
+  // of the same stock field; 0xffffffff means "unset" there.
+  CHECK(resolveBodyTint(tints, 0x9999, 0xffffffffu) == std::nullopt);
+  CHECK(resolveBodyTint(tints, 0x9999, 0x00466285) ==
+        std::optional<uint32_t>{0x00466285});
+  // The scheme entry wins over the instance colour.
+  CHECK(resolveBodyTint(tints, 0x1234, 0x00466285) ==
+        std::optional<uint32_t>{0x00f3be00});
+  std::array<float, 4> diffuse = {1, 1, 1, 1};
+  applyBodyTint(diffuse, 0x00f3be00);
+  CHECK(std::abs(diffuse[0] - 243.0f / 255.0f) < 1e-4 &&
+        std::abs(diffuse[1] - 190.0f / 255.0f) < 1e-4 &&
+        std::abs(diffuse[2] - 0.0f) < 1e-4 && diffuse[3] == 1);
+  // A tinted material paints the draw: silver texel with a red/magenta paint
+  // word.
+  std::string error;
+  Raster3D r;
+  CHECK(r.resize(W, H, error));
+  r.clear(0, 0, 0);
+  const float positions[9] = {-1, -1, 0.5f, 1, -1, 0.5f, 0, 1, 0.5f};
+  const uint32_t idx[3] = {0, 1, 2};
+  Raster3DDraw d;
+  d.positions = positions;
+  d.vertexCount = 3;
+  d.indices = idx;
+  d.indexCount = 3;
+  std::map<uint32_t, uint32_t> scheme;
+  scheme[0x42] = 0x00e01860; // red/magenta paint
+  auto tint = resolveBodyTint(scheme, 0x42, 0xffffffffu);
+  CHECK(tint.has_value());
+  d.material.diffuse = {0.8f, 0.8f, 0.8f, 1}; // untinted silver material
+  applyBodyTint(d.material.diffuse, *tint);
+  CHECK(r.draw(d, error));
+  const auto px = pixelAt(r, W / 2, H / 2);
+  CHECK(std::abs(px.r - std::lround(224.0f * 0.8f)) <= 2 &&
+        std::abs(px.g - std::lround(24.0f * 0.8f)) <= 2 &&
+        std::abs(px.b - std::lround(96.0f * 0.8f)) <= 2);
+}
+
 } // namespace
 
 int main() {
   testPerspectiveChecker();
   testMipmapAverages();
   testDepth();
+  testBackgroundPass();
   testAlpha();
   testCullAndFill();
   testViewportMapping();
@@ -1281,6 +1530,11 @@ int main() {
   testGroundStateMachine();
   testFixedMultiStageDraw();
   testGroundSubmission();
+  testWorldLighting();
+  testSceneWorldLight();
+  testBodyTint();
+  testPaintTexture();
+  testPaintDrawPath();
   if (failures) {
     std::fprintf(stderr, "raster3d: %d check(s) failed\n", failures);
     return 1;

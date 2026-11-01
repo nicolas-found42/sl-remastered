@@ -34,6 +34,8 @@ struct CarPhysics {
   std::unordered_map<const physics::Body*, std::shared_ptr<CarBodyObservation>> bodyObservations;
   std::vector<physics::Body*> teardownOrder;
   float mass = 0;
+  // Car record +0x1eac, the `center` directive (00444570).
+  std::array<float, 3> center{};
 };
 
 // 0044a250: create the box root at the part root's pose and reparent the part.
@@ -50,6 +52,16 @@ void resetCarToRest(CarPhysics& car);
 void suspendCar(CarPhysics& car);
 void wakeCar(CarPhysics& car);
 bool finalizeCarPhysics(CarPhysics& car, std::string& error);
+
+// The pose 0044c460 hands to the root placement (0048af20) for a six-float
+// `GameRef.setMatrix` request: the target position is where the mean static
+// wheel-centre point lands, and pitch/roll are corrected by the static
+// front/rear and left/right wheel heights. Returns false for an invalid angle.
+bool carRideHeightPlacement(const CarPhysics& car,
+                            const std::array<float, 3>& position,
+                            const std::array<float, 3>& orientation,
+                            std::array<float, 3>& placedPosition,
+                            std::array<float, 3>& placedOrientation);
 std::unique_ptr<CarPhysics> buildDetachedCarPhysics(CarPrototype& prototype,
     std::string_view arguments, float creationTime, const physics::Vec3& gravity,
     std::string& error);

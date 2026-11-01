@@ -1,5 +1,6 @@
 #include "game_creation.hpp"
 #include "object_physics.hpp"
+#include "resource_world.hpp"
 
 #include <cmath>
 #include <cstdio>
@@ -359,9 +360,7 @@ int main() {
         ++scriptGetInfoCalls;
         return 0;
       };
-      GameCreationRequest request{50,           "java.io.Controller",
-                                  {},           std::string{"0 0 2"},
-                                  "controller", "player"};
+      GameCreationRequest request{50, "java.io.Controller", {}, std::string{"0 0 2"}, "controller", "player"};
       PlayerFactorySetup setup{{3, 0.5f, 12.0f, 4.0f}, &sound, &font};
       const auto made =
           createNativeInstance(world, request, &receiver, nullptr, &setup);
@@ -734,6 +733,61 @@ int main() {
     longName.name = std::string(80, 'n');
     auto truncated = createNativeInstance(world, longName, &receiver);
     CHECK(truncated.node && truncated.node->name == std::string(30, 'n'));
+  }
+  {
+    // Stock button factory FUN_00436f30: the `render` and `body` directives of
+    // the native cfg parse into the script's ButtonPrototype with resource ids
+    // remapped through the script's own pack; an existing prototype accepts
+    // only its own config path and is reused without reparsing.
+    PackRegistry packs(
+        ".scratch/2005-extract/Program Files/Street Legal Racing - Redline");
+    GameWorld world;
+    CHECK(world.addRoot());
+    ResourceWorld resources(world, packs);
+    std::string error;
+    uint32_t scriptId = 0;
+    CHECK(packs.resolveLiteral("cars\\racers\\Baiern.rpk", 0x157, scriptId,
+                               error));
+    ScriptNode* source = world.addScript(scriptId, "");
+    CHECK(source && source->resourceId == scriptId && !source->button);
+    const std::string path = "misc\\garage\\scripts\\decals_button.cfg";
+    CHECK(loadButtonScriptPrototype(resources, *source, path, error));
+    CHECK(error.empty());
+    CHECK(source->button && source->button->configPath == path);
+    PackView view;
+    CHECK(packs.view(static_cast<uint16_t>(scriptId >> 16), view, error) ==
+          PackViewStatus::Ok);
+    // render 0x00000083 and body 0x00000090 remap to the script pack's slot.
+    CHECK(source->button->renderId ==
+          ((static_cast<uint32_t>(view.slot) << 16) | 0x83));
+    CHECK(source->button->hasBody);
+    CHECK(source->button->bodyId ==
+          ((static_cast<uint32_t>(view.slot) << 16) | 0x90));
+    CHECK(source->button->bodyName.empty());
+    // The same config path reuses the prototype and clears the error.
+    ButtonPrototype* cached = source->button.get();
+    error = "stale";
+    CHECK(loadButtonScriptPrototype(resources, *source, path, error));
+    CHECK(error.empty() && source->button.get() == cached);
+    // A different config path is an error and keeps the cached prototype.
+    CHECK(!loadButtonScriptPrototype(
+        resources, *source, "misc\\garage\\scripts\\other.cfg", error));
+    CHECK(!error.empty() && source->button.get() == cached);
+    // Empty and "-" name no config at all.
+    CHECK(!loadButtonScriptPrototype(resources, *source, "", error));
+    CHECK(!loadButtonScriptPrototype(resources, *source, "-", error));
+    // A zero local id names a primitive mesh body: bodyName is kept and the
+    // numeric id stays zero.
+    ScriptNode* primitive = world.addScript(scriptId + 1, "");
+    CHECK(primitive);
+    const std::string primitivePath = "frontend\\scripts\\paintcan.cfg";
+    CHECK(loadButtonScriptPrototype(resources, *primitive, primitivePath,
+                                    error));
+    CHECK(primitive->button && primitive->button->hasBody &&
+          primitive->button->bodyId == 0 &&
+          primitive->button->bodyName == "0" &&
+          primitive->button->renderId ==
+              ((static_cast<uint32_t>(view.slot) << 16) | 0x21));
   }
   return failures ? 1 : 0;
 }

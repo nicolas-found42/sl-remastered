@@ -1,9 +1,15 @@
 #include "camera_device_factory.hpp"
+#include "car_hud.hpp"
+#include "scene_2d.hpp"
 #include "natives/game_type.hpp"
 #include "pack_registry.hpp"
 #include "resource_world.hpp"
 #include "vm_test_harness.hpp"
 #include "world_model.hpp"
+#include "scene_2d.hpp"
+#include "skeleton.hpp"
+#include "physics_body.hpp"
+#include <cmath>
 
 #include <array>
 #include <cstdio>
@@ -51,6 +57,33 @@ NativeResult activate(VmArena &arena, const VmObject *receiver,
 } // namespace
 
 int main() {
+  // FUN_0043c0a0: material/mode gate, scale/offset, then clamp and printf.
+  auto speed = carHudSpeed();
+  CHECK(carHudValue(speed, 27.0) == "027");
+  CHECK(carHudValue(speed, 1000.0) == "999");
+  CHECK(carHudValue(speed, -1.0) == "000");
+  speed.scale = 2;
+  speed.offset = 1;
+  CHECK(carHudValue(speed, 13.0) == "027");
+  speed.material = 0;
+  CHECK(carHudValue(speed, 13.0).empty());
+  speed.material = 0x58;
+  speed.mode = 1;
+  CHECK(carHudValue(speed, 13.0).empty());
+  CHECK(carHudGear(0) == "N");
+  CHECK(carHudGear(1) == "a");
+  CHECK(carHudGear(6) == "f");
+  CHECK(carHudGear(7) == "R");
+  CHECK(carHudGear(1, "0123456R") == "1");
+  CHECK(carHudValue(carHudScore(), 0) == "0000000");
+  CHECK(std::fabs(carHudNeedle(0) - 0.48f) < 0.00001f);
+  CHECK(std::fabs(carHudNeedle(4800)) < 0.00001f);
+  CHECK(std::fabs(carHudNeedle(-9600) + 0.48f) < 0.00001f);
+  CHECK(carHudNeedle(20000) == -0.48f);
+  CHECK(!carHudLamp(0) && !carHudLamp(0.01f) && carHudLamp(0.01001f));
+  CHECK(!carHudWarning(100, 7000, 7000, 10000));
+  CHECK(carHudWarning(100.01f, 0, 7000, 10000));
+  CHECK(carHudWarning(20, 7001, 7000, 10000));
   PackRegistry packs("ref/raw");
   GameWorld world;
   auto *root = world.addRoot();
@@ -86,6 +119,45 @@ int main() {
     return 1;
   world.markLoaded(*carRoot);
   setLinkOwner(car->carInstance->physicsRoot, carRoot);
+  auto driverBodyPrototype = std::make_shared<physics::BodyProto>();
+  auto driverBody = std::make_shared<physics::Body>(
+      physics::createBody(*driverBodyPrototype, {}));
+  CHECK(world.registerDynamicBody(*carRoot, driverBody, driverBodyPrototype));
+
+  // Exercise the real activation -> material skeleton loader -> pose ->
+  // physics/render attachment path, not a preinstalled synthetic SkeletonPose.
+  std::string driverError;
+  uint16_t humansSlot = 0;
+  CHECK(packs.registerPackName("humans.rpk", humansSlot, driverError));
+  PackView humansView;
+  CHECK(packs.view(humansSlot, humansView, driverError) == PackViewStatus::Ok);
+  uint32_t driverMaterialId = 0;
+  const size_t humanEntries = humansView.pack ? humansView.pack->entries.size() : 0;
+  for (uint32_t local = 1; local <= humanEntries && !driverMaterialId; ++local) {
+    uint32_t resolved = 0;
+    PackResource resource;
+    if (!packs.resolveLiteral("humans.rpk", local, resolved, driverError) ||
+        !resolved || !packs.lookup(resolved, resource, driverError) ||
+        !resource.packBytes || resource.entry.resType != 14) continue;
+    const std::string payload(
+        reinterpret_cast<const char *>(resource.packBytes->data()) +
+            resource.entry.payloadOffset, resource.entry.payloadSize);
+    if (payload.find("skeleton") == std::string::npos) continue;
+    auto candidate = sceneLoadMaterial(resources, resolved);
+    if (!candidate.material) continue;
+    SkeletonPose candidatePose(candidate.material->skeletonBones());
+    if (candidatePose.findBone("Bip01_L_Hand") < 0 ||
+        candidatePose.findBone("Bip01_R_Hand") < 0) continue;
+    const auto materialNode = resources.lookup(resolved, 14);
+    CHECK(materialNode.status == LookupStatus::Found);
+    auto material = std::shared_ptr<SceneMaterialResources>(std::move(candidate.material));
+    CHECK(resources.bindSceneMaterial(materialNode.node, material));
+    auto renderInstance = std::make_shared<SceneRenderInstance>(materialNode.node.owner);
+    CHECK(!renderInstance->skeletonPose());
+    CHECK(resources.bindSceneRenderInstance(resources.resolve(render), renderInstance));
+    driverMaterialId = resolved;
+  }
+  CHECK(driverMaterialId != 0);
   car->carInstance->seats.push_back(std::make_unique<CarSeat>());
   CarSeat *seat = car->carInstance->seats.front().get();
   setLinkOwner(seat->player, player);
@@ -116,6 +188,11 @@ int main() {
         renderBody.colors.push_back(c);
       script->car->config.bodies.push_back(renderBody);
     }
+    CarBodyRecord steeringMount;
+    steeringMount.directive = "steering";
+    steeringMount.transform.position = {0, 0.5f, -0.3f};
+    script->car->config.steeringBody = static_cast<int>(script->car->config.bodies.size());
+    script->car->config.bodies.push_back(steeringMount);
     setLinkOwner(car->carInstance->prototypeSource, script);
   }
   camera->nativeDevice = "camera";
@@ -183,6 +260,32 @@ int main() {
                                 seat->camera.owner == camera &&
                                 seat->renderInstance.owner == render;
   CHECK(carActivateLinks);
+  const auto activatedRender = resources.sceneRenderInstance(resources.resolve(render));
+  CHECK(activatedRender && activatedRender->typeId() == driverMaterialId);
+  const auto driverPose = activatedRender ? activatedRender->skeletonPose() : nullptr;
+  CHECK(driverPose && !driverPose->palette().empty());
+  CHECK(driverPose && driverPose->namedFrame("bone00") &&
+        driverPose->namedFrame("lfbone") && driverPose->namedFrame("rfbone") &&
+        driverPose->namedFrame("gsbone") && driverPose->namedFrame("lhbone") &&
+        driverPose->namedFrame("rhbone") && driverPose->namedFrame("sthbone"));
+  CHECK(activatedRender && activatedRender->hasPhysicsBoneAttachment());
+  CHECK(carRoot->physicsBoneAttachments != 0);
+  if (activatedRender && driverPose && driverPose->namedFrame("lhbone")) {
+    CHECK(activatedRender->refreshPhysicsBone());
+    const auto before = *driverPose->namedFrame("lhbone");
+    car->carInstance->steeringState = 0.5f;
+    CHECK(activatedRender->refreshPhysicsBone());
+    const auto after = *driverPose->namedFrame("lhbone");
+    CHECK(std::fabs(after[12]-before[12]) + std::fabs(after[13]-before[13]) > 0.001f);
+    driverBody->state[driverBody->current].pos = {2, 3, 4};
+    CHECK(activatedRender->refreshPhysicsBone());
+    activatedRender->processRootBoneUpdate();
+    activatedRender->refreshSingleBoneDrawMatrix();
+    CHECK(std::fabs(activatedRender->boneMatrix()[12] -
+                    (20 + script->car->config.seat[0]*10)) < 0.001f);
+    car->carInstance->steeringState = 0;
+  }
+
   CHECK(carActivateGetInfo == 0x1a && carActivateReceiver == playerScript);
   CHECK(car->carInstance->seatCameraMode == 0);
   CHECK(car->carInstance->seatCameraSeat == 0);
@@ -373,11 +476,40 @@ int main() {
     const auto osdResult = activate(arena, osdRef, osdCommand);
     const auto osdError = errorOf(osdResult);
     CHECK(osdSeat->osd.cachedValue != 0);
-    CHECK(osdError.find("car activate gauges unsupported") !=
-          std::string::npos);
-    CHECK(osdError.find("car activate info 0x15 unsupported") ==
-          std::string::npos);
-    CHECK(!std::holds_alternative<std::monostate>(osdResult));
+    // A fabricated cached OSD id is not a render parent. Native text creation
+    // must reject a missing parent, not invent successful gauge nodes.
+    CHECK(!osdError.empty());
+    CHECK(!osdSeat->hudText[0]);
+    auto* osdParent = world.addTypedChild(*root, 1, "hud parent", 0);
+    CHECK(osdParent && osdParent->instanceId != 0);
+    world.markLoaded(*osdParent);
+    setLinkOwner(osdSeat->osd, osdParent);
+    setLinkOwner(player->player->osd, osdParent);
+    CHECK(errorOf(activate(arena, osdRef, osdCommand)).empty());
+    for (const auto& text : osdSeat->hudText)
+      CHECK(text);
+    CHECK(osdSeat->hudModels[0] && osdSeat->hudModels[1]);
+    CHECK(osdSeat->hudText[3]->instanceColor() == 0xff00ff00);
+    CHECK(!osdSeat->hudModels[2] && !osdSeat->hudModels[5]);
+    const uint32_t pack = osdSeat->hudText[0]->typeId() & 0xffff0000u;
+    std::string modelError;
+    CHECK(carHudModel(resources, world, *osdSeat, 4, pack | 0x63,
+                      {3.24f, -2.4f, -3.58f}, 0, true, modelError));
+    CHECK(osdSeat->hudModels[4] && osdSeat->links[36].owner);
+    CHECK(carHudModel(resources, world, *osdSeat, 4, pack | 0x63,
+                      {3.24f, -2.4f, -3.58f}, 0, false, modelError));
+    CHECK(!osdSeat->hudModels[4] && !osdSeat->links[36].owner);
+    OwnerLink oldGear;
+    setLinkOwner(oldGear, osdSeat->links[25].owner);
+    const auto oldCluster = osdSeat->hudModels[0];
+    CHECK(errorOf(activate(arena, osdRef, osdCommand)).empty());
+    CHECK(!oldGear.owner && osdSeat->hudModels[0] != oldCluster);
+    CHECK(errorOf(activate(arena, osdRef, "abs 2")).empty());
+    CHECK(osdCar->carInstance->abs == 0.5f);
+    CHECK(errorOf(activate(arena, osdRef, "asr 4")).empty());
+    CHECK(osdCar->carInstance->asr == 0.25f);
+    CHECK(errorOf(activate(arena, osdRef, "abs 0")).empty());
+    CHECK(osdCar->carInstance->abs == 0);
   }
 
   auto *idleCar = world.addChild(*root, "activate no player id", 0x21);

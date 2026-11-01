@@ -127,8 +127,7 @@ bool ResourceWorld::completePendingPackLoads(uint32_t loadRate,
       auto material = sceneMaterial(node);
       if (!material) {
         auto parsed = sceneLoadMaterial(*this, node.id);
-        if (!parsed.material || parsed.flags != 4100 ||
-            parsed.material->textureCount() != 1) {
+        if (!parsed.material || parsed.material->textureCount() != 1) {
           error = "unsupported pending font material: " + parsed.error;
           return false;
         }
@@ -138,7 +137,7 @@ bool ResourceWorld::completePendingPackLoads(uint32_t loadRate,
           return false;
         }
       }
-      if (material->flags() != 4100 || material->textureCount() != 1) {
+      if (material->textureCount() != 1) {
         error = "unsupported pending font material";
         return false;
       }

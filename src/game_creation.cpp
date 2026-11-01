@@ -729,6 +729,8 @@ CreationResult createNativeInstance(GameWorld &world,
           inst.meshId = res->id;
         if (res->request.directive == "texture" && !inst.textureId)
           inst.textureId = res->id;
+        if (res->request.directive == "texture" && !inst.defaultTextureId)
+          inst.defaultTextureId = res->id;
       }
       for (const auto &body : proto.config.bodies) {
         if (body.kind == CarBodyRecord::Render && body.renderResource) {

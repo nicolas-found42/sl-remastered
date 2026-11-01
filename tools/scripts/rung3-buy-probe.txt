@@ -1,0 +1,54 @@
+# Timed input for build/startup_probe --script. Seconds from the start of the frame loop.
+# Rung 3 buy probe: new career, dealer, cycle to Einvagen IIO GT ($18047), buy it.
+8 move 320 240
+9.5 move 250 96
+10.5 down
+11 up
+14 sdl_type Tester
+16 move 256 378
+16.5 down
+17 up
+19 move 318 376
+19.5 down
+20 up
+24 move 318 378
+24.5 down
+25 up
+28 move 150 38
+28.5 down
+29 up
+33 move 619 43
+33.5 down
+34 up
+43 move 179 38
+43.5 down
+44 up
+46.5 sdl_keydown Return
+46.7 sdl_keyup Return
+50 move 511 42
+50.5 down
+51 up
+54 move 511 42
+54.5 down
+55 up
+58 move 511 42
+58.5 down
+59 up
+62 shot @run/buy-target.bmp
+63 move 565 42
+64 sdl_keydown Return
+65 sdl_keyup Return
+68 shot @run/buy-dialog.bmp
+70 move 225 378
+71 sdl_keydown Return
+71.5 sdl_keyup Return
+73 shot @run/buy-after-enter.bmp
+76 move 617 42
+76.5 down
+77 up
+83 shot @run/after-back.bmp
+85 move 150 38
+85.5 down
+86 up
+93 shot @run/carlot-owned.bmp
+96 quit

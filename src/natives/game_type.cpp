@@ -3,6 +3,7 @@
 #include "camera_device_body.hpp"
 #include "camera_device_factory.hpp"
 #include "car_runtime.hpp"
+#include "car_hud.hpp"
 #include "ground_runtime.hpp"
 #include "hotkeys.hpp"
 #include "natives/lang_string.hpp"
@@ -16,6 +17,7 @@
 #include "run_log.hpp"
 #include "scene_2d.hpp"
 #include "scx.hpp"
+#include "skeleton.hpp"
 #include "sector_collision.hpp"
 #include "timers.hpp"
 
@@ -43,6 +45,36 @@ std::optional<CarCameraSettings> carCameraSettings(const VmArena &arena) {
   return CarCameraSettings{std::get<float>(*distance) * 0.2f,
                            std::get<float>(*fov)};
 }
+// FUN_00448f20: construct constraints only after the render skeleton exists.
+void activateSeatedDriver(ResourceWorld &resources, GameWorld &world,
+                          WorldNode &carNode, CarRuntimeInstance &car, CarSeat &seat, const CarConfig &config) {
+  const auto renderNode = resources.resolve(seat.renderInstance.owner);
+  auto render = renderNode ? resources.sceneRenderInstance(renderNode) : nullptr;
+  if (!render) return;
+  std::string error;
+  if (!sceneEnsureSkeleton(resources, *render, error)) {
+    runlog::event(runlog::EventKind::Note,
+                  "FUN_00448f20 seated driver skeleton unavailable: %s", error.c_str());
+    return;
+  }
+  const auto &pose = render->skeletonPose();
+  if (!pose) return; // Non-skeletal material: stock FUN_00541400 returns zero.
+  const auto missing = configureSeatedDriver(*pose, config);
+  runlog::event(runlog::EventKind::Note,
+      "FUN_00448f20 driver animation parity subgap: named head/foot/hand and sthbone targets, live wheel-frame updates and skin palettes active; FUN_00533450 exact quaternion/Euler equivalence selection and annealing schedule not matched; normalized steering-to-wheel angle and seat/root alignment remain [INFERENCE]");
+  for (const auto &bone : missing)
+    runlog::event(runlog::EventKind::Note,
+                  "FUN_00448f20 seated driver constraint bone absent: %s", bone.c_str());
+  SceneRenderInstance seatFrame(nullptr);
+  seatFrame.setBoneMatrix(config.seat.data(), config.seat.data()+3);
+  render->setAttachmentOffset(seatFrame.boneMatrix());
+  render->setDriverCar(&carNode);
+  auto *root = world.nodeFor(car.physicsRoot.owner);
+  if (!root || !render->attachPhysicsBone(world, *root))
+    runlog::event(runlog::EventKind::Note,
+                  "FUN_00448f20 seated driver physics root unavailable");
+}
+
 class Type1LoadTrace {
 public:
   explicit Type1LoadTrace(uint32_t resource) : resource_(resource) {
@@ -1419,11 +1451,12 @@ NativeResult gameRefQueueEvent(const std::vector<VmValue> &args,
             playerRender ? static_cast<unsigned>(playerRender->type) : 0u,
             playerRender && playerRender->loaded ? 1 : 0);
       }
-      if (seat->renderInstance.owner && !player.driverPoseParityReported) {
-        runlog::event(
-            runlog::EventKind::Note,
-            "player car activation: driver skeletal animation not implemented");
-        player.driverPoseParityReported = true;
+      if (seat->renderInstance.owner && game.resources) {
+        const auto source = game.resources->resolve(target->carInstance->prototypeSource.owner);
+        const auto *prototype = source.script ? source.script->car.get() : nullptr;
+        if (prototype)
+          activateSeatedDriver(*game.resources, *game.world, *target, *target->carInstance,
+                               *seat, prototype->config);
       }
       return std::monostate{};
     }
@@ -1704,6 +1737,13 @@ NativeResult gameRefQueueEvent(const std::vector<VmValue> &args,
       inst.damageMultiplier = parsed.values.empty() ? 1.0f : parsed.values[0].f;
       return std::monostate{};
     }
+    if (inst.isCar && (command == "abs" || command == "asr")) {
+      // FUN_00458c00 stores reciprocal thresholds; nonpositive disables.
+      const auto parsed = stockScan(*bytes, "%*s %f");
+      const float value = parsed.values.empty() ? 0.0f : parsed.values[0].f;
+      (command == "abs" ? inst.abs : inst.asr) = value > 0 ? 1.0f / value : 0.0f;
+      return std::monostate{};
+    }
     if (inst.isCar && command == "activate") {
       // FUN_00458c00 links the three ids, calls getInfo(0x1a), and stores the
       // seat camera mode. FUN_00449680 then calls FUN_0048ce30, records the
@@ -1775,6 +1815,11 @@ NativeResult gameRefQueueEvent(const std::vector<VmValue> &args,
                    answer.error;
         }
       }
+      // FUN_00426470(seat+4, 0x1a, seat+0x54) reaches the native player's
+      // getInfo case 0x1a (FUN_0047b220), which relinks the seat's osd record
+      // to the player's osd link (player +0x21b0, id +0x21ac).
+      if (playerNode && playerNode->player && playerNode->loaded)
+        setLinkOwner(seat->osd, playerNode->player->osd.owner);
       // FUN_00448e60. Seat count is the car's seat list. Stock reads that count
       // from the event receiver at +0x177c and writes the mode on the car.
       int32_t playerIds = 0;
@@ -1859,43 +1904,98 @@ NativeResult gameRefQueueEvent(const std::vector<VmValue> &args,
                                                    *inst.seatCameraPose))
             return *err;
       }
-      // FUN_00448f20 builds the driver skeleton. Same visual gap as player
-      // activation: record it and keep going.
-      if (playerNode && playerNode->player && seat->renderInstance.owner &&
-          !playerNode->player->driverPoseParityReported) {
-        runlog::event(
-            runlog::EventKind::Note,
-            "player car activation: driver skeletal animation not implemented");
-        playerNode->player->driverPoseParityReported = true;
+      if (prototype && seat->renderInstance.owner)
+        activateSeatedDriver(*game.resources, *game.world, *node, inst, *seat, prototype->config);
+      // FUN_00449680 tears down old seat-local cockpit instances before
+      // rebuilding them, including when the next activation has no OSD.
+      for (OwnerLink& link : seat->links) {
+        if (auto* old = game.world->nodeFor(link.owner))
+          game.world->destroy(*old);
+        setLinkOwner(link, nullptr);
+        link.cachedValue = 0;
       }
-      for (OwnerLink &link : seat->links)
-        if (!link.owner)
-          link.cachedValue = 0;
+      seat->hudText.fill(nullptr);
+      seat->hudModels.fill(nullptr);
       // Seat osd id is stock +0x5c. Zero skips cockpit text and gauges. The
       // other arm creates them only for the active driver, param_3 == +0x1780.
       const int32_t activeDriver =
           prototype ? prototype->config.defaultDriver : 0;
-      constexpr std::array<int, 10> cockpitSlots{
-          {25, 26, 1, 3, 4, 5, 6, 7, 8, 21}};
-      static bool gaugeGateLogged = false;
-      if (seatIndex == activeDriver && !gaugeGateLogged) {
-        gaugeGateLogged = true;
-        runlog::event(
-            runlog::EventKind::Note,
-            "gauge gate: seat=%zu osd=0x%x activeDriver=%d "
-            "links=%zu (25=0x%x 26=0x%x 1=0x%x 3=0x%x)",
-            seatIndex, seat->osd.cachedValue, activeDriver, seat->links.size(),
-            seat->links.size() > 25 ? seat->links[25].cachedValue : 0u,
-            seat->links.size() > 26 ? seat->links[26].cachedValue : 0u,
-            seat->links.size() > 1 ? seat->links[1].cachedValue : 0u,
-            seat->links.size() > 3 ? seat->links[3].cachedValue : 0u);
-      }
       if (seat->osd.cachedValue != 0 && seatIndex == activeDriver) {
-        for (const int index : cockpitSlots) {
-          if (seat->links[static_cast<size_t>(index)].cachedValue == 0)
-            return std::string{
-                "GameRef.queueEvent: car activate gauges unsupported"};
+        // FUN_00446180 defaults and FUN_00449680 seat-local creation.
+        // FUN_0048c670 uses the same material-backed text path as Text.create.
+        uint16_t carsSlot = 0;
+        std::string hudError;
+        if (!game.packs->registerPackName("cars.rpk", carsSlot, hudError))
+          return "HUD font pack: " + hudError;
+        const auto parent = game.resources->resolve(seat->osd.owner);
+        if (!parent.worldNode)
+          return std::string{"HUD parent unavailable"};
+        const uint32_t pack = uint32_t(carsSlot) << 16;
+        // FUN_00446180 default model transforms. The source atlas/SCX owns
+        // the cluster arc, red zone, legends and right-hand silhouette panel.
+        if (!carHudModel(*game.resources, *game.world, *seat, 0, pack | 0x55,
+                         {3.24f, -2.4f, -3.59f}, 0, true, hudError) ||
+            !carHudModel(*game.resources, *game.world, *seat, 1, pack | 0x56,
+                         {1.43f, -4.36f, -3.58f},
+                         carHudNeedle(inst.displayedEngineSpeed * 9.549296f), true, hudError))
+          return hudError;
+        std::array<CarHudElement, 13> elements{};
+        elements[0] = {0x58, 2, 0.55f, 0.86f};
+        elements[1] = carHudSpeed();
+        elements[2] = carHudScore();
+        // FUN_00449680 uses composite panel-font glyphs A/B/C/D/E/T/L/O.
+        // Each glyph includes its own panel position; they share this origin.
+        for (size_t i = 3; i < 11; ++i)
+          elements[i] = {0x57, 2, 0.93f, 0.8f, 0xffffffff};
+        elements[11] = {0x5c, 2, -0.17f, 0.8f, 0xff000000, "%01.0f", 0, 8, 0, 8};
+        elements[12] = {0x5c, 2, -0.17f, 0.91f, 0xff000000, "%01.0f", 0, 8, 0, 8};
+        constexpr std::array<size_t, 13> hudSlots{25, 29, 24, 1, 4, 5, 3, 6, 7, 21, 8, 22, 23};
+        for (size_t i = 0; i < elements.size(); ++i) {
+          auto& link = seat->links[hudSlots[i]];
+          if (seat->hudText[i] && link.owner)
+            continue;
+          const uint32_t fontId = (uint32_t(carsSlot) << 16) | elements[i].material;
+          const auto font = game.resources->lookup(fontId, 14);
+          if (font.status != LookupStatus::Found)
+            return std::string{"HUD font unavailable"};
+          auto material = game.resources->sceneMaterial(font.node);
+          if (!material) {
+            auto loaded = sceneLoadMaterial(*game.resources, fontId);
+            if (!loaded.material)
+              return "HUD font: " + loaded.error;
+            material = std::move(loaded.material);
+            if (!game.resources->bindSceneMaterial(font.node, material))
+              return std::string{"HUD font binding failed"};
+          }
+          SceneMaterialCache fontCache;
+          if (!sceneRefreshMaterial(*game.resources, *material,
+                                    game.packs->root(), fontCache, hudError, false, true))
+            return "HUD font preparation: " + hudError;
+          auto* text = game.world->addTypedChild(*parent.worldNode, 3,
+                                                 "r_text", 0x200);
+          if (!text)
+            return std::string{"HUD text allocation failed"};
+          text->bounds = ResourceBounds{};
+          text->field6c = parent.worldNode->field6c;
+          text->field70 = parent.worldNode->field70;
+          game.world->markLoaded(*text);
+          text->loadPriority = 1.0f;
+          auto render = std::make_shared<SceneRenderInstance>(font.node.owner);
+          render->setBoneTranslation(elements[i].x, elements[i].y, 0);
+          const std::string initial = i == 0             ? carHudGear(inst.currentGear)
+                                      : i < 3 || i >= 11 ? ""
+                                                         : std::string(1, "ABCDETLO"[i - 3]);
+          render->setTextState({initial, 2, elements[i].color, 1.0f});
+          if (i >= 3 && i < 11)
+            render->setInstanceColor(0xff00ff00); // FUN_0048c8c0 initial healthy color.
+          if (!game.resources->bindSceneRenderInstance(
+                  game.resources->resolve(text), render))
+            return std::string{"HUD text binding failed"};
+          seat->hudText[i] = std::move(render);
+          setLinkOwner(link, text);
         }
+        runlog::event(runlog::EventKind::Note,
+                      "HUD right panel: per-part damage-color refresh and wheel diagnostic glyphs not implemented");
       }
       // FUN_00448d70 (all.c:57388): clear car +0x1edc, scan seats for the
       // first nonzero player id (+0x128, stride 0x4a8), relink the car's
@@ -1924,23 +2024,29 @@ NativeResult gameRefQueueEvent(const std::vector<VmValue> &args,
         targetId = parsed.values[3].i;
       if (parsed.values.size() > 4)
         slotId = parsed.values[4].i;
-      // The stock install event carries an optional position after the slot id
-      // (`install <id> <id> <id> <id> <id> <x> <y> <z>`); it selects the
-      // nearest candidate slot (00473790 / 004720a0).
-      std::array<float, 3> preferred{};
-      const bool hasPreferred =
-          parsed.values.size() > 7 && parsed.values[5].kind == 'f' &&
-          parsed.values[6].kind == 'f' && parsed.values[7].kind == 'f';
-      if (hasPreferred)
-        for (size_t i = 0; i < 3; ++i)
-          preferred[i] = parsed.values[5 + i].f;
+      // FUN_00458c00 binds the second integer to part +0x60 before
+      // FUN_00473b10 searches that parent and its children. Its position
+      // argument is null even if the command contains trailing coordinates.
+      if (!game.resources)
+        return std::string{"GameRef.queueEvent: install resource world unavailable"};
+      const uint32_t parentId = parsed.values.size() > 1
+                                    ? static_cast<uint32_t>(parsed.values[1].i)
+                                    : 0;
+      auto &parentLink = node->carInstance->installParentLink;
+      if (parentLink.cachedValue != parentId) {
+        auto parent = game.resources->lookup(parentId, 1);
+        if (parent.status == LookupStatus::StockCrash ||
+            parent.status == LookupStatus::MountRefused)
+          return "GameRef.queueEvent: install parent lookup: " + parent.detail;
+        setLinkOwner(parentLink, parent.status == LookupStatus::Found
+                                     ? parent.node.owner : nullptr);
+      }
       WorldNode *targetNode =
           targetId ? game.world->findInstance(static_cast<uint32_t>(targetId))
                    : nullptr;
       std::string err;
       const bool installed =
-          carPartInstall(*node, targetNode, slotId, *arena, err,
-                         hasPreferred ? &preferred : nullptr);
+          carPartInstall(*node, targetNode, slotId, *arena, err);
       runlog::event(
           runlog::EventKind::Note,
           "part install: part=0x%08x target=0x%08x slot=%d outcome=%s",
@@ -3143,6 +3249,23 @@ NativeResult inputCheckHotkeys(const std::vector<VmValue> &args,
       !arena->callScript)
     return std::string{
         "Input.checkHotkeys: handler script delivery unavailable"};
+  // FUN_0047cd40 sends event 0x100000 through FUN_00426800; like cursor
+  // delivery, its handler runs independently and may park in a modal dialog.
+  if (arena->scheduler) {
+    struct HandlerGuard {
+      OwnerLink link;
+      explicit HandlerGuard(LinkOwner *owner) { setLinkOwner(link, owner); }
+      ~HandlerGuard() { setLinkOwner(link, nullptr); }
+    };
+    auto guard = std::make_shared<HandlerGuard>(node);
+    std::shared_ptr<VmHostTask> task;
+    const auto started = arena->scheduler->startHostTask(
+        node->scriptReceiver, "handleEvent", {first->hotkey},
+        [guard] { return guard->link.owner != nullptr; }, task);
+    if (!started.ok)
+      return "Input.checkHotkeys: " + started.error;
+    return std::monostate{};
+  }
   const auto result =
       arena->callScript(node->scriptReceiver, "handleEvent", {first->hotkey});
   if (!result.ok)
@@ -5003,8 +5126,10 @@ bool carPartInstall(WorldNode &partNode, WorldNode *explicitTarget,
       // is linked to the car; removing that link clears the same flag.
       if (targetSlotId == 0x191)
         carRoot->carInstance->engineRunning = true;
-      if (!carRoot->carInstance->chassisObject && partNode.scriptReceiver)
-        carRoot->carInstance->chassisObject = partNode.scriptReceiver;
+      // FUN_00469120 follows the car's chassis link; this port represents
+      // the car and its chassis with the same root script instance.
+      if (!carRoot->carInstance->chassisObject && carRoot->scriptReceiver)
+        carRoot->carInstance->chassisObject = carRoot->scriptReceiver;
       bool exists = false;
       for (const auto &link : carRoot->carInstance->attachedParts)
         if (link->owner == &partNode)
@@ -5524,6 +5649,34 @@ NativeResult gameRefGetInfoIntString(const std::vector<VmValue> &args,
                               arena);
 }
 
+// FUN_00487970 reads MouseCursor.cursor and selector 2 of the native
+// cursor (FUN_004625f0), which supplies its normalized x/y coordinates.
+NativeResult mouseCursorGetPos(const std::vector<VmValue> &args,
+                               const VmObject *receiver, VmArena *arena,
+                               const std::vector<const TufaClass *> *classes) {
+  if (!args.empty() || !receiver || !arena || !arena->gameState ||
+      !arena->gameState->resources)
+    return std::string{"MouseCursor.getPos: invalid call"};
+  const VmObject *ref = nullptr;
+  for (const auto &field : receiver->fields)
+    if (field.name == "cursor" && std::holds_alternative<const VmObject *>(field.value))
+      ref = std::get<const VmObject *>(field.value);
+  if (!ref)
+    return VmValue{static_cast<const VmObject *>(nullptr)};
+  const auto *state = nativeResourceState(ref, arena);
+  if (!state)
+    return std::string{"MouseCursor.getPos: cursor native link unavailable"};
+  const int32_t handle = static_cast<int32_t>(state - arena->resourceStates.data()) + 1;
+  auto it = arena->gameState->bindings.find(handle);
+  if (it == arena->gameState->bindings.end() || !it->second || !it->second->link.owner)
+    return std::string{"MouseCursor.getPos: cursor binding unavailable"};
+  const auto node = arena->gameState->resources->resolve(it->second->link.owner);
+  if (!node.worldNode || !node.worldNode->cursor)
+    return std::string{"MouseCursor.getPos: native cursor unavailable"};
+  return allocateVector3(arena, classes, node.worldNode->cursor->x,
+                         node.worldNode->cursor->y, 0.0f);
+}
+
 NativeResult gameRefGetPos(const std::vector<VmValue> &args,
                            const VmObject *receiver, VmArena *arena,
                            const std::vector<const TufaClass *> *classes) {
@@ -5539,7 +5692,16 @@ NativeResult gameRefGetPos(const std::vector<VmValue> &args,
         it->second->link.owner) {
       const auto node =
           arena->gameState->resources->resolve(it->second->link.owner);
-      if (node.worldNode && node.worldNode->carInstance) {
+      if (node.worldNode && node.worldNode->cameraDevice) {
+        if (!arena->gameState->world || !node.worldNode->cameraDevice->physicsNode())
+          return std::string{"GameRef.getPos: camera physics unavailable"};
+        const auto body = arena->gameState->world->dynamicBody(
+            *node.worldNode->cameraDevice->physicsNode()).lock();
+        if (!body || body->current > 1)
+          return std::string{"GameRef.getPos: camera physics unavailable"};
+        const auto &position = body->state[body->current].pos;
+        x = position[0]; y = position[1]; z = position[2];
+      } else if (node.worldNode && node.worldNode->carInstance) {
         x = node.worldNode->carInstance->position[0];
         y = node.worldNode->carInstance->position[1];
         z = node.worldNode->carInstance->position[2];
@@ -5572,7 +5734,25 @@ NativeResult gameRefGetOri(const std::vector<VmValue> &args,
         it->second->link.owner) {
       const auto node =
           arena->gameState->resources->resolve(it->second->link.owner);
-      if (node.worldNode && node.worldNode->carInstance) {
+      if (node.worldNode && node.worldNode->cameraDevice) {
+        if (!arena->gameState->world || !node.worldNode->cameraDevice->physicsNode())
+          return std::string{"GameRef.getOri: camera physics unavailable"};
+        const auto body = arena->gameState->world->dynamicBody(
+            *node.worldNode->cameraDevice->physicsNode()).lock();
+        if (!body || body->current > 1)
+          return std::string{"GameRef.getOri: camera physics unavailable"};
+        // FUN_0048b300 reads the current body matrix and calls FUN_00551c90.
+        const auto &m = body->state[body->current].rot;
+        if (m[10] == 0.0f && m[2] == 0.0f) {
+          y = std::atan2(-m[1], m[0]); p = 3.1415927f; r = 0.0f;
+        } else {
+          y = std::atan2(m[2], m[10]);
+          r = std::atan2(m[4], m[5]);
+          const float cr = std::cos(r);
+          p = cr > 0.0f ? std::atan2(-cr * m[6], m[5])
+                         : std::atan2(cr * m[6], -m[5]);
+        }
+      } else if (node.worldNode && node.worldNode->carInstance) {
         y = node.worldNode->carInstance->ypr[0];
         p = node.worldNode->carInstance->ypr[1];
         r = node.worldNode->carInstance->ypr[2];
@@ -5691,9 +5871,17 @@ NativeResult gameRefSetActiveCollision(const std::vector<VmValue> &args,
 static bool placeCar(VmGameState &game, CarRuntimeInstance &car,
                      const std::array<float, 3> &position,
                      const std::array<float, 3> &orientation) {
+  // 0044c460: the compound root is placed at the ride-height corrected pose;
+  // the script-visible pose below keeps the requested one.
+  std::array<float, 3> rootPosition = position;
+  std::array<float, 3> rootOrientation = orientation;
+  if (car.carPhysics && car.carPhysics->root &&
+      !carRideHeightPlacement(*car.carPhysics, position, orientation,
+                              rootPosition, rootOrientation))
+    return false;
   PartSlotDirective directive{};
   for (size_t i = 0; i < 3; ++i)
-    directive.orientation[i] = orientation[i];
+    directive.orientation[i] = rootOrientation[i];
   PartSlotState transform;
   if (!makePartSlotState(directive, transform))
     return false;
@@ -5706,7 +5894,7 @@ static bool placeCar(VmGameState &game, CarRuntimeInstance &car,
     if (root.current > 1 || !root.proto || compound.teardownOrder.empty())
       return false;
     auto &state = root.state[root.current];
-    state.pos = position;
+    state.pos = rootPosition;
     state.rot = matrix;
     state.quat = physics::quatFromMatrix(matrix);
     physics::updateWorldInertia(*root.proto, state);

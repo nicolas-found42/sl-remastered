@@ -195,6 +195,11 @@ static void typeTable() {
   CHECK(stockMeshVertexBytes(quad) == 160);
   quad.materials[0].maps[0].slot = 1;
   CHECK(!stockMeshVertexBytes(quad));
+  CHECK(stockMeshVertexBytesUpperBound(quad) == 4u * 56u);
+  quad.materials[0].flags = 12;
+  quad.materials[0].functionWord = 0;
+  CHECK(stockMeshVertexBytesUpperBound(quad) == 4u * 32u);
+  quad.materials[0].functionWord = 0x80000000u;
   CHECK(stockMeshVertexBytesUpperBound(quad) == 4u * 304u);
   CHECK(stockMeshVertexBytesUpperBound(mesh) == 1031u * 304u);
   mesh.version = 5;

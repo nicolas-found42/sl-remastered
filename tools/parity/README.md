@@ -32,6 +32,81 @@ Each new snapshot contains a `save/` copy and `manifest.json` with a SHA-256 for
 
 For an isolated native run, copy a snapshot's `save` folder into a **new** data root and pass that root to `startup_probe --data-root` instead of using `tools/play.sh`'s shared `local/stock-data`. Stock requires a separate writable copy of the whole game data with the chosen `save/`, passed as `SOURCE` to `run_capture.sh`. Do not replace a live game's save directory. A matching save is only one starting condition: this tool does not control random state, timing, input delivery, or selected car.
 
-Existing stock-code readings identify `Math.randomize` (0047c7d0) as seeding a thread-local generator from elapsed performance-counter milliseconds (`docs/decisions.tsv` and `local/census/DecompileAt-0047c7d0.log`). The native implementation also uses an elapsed performance clock (`src/natives/random.cpp`); neither capture workflow fixes or records the actual seed. The observed stock runs selected different cars (`docs/stock-flow.md`), and the native currently stops before a driveable car exists (`docs/continuation.md`). Stock proxy present counts are display events, not simulation steps; native replay is elapsed-time based (`docs/run-log.md`). Consequently, equal saves alone do not make runs deterministic. Record the car shown in each stock capture and the run logs separately; do not infer the seed from the car.
+Existing stock-code readings identify `Math.randomize` (0047c7d0) as seeding a thread-local generator from elapsed performance-counter milliseconds (`docs/decisions.tsv` and `local/census/DecompileAt-0047c7d0.log`). The native implementation also uses an elapsed performance clock (`src/natives/random.cpp`); neither capture workflow fixes or records the actual seed. The observed stock runs selected different cars (`docs/stock-flow.md`). Native Free Ride now reaches a driveable player car (2026-11-01 `run_native.py` runs: chase camera, HUD speed/gear respond to throttle), but that is not Parity evidence. Stock proxy present counts are display events, not simulation steps; native replay is elapsed-time based (`docs/run-log.md`). Consequently, equal saves alone do not make runs deterministic. Record the car shown in each stock capture and the run logs separately; do not infer the seed from the car.
 
 Run the save checks with `python3 -I tools/parity/test_save_snapshot.py`.
+
+## Record a native Free Ride run
+
+`run_native.py` performs one isolated native Free Ride attempt. It snapshots the
+`--save` fixture into a fresh data root (the fixture itself is never modified),
+writes a game-data manifest, copies the exact script that ran into
+`<output>/script.txt` (SHA-256 in `metadata.json`), and points the probe's run
+recorder at `<output>/run` so `shot @run/...` lines and run telemetry stay in
+the record. The output directory must be new and outside `ref/`; it must not
+contain or be contained by the game or save directories. A nonzero probe exit
+or a subprocess timeout is a failure; screenshots and process exit alone do
+not prove a driving scene or parity.
+
+Rapid default (waits for the real menu, clicks Free Ride at (420,127), waits
+for a real driving scene, short throttle burst, two captures):
+
+```sh
+python3 -I tools/parity/run_native.py local/verify/fast-1 \
+  --probe build/startup_probe \
+  --game '.scratch/2005-extract/Program Files/Street Legal Racing - Redline' \
+  --save local/stock-data/save
+```
+
+The bundled rapid script is `tools/scripts/free-ride-fast.txt`. The process
+timeout is 120 s, covering a menu wait of up to 30 s, a driving wait of up to
+60 s, startup and post-ready actions; override with `--timeout SECONDS`.
+
+Explicit cold baseline — same driving wait and post-ready throttle burst, but
+the menu is entered with the legacy fixed-timed click (10/13/13.5 s):
+
+```sh
+python3 -I tools/parity/run_native.py local/verify/cold-1 \
+  --probe build/startup_probe --game <game-dir> --save <save-dir> --cold-start
+```
+
+Custom script (any later-state fixture save works the same way; the save is
+copied, never written in place):
+
+```sh
+python3 -I tools/parity/run_native.py local/verify/custom-1 \
+  --probe build/startup_probe --game <game-dir> --save <save-dir> \
+  --script tools/scripts/free-ride-drive.txt --timeout 120
+```
+
+Script lines are `<seconds> <verb> [args]`; seconds are script-clock offsets
+from frame-loop start. `wait menu|driving <timeout-seconds>` blocks following
+actions and pauses only the script clock (real loop/simulation clocks run
+normally); success logs one stdout/runlog milestone with real loop elapsed and
+frame, and a wait timeout or invalid input is a nonzero failure. Offsets after
+a wait are logical script time, shifted by the actual blocked duration. A
+`--script` may only take screenshots as `shot @run/NAME`, inside the run
+record; any other `shot` path is rejected before the output is created. A
+matching visible-mode interactive run of the same script format is
+`tools/play.sh --script FILE` (no build caching; it rebuilds `startup_probe`
+each launch). The full cold/end-to-end UI paths remain the supplied
+`tools/scripts/rung*-*.txt` scripts; one Free Ride cold run does not cover the
+career flow.
+
+Measured 2026-11-01, same `build/startup_probe`, fixture, scenario workload,
+640×480 visible window, `SDL_AUDIODRIVER=dummy SLRR_CAR_TRACE=1`, three
+alternating samples each (seconds; menu/driving are frame-loop elapsed at the
+wait milestone, total is the probe process wall time; game-data manifest and
+save copy happen before the probe and are not included):
+
+| Route | menu ready | driving ready | total |
+|---|---|---|---|
+| rapid | 3.060–3.062 | 5.606–5.666 | 8.67–8.81 |
+| cold (`--cold-start`) | click fixed at 13.0 | 15.948–15.998 | 19.05–19.13 |
+
+All six exited 0; `tools/cartrace_check.py` passed each (worst step 0.42 m/s,
+no fall), the player reached 11.2–11.6 m/s after the 2 s throttle on both
+routes, and the source save matched its manifest afterwards. This measures
+setup time only, not Parity.
+
+Run the checks with `python3 -I tools/parity/test_run_native.py`.

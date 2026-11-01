@@ -36,5 +36,43 @@ int main() {
       parseSkeleton(child+child).ok || parseSkeleton(child).ok ||
       parseSkeleton("root\n0\n1,0,0\n0,1,0\n0,0,1\n0,0,0\n0,1\n0,1\n0,1\n").ok ||
       parseSkeleton("root\n-1\n0,0,0\n0,1,0\n0,0,1\n0,0,0\n0,1\n0,1\n0,1\n").ok) return 6;
+  // Instance ownership, named lookup, target-driven chain solving and skin
+  // palette bind compensation. Fault injection: disabling solve must fail 9.
+  SkeletonPose pose(tree.bones);
+  if (pose.findBone("root") != 1 || pose.findBone("missing") != -1) return 7;
+  for (const auto &matrix : pose.palette()) {
+    SkeletonMatrix identity{}; identity[0]=identity[5]=identity[10]=identity[15]=1;
+    for (size_t i=0;i<16;++i) if (!near(matrix[i],identity[i])) return 8;
+  }
+  auto chain = parseSkeleton(
+      "tip\n1\n1,0,0\n0,1,0\n0,0,1\n10,0,0\n-3.14159265,3.14159265\n-3.14159265,3.14159265\n-3.14159265,3.14159265\n"
+      "root\n-1\n1,0,0\n0,1,0\n0,0,1\n0,0,0\n-3.14159265,3.14159265\n-3.14159265,3.14159265\n-3.14159265,3.14159265\n");
+  if (!chain.ok) return 9;
+  SkeletonPose constrained(chain.bones), independent(chain.bones);
+  const int constraint = constrained.addConstraint("hand", "tip", 1, {0,0,0});
+  if (constraint < 0 || constrained.addConstraint("hand", "missing", 1, {}) != constraint ||
+      constrained.addConstraint("invalid", "missing", 1, {}) != -1 ||
+      !constrained.setConstraintTarget(static_cast<size_t>(constraint), {0,1,0})) return 10;
+  constrained.solve(8);
+  if (!near(constrained.matrices()[0][12],0) || !near(constrained.matrices()[0][13],1) ||
+      !near(independent.matrices()[0][12],1) || !near(independent.matrices()[0][13],0)) return 11;
+  chain.bones[1].minimum[2] = chain.bones[1].maximum[2] = 0;
+  SkeletonPose limited(chain.bones);
+  const int limitedConstraint = limited.addConstraint("hand", "tip", 1, {});
+  limited.setConstraintTarget(static_cast<size_t>(limitedConstraint), {0,1,0});
+  limited.solve(8);
+  if (!near(limited.matrices()[0][12],1) || !near(limited.matrices()[0][13],0)) return 12;
+  SkeletonMatrix mount{}; mount[0]=mount[5]=mount[10]=mount[15]=1;
+  constrained.setSteeringMount(mount, 0.2f, 0.03f);
+  constrained.updateSteering(0);
+  const auto *leftFrame = constrained.namedFrame("lhbone");
+  const auto *directionFrame = constrained.namedFrame("sthbone");
+  if (!leftFrame || !directionFrame || constrained.namedFrame("unknown") ||
+      !near((*leftFrame)[12],-std::sin(1.0f)*0.185f) ||
+      !near((*directionFrame)[13],0.215f/std::cos(1.0f))) return 13;
+  const float initialX = (*leftFrame)[12];
+  constrained.updateSteering(0.5f);
+  if (near((*leftFrame)[12],initialX) ||
+      !near((*leftFrame)[12],-std::sin(1.5f)*0.185f)) return 14;
   return 0;
 }

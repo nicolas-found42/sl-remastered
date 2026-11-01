@@ -157,8 +157,77 @@ std::unique_ptr<CarPhysics> buildDetachedCarPhysics(CarPrototype& prototype,
   car->wheels = buildCarWheelRuntime(prototype.wheels, *car->root, *mainBody,
       {center[0], center[1], center[2]}, mainBody->attachment->relative.position,
       car->mass, gravity, error);
+  car->center = prototype.config.center;
   if (!error.empty() || !finalizeCarPhysics(*car, error) || !indexCarBodies(*car, error)) return {};
   return car;
+}
+
+bool carRideHeightPlacement(const CarPhysics& car,
+                            const std::array<float, 3>& position,
+                            const std::array<float, 3>& orientation,
+                            std::array<float, 3>& placedPosition,
+                            std::array<float, 3>& placedOrientation) {
+  const auto rotation = [](const std::array<float, 3>& angles,
+                           std::array<float, 9>& r) {
+    PartSlotDirective directive{};
+    for (size_t i = 0; i < 3; ++i) directive.orientation[i] = angles[i];
+    PartSlotState slot;
+    if (!makePartSlotState(directive, slot)) return false;
+    r = slot.rotation;
+    return true;
+  };
+  placedPosition = position;
+  placedOrientation = orientation;
+  std::array<float, 9> m{};
+  if (!rotation(orientation, m)) return false;
+  if (car.wheels.size() < 4) {
+    // 0044c460 < 4 wheels: position += R * center.
+    for (size_t i = 0; i < 3; ++i)
+      placedPosition[i] = m[i * 3 + 2] * car.center[2] +
+                          m[i * 3] * car.center[0] + m[i * 3 + 1] * car.center[1] +
+                          position[i];
+    return true;
+  }
+  // Static wheel-centre points: anchor with the suspension at the length
+  // reset applies, (initialLength) - (|g| / invMass / wheels) / stiffness.
+  // [INFERENCE] wheel record +0x50 + +0x60 is initialLength and +0x78..+0x80
+  // is `anchor`; the 0.25 mean factor (_DAT_005f0c80) was not re-read.
+  const float gravityLength = std::fabs(physics::k::gravityY);
+  const float weight = gravityLength * car.mass;
+  const float perWheel = weight / static_cast<float>(car.wheels.size());
+  float w[4][3];
+  for (size_t i = 0; i < 4; ++i) {
+    const auto& wheel = *car.wheels[i];
+    w[i][0] = wheel.anchor[0];
+    w[i][2] = wheel.anchor[2];
+    w[i][1] = wheel.anchor[1] -
+              (wheel.initialLength - perWheel / wheel.springForce);
+  }
+  const float mean[3] = {(w[1][0] + w[0][0] + w[2][0] + w[3][0]) * 0.25f,
+                         (w[2][1] + w[1][1] + w[0][1] + w[3][1]) * 0.25f,
+                         (w[2][2] + w[1][2] + w[0][2] + w[3][2]) * 0.25f};
+  const float rollHeight = (w[3][1] + (w[1][1] - w[0][1])) - w[2][1];
+  const float pitchDepth = (w[3][2] + (w[2][2] - w[0][2])) - w[1][2];
+  const long double pitch = atan2l(
+      (((long double)w[2][1] - w[0][1]) + w[3][1] - w[1][1]) * 0.5L,
+      (long double)pitchDepth * 0.5L);
+  placedOrientation[1] = (float)(pitch + (long double)orientation[1]);
+  const long double roll = atan2l(
+      (long double)rollHeight * 0.5L,
+      (((long double)w[1][0] - w[0][0]) + w[3][0] - w[2][0]) * 0.5L);
+  placedOrientation[2] = (float)((long double)orientation[2] - roll);
+  if (!rotation(placedOrientation, m)) return false;
+  float offset[3];
+  for (size_t i = 0; i < 3; ++i)
+    offset[i] = mean[2] * m[i * 3 + 2] + mean[1] * m[i * 3 + 1] +
+                mean[0] * m[i * 3];
+  float lift = -(m[3] * car.center[0] + m[5] * car.center[2] +
+                 m[4] * car.center[1]);
+  if (offset[1] <= lift) lift = offset[1];
+  placedPosition[0] = position[0] - offset[0];
+  placedPosition[1] = position[1] - lift;
+  placedPosition[2] = position[2] - offset[2];
+  return true;
 }
 
 namespace {

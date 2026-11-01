@@ -5,6 +5,27 @@
 #include <algorithm>
 #include <cmath>
 
+namespace {
+// Stock FUN_00551c90: 3x3 rotation (row-major floats, indices 0/1/2, 4/5/6,
+// 8/9/10) to the Ypr triple (yaw, pitch, roll). The identity test uses zero,
+// matching the exe constant at 0x5f0c18.
+std::array<float, 3> yprFromMatrix(const float *m) {
+  const float eps = 0.0f;
+  std::array<float, 3> ypr{};
+  if (m[10] == eps && m[2] == eps) {
+    ypr[1] = 3.1415927f;
+    ypr[2] = 0.0f;
+    ypr[0] = std::atan2(m[0], -m[1]);
+    return ypr;
+  }
+  ypr[0] = std::atan2(m[2], m[10]);
+  ypr[2] = std::atan2(m[4], m[5]);
+  const float c = std::cos(ypr[2]);
+  ypr[1] = eps < c ? std::atan2(-(c * m[6]), m[5]) : std::atan2(c * m[6], -m[5]);
+  return ypr;
+}
+} // namespace
+
 NativeResult physicsCreateBox(const std::vector<VmValue> &args,
                               const VmObject *receiver, VmArena *arena,
                               const std::vector<const TufaClass *> *) {
@@ -178,4 +199,61 @@ NativeResult physicsSetMatrix(const std::vector<VmValue> &args,
   node->bounds.values = {position[0], position[1], position[2],
                          radius,      radius,      radius};
   return std::monostate{};
+}
+
+NativeResult physicsGetPos(const std::vector<VmValue> &args,
+                           const VmObject *receiver, VmArena *arena,
+                           const std::vector<const TufaClass *> *classes) {
+  if (!arena || !receiver || !args.empty() || !arena->gameState ||
+      !arena->gameState->world)
+    return std::string{"PhysicsRef.getPos: invalid call"};
+  const auto *state = nativeResourceState(receiver, arena);
+  if (!state)
+    return std::string{"PhysicsRef.getPos: native link unavailable"};
+  auto &game = *arena->gameState;
+  const auto handle =
+      static_cast<int32_t>(state - arena->resourceStates.data()) + 1;
+  const auto binding = game.bindings.find(handle);
+  if (binding == game.bindings.end() || !binding->second ||
+      !binding->second->link.owner)
+    return std::string{"PhysicsRef.getPos: body unavailable"};
+  // FUN_00480b00 reads the record's current state position; the port's
+  // dynamic record is the body state, static boxes keep their box position.
+  auto *node = game.world->nodeFor(binding->second->link.owner);
+  if (!node)
+    return std::string{"PhysicsRef.getPos: body unavailable"};
+  if (const auto body = game.world->dynamicBody(*node).lock()) {
+    const auto &p = body->state[body->current].pos;
+    return allocateVector3(arena, classes, p[0], p[1], p[2]);
+  }
+  if (!node->physicsBox)
+    return std::string{"PhysicsRef.getPos: body unavailable"};
+  const auto &p = node->physicsBox->position[0];
+  return allocateVector3(arena, classes, p[0], p[1], p[2]);
+}
+
+NativeResult physicsGetOri(const std::vector<VmValue> &args,
+                           const VmObject *receiver, VmArena *arena,
+                           const std::vector<const TufaClass *> *classes) {
+  if (!arena || !receiver || !args.empty() || !arena->gameState ||
+      !arena->gameState->world)
+    return std::string{"PhysicsRef.getOri: invalid call"};
+  const auto *state = nativeResourceState(receiver, arena);
+  if (!state)
+    return std::string{"PhysicsRef.getOri: native link unavailable"};
+  auto &game = *arena->gameState;
+  const auto handle =
+      static_cast<int32_t>(state - arena->resourceStates.data()) + 1;
+  const auto binding = game.bindings.find(handle);
+  if (binding == game.bindings.end() || !binding->second ||
+      !binding->second->link.owner)
+    return std::string{"PhysicsRef.getOri: body unavailable"};
+  // FUN_00480c10 -> FUN_00551c90 extracts Ypr from the record's 3x3 rotation.
+  auto *node = game.world->nodeFor(binding->second->link.owner);
+  const auto locked =
+      node ? game.world->dynamicBody(*node).lock() : std::shared_ptr<physics::Body>{};
+  if (!locked)
+    return std::string{"PhysicsRef.getOri: body unavailable"};
+  const auto ypr = yprFromMatrix(locked->state[locked->current].rot.data());
+  return allocateYpr(arena, classes, ypr[0], ypr[1], ypr[2]);
 }

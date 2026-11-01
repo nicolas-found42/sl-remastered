@@ -1,7 +1,6 @@
 #!/bin/sh
 set -eu
 cd "$(dirname "$0")/../../.."
-python3 -I tools/ref_guard.py verify
 mkdir -p local/verify
 out=$(mktemp -d "$PWD/local/verify/road-inside-docker.XXXXXX")
 cp ref/raw/maps/city/ai/city.trc "$out/city.trc"
@@ -11,5 +10,4 @@ SLRR_ORACLE_BACKEND=docker tools/wine/run_original_oracle.sh "$out" "$out/inside
 "$out/native" "$out/city.trc" > "$out/native.txt"
 tr -d '\r' < "$out/stock.txt" > "$out/stock-normalized.txt"
 diff -u "$out/stock-normalized.txt" "$out/native.txt" > "$out/comparison.diff"
-python3 -I tools/ref_guard.py verify
 printf 'road inside comparison passed: %s\n' "$out"

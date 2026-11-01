@@ -140,6 +140,17 @@ int main() {
 	CHECK(std::get<int32_t>(std::get<VmValue>(number("4294967295"))) == -1);
 	CHECK(isError(number("+1")) && isError(number("0x")) && isError(number("word")));
 
+  // String.floatValue, handler 00481f10: sscanf(text, "%f", &value) on the
+  // receiver's bytes; a non-numeric string is an error because the stock
+  // result would be uninitialized.
+  const auto floatNumber = [&](const char* input) { return stringFloatValue({}, str(input), &arena, &classes); };
+  CHECK(std::get<float>(std::get<VmValue>(floatNumber("12.5"))) == 12.5f);
+  CHECK(std::get<float>(std::get<VmValue>(floatNumber("  -2.75tail"))) == -2.75f);
+  CHECK(isError(floatNumber("word")));
+  CHECK(isError(floatNumber("")));
+  CHECK(isError(stringFloatValue({int32_t{1}}, str("1.0"), &arena, &classes)));
+  CHECK(isError(stringFloatValue({}, nullptr, &arena, &classes)));
+
 	// The result needs the registered String class.
 	std::vector<const TufaClass*> none;
 	CHECK(isError(integerToString({int32_t{1}}, nullptr, &arena, &none)));

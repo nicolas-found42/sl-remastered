@@ -6,28 +6,29 @@
 #include <string_view>
 
 namespace {
-bool parseId(std::string_view value, uint32_t &result) {
+bool parseId(std::string_view value, uint32_t& result) {
   const bool hex = value.size() >= 2 && value[0] == '0' &&
                    (value[1] == 'x' || value[1] == 'X');
-  const char *first = value.data() + (hex ? 2 : 0);
-  const char *last = value.data() + value.size();
+  const char* first = value.data() + (hex ? 2 : 0);
+  const char* last = value.data() + value.size();
   const auto parsed = std::from_chars(first, last, result, hex ? 16 : 10);
   return parsed.ec == std::errc{} && parsed.ptr == last;
 }
-bool parseFloat(std::string_view value, float &result) {
+bool parseFloat(std::string_view value, float& result) {
   const auto parsed =
       std::from_chars(value.data(), value.data() + value.size(), result);
   return parsed.ec == std::errc{} &&
          parsed.ptr == value.data() + value.size() && std::isfinite(result);
 }
-bool parseFlags(std::string_view value, uint32_t &result) {
+bool parseFlags(std::string_view value, uint32_t& result) {
   // Stock scans flags as an integer prefix, even when the payload spells
   // the value with a decimal suffix (for example, "4096.000").
   const bool negative = !value.empty() && value.front() == '-';
   const bool hex = !negative && value.size() >= 2 && value[0] == '0' &&
                    (value[1] == 'x' || value[1] == 'X');
-  const char *first = value.data() + (negative ? 1 : hex ? 2 : 0);
-  const char *last = value.data() + value.size();
+  const char* first = value.data() + (negative ? 1 : hex ? 2
+                                                         : 0);
+  const char* last = value.data() + value.size();
   uint32_t magnitude = 0;
   const auto parsed = std::from_chars(first, last, magnitude, hex ? 16 : 10);
   if (parsed.ec != std::errc{} || parsed.ptr == first)
@@ -37,13 +38,13 @@ bool parseFlags(std::string_view value, uint32_t &result) {
 }
 } // namespace
 
-ResourceMaterialResult resourceMaterialParse(const PackResource &resource) {
+ResourceMaterialResult resourceMaterialParse(const PackResource& resource) {
   ResourceMaterialResult out;
   if (resource.entry.resType != 14 || !resource.packBytes) {
     out.error = "expected type-14 resource payload";
     return out;
   }
-  const auto &bytes = *resource.packBytes;
+  const auto& bytes = *resource.packBytes;
   const size_t offset = resource.entry.payloadOffset,
                size = resource.entry.payloadSize;
   if (offset > bytes.size() || size > bytes.size() - offset || size > 65536) {
@@ -61,6 +62,7 @@ ResourceMaterialResult resourceMaterialParse(const PackResource &resource) {
   std::string line;
   bool mesh = false, flags = false, particle = false, skidmark = false;
   bool lodBias = false, lodAmplitude = false;
+  bool bones = false, skeleton = false;
   while (std::getline(lines, line)) {
     std::istringstream fields(line);
     std::string key, value, extra;
@@ -132,6 +134,11 @@ ResourceMaterialResult resourceMaterialParse(const PackResource &resource) {
     } else if (key == "skidmark" && !skidmark) {
       out.skidmark = value;
       skidmark = true;
+    } else if (key == "numbones" && !bones && parseId(value, out.bones)) {
+      bones = true;
+    } else if (key == "skeleton" && !skeleton) {
+      out.skeleton = value;
+      skeleton = true;
     } else {
       out.error = "unsupported or invalid material directive";
       return out;

@@ -1,40 +1,32 @@
-# Timed input for build/startup_probe --script. Seconds from the start of the frame loop.
-# Rung 3: new career, dismiss the welcome dialog, open the car dealers.
+# Create a career, buy the selected affordable used car, and inspect Car Lot.
 8 move 320 240
-8.5 shot @run/r2-menu.bmp
 9.5 move 250 96
-10 shot @run/r2-hole-hover.bmp
 10.5 down
 11 up
-13 shot @run/r2-name-dialog.bmp
 14 sdl_type Tester
-15 shot @run/r2-name-typed.bmp
 16 move 256 378
 16.5 down
 17 up
-18 shot @run/r2-after-ok.bmp
 19 move 318 376
 19.5 down
 20 up
-24 shot @run/r3-welcome.bmp
 24.5 move 318 378
 25 down
 25.5 up
-27 shot @run/r3-garage.bmp
-28 move 150 38
+28 move 208 38
 28.5 down
 29 up
-32 shot @run/r3-top-150.bmp
-34 move 619 43
-34.5 down
-35 up
-42 shot @run/r3-back-garage.bmp
-43 move 179 38
-43.5 down
-44 up
-45.6 shot @run/r3-dealer-a.bmp
-45.7 sdl_keydown Return
-45.8 sdl_keyup Return
-46.3 shot @run/r3-dealer-b.bmp
-52 shot @run/r3-top-179.bmp
-54 quit
+40 shot @run/dealer-car.bmp
+42 move 565 42
+42.5 down
+43 up
+46 shot @run/buy-confirmation.bmp
+48 move 220 378
+48.5 down
+49 up
+60 shot @run/purchased-garage.bmp
+62 move 150 38
+62.5 down
+63 up
+70 shot @run/owned-carlot.bmp
+73 quit

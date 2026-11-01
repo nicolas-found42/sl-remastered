@@ -19,6 +19,12 @@ int main() {
       std::fabs(state.perpendicularDamping + 0.7f) > 1e-6f ||
       std::fabs(state.torque - 0.1f) > 1e-6f || state.roll != 0) return 5;
   if (!applyCameraCommand(state, "roll -0.25") || std::fabs(state.roll + 0.25f) > 1e-6f) return 6;
+  // FUN_0043a4b0: `height X` stores X, then maxPitch = 1.3 when X == 0 else 0.3.
+  if (!applyCameraCommand(state, "height 0") || state.height != 0.0f ||
+      std::fabs(state.maxPitch - 1.3f) > 1e-6f) return 16;
+  if (!applyCameraCommand(state, "height 1.75") || std::fabs(state.height - 1.75f) > 1e-6f ||
+      std::fabs(state.maxPitch - 0.3f) > 1e-6f) return 17;
+  if (!applyCameraCommand(state, "maxpitch 0.65") || std::fabs(state.maxPitch - 0.65f) > 1e-6f) return 18;
   if (!applyCameraCommand(state, "roll +1") || std::fabs(state.roll + 0.25f) > 1e-6f) return 7;
   if (applyCameraCommand(state, "render 1") || applyCameraCommand(state, "unknown")) return 8;
   CameraFollowCommand follow;

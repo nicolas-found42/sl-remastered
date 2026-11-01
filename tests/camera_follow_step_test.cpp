@@ -1,5 +1,8 @@
 #include "camera_device_factory.hpp"
 #include "camera_follow_step.hpp"
+#include "ground_runtime.hpp"
+#include "pack_registry.hpp"
+#include "resource_world.hpp"
 #include "timers.hpp"
 #include "world_model.hpp"
 #include <cmath>
@@ -182,5 +185,194 @@ int main() {
       alongsideCamera->state[alongsideCamera->current].vel != held ||
       alongside.dynamicBody(*alongsideCar).expired())
     return 12;
+
+  // A camera whose look/move targets name a resource-world pack node with a
+  // prepared ground factory follows that ground's static body: the follow
+  // binds through groundFactory->preparation->physics (the garage camera
+  // looking at its map resource), the camera moves toward the ground body and
+  // the shared preparation body itself is not stepped.
+  PackRegistry groundPacks("ref/raw");
+  GameWorld groundWorld;
+  auto* groundRoot = groundWorld.addRoot();
+  if (!groundRoot)
+    return 13;
+  ResourceWorld groundResources(groundWorld, groundPacks);
+  uint16_t groundSlot = 0;
+  if (!groundPacks.registerPackName("maps\\city.rpk", groundSlot, error))
+    return 14;
+  const auto city = groundResources.lookup((uint32_t(groundSlot) << 16) | 1, 1);
+  if (!city.node.packNode)
+    return 15;
+  auto& cityNode = *city.node.packNode;
+  auto groundRuntime = createGroundRuntime({10, 0, 0}, 1.0f);
+  if (!groundRuntime)
+    return 16;
+  const auto& groundBody = groundRuntime->body;
+  const auto groundPos = groundBody.state[groundBody.current].pos;
+  auto groundPrep = std::make_shared<GroundPreparation>();
+  groundPrep->physics =
+      std::shared_ptr<GroundRuntime>(std::move(groundRuntime));
+  auto groundFactory = std::make_shared<GroundFactoryResult>();
+  groundFactory->preparation = groundPrep;
+  groundFactory->roadWorld = &groundWorld;
+  cityNode.groundFactory = groundFactory;
+  auto* groundHost = groundWorld.addChild(*groundRoot, "garage camera", 0x21);
+  if (!groundHost)
+    return 17;
+  groundHost->nativeDevice = "camera";
+  groundHost->cameraDevice =
+      std::make_shared<CameraDeviceResources>(groundWorld);
+  auto& groundDevice = *groundHost->cameraDevice;
+  groundDevice.fieldOfView = 55;
+  groundDevice.maxForce = 20;
+  groundDevice.commands.torque = 1;
+  groundDevice.commands.force = 2;
+  groundDevice.commands.damping = 1;
+  groundDevice.commands.perpendicularDamping = -0.5f;
+  groundDevice.commands.moveDistance = 2;
+  auto groundCamProto = std::make_shared<physics::BodyProto>(*cameraProto);
+  auto groundCam = std::make_shared<physics::Body>(
+      physics::createBody(*groundCamProto, {0, 0, 0}));
+  groundCam->flags |= 0x4002;
+  auto* groundCamNode =
+      groundWorld.addTypedChild(*groundRoot, 2, "camera body", 0);
+  if (!groundCamNode ||
+      !groundWorld.registerDynamicBody(*groundCamNode, groundCam,
+                                       groundCamProto))
+    return 18;
+  setLinkOwner(groundDevice.physics, groundCamNode);
+  setLinkOwner(groundDevice.lookTarget, &cityNode);
+  setLinkOwner(groundDevice.moveTarget, &cityNode);
+  if (!groundWorld.directCameraFollowReady(groundDevice))
+    return 19;
+  // The garage-camera scenario runs through the camera-only step: the ground
+  // follow binds, the camera moves toward the static ground body and the
+  // shared preparation body itself is not stepped.
+  error.clear();
+  if (!groundWorld.stepArmedCameraFollow(0.02f, error))
+    return 20;
+  const auto& groundCamState = groundCam->state[groundCam->current];
+  if (!(groundCamState.vel[0] > 0.0f) ||
+      groundBody.state[groundBody.current].pos != groundPos)
+    return 21;
+  // The follow smoothing initialized to the ground body's pose, proving the
+  // target body is the preparation's shared static body.
+  if (groundDevice.followSmoothing.look != groundPos ||
+      groundDevice.followSmoothing.move != groundPos)
+    return 22;
+
+  // A follow whose look/move target is the car's type-1 node owns no dynamic
+  // body itself: the follow resolves through carInstance->physicsRoot.owner
+  // to the type-2 physics-root child and binds to its body (FUN_00545fc0
+  // only stores the node link). With the root link broken the bind fails.
+  GameWorld carFollow;
+  auto* carFollowRoot = carFollow.addRoot();
+  if (!carFollowRoot)
+    return 23;
+  auto* carNode = carFollow.addChild(*carFollowRoot, "car", 0x21);
+  if (!carNode)
+    return 24;
+  carNode->carInstance = std::make_unique<CarRuntimeInstance>();
+  carNode->carInstance->isCar = true;
+  auto* carRootNode =
+      carFollow.addTypedChild(*carNode, 2, "car_root", 0);
+  if (!carRootNode)
+    return 25;
+  carFollow.markLoaded(*carRootNode);
+  setLinkOwner(carNode->carInstance->physicsRoot, carRootNode);
+  auto carBodyProto = std::make_shared<physics::BodyProto>(*cameraProto);
+  auto carBody = std::make_shared<physics::Body>(
+      physics::createBody(*carBodyProto, {6, 0, 0}));
+  if (!carFollow.registerDynamicBody(*carRootNode, carBody, carBodyProto))
+    return 26;
+  auto* carCamHost =
+      carFollow.addChild(*carFollowRoot, "chase camera", 0x21);
+  if (!carCamHost)
+    return 27;
+  carCamHost->nativeDevice = "camera";
+  carCamHost->cameraDevice =
+      std::make_shared<CameraDeviceResources>(carFollow);
+  auto& carCamDevice = *carCamHost->cameraDevice;
+  carCamDevice.fieldOfView = 55;
+  carCamDevice.maxForce = 20;
+  carCamDevice.commands.torque = 1;
+  carCamDevice.commands.force = 2;
+  carCamDevice.commands.damping = 1;
+  carCamDevice.commands.perpendicularDamping = -0.5f;
+  carCamDevice.commands.moveDistance = 2;
+  auto carCamProto = std::make_shared<physics::BodyProto>(*cameraProto);
+  auto carCamBody = std::make_shared<physics::Body>(
+      physics::createBody(*carCamProto, {0, 0, 0}));
+  carCamBody->flags |= 0x4002;
+  auto* carCamNode =
+      carFollow.addTypedChild(*carFollowRoot, 2, "camera body", 0);
+  if (!carCamNode ||
+      !carFollow.registerDynamicBody(*carCamNode, carCamBody, carCamProto))
+    return 28;
+  setLinkOwner(carCamDevice.physics, carCamNode);
+  setLinkOwner(carCamDevice.lookTarget, carNode);
+  setLinkOwner(carCamDevice.moveTarget, carNode);
+  if (!carFollow.directCameraFollowReady(carCamDevice))
+    return 29;
+  // The bound follow moves the camera toward the car's physics-root body.
+  error.clear();
+  if (!carFollow.stepArmedCameraFollow(0.02f, error))
+    return 30;
+  const auto& carCamState = carCamBody->state[carCamBody->current];
+  if (!(carCamState.vel[0] > 0.0f))
+    return 32;
+  // Breaking the physics-root link makes the car target unresolvable: the
+  // follow must not bind.
+  setLinkOwner(carNode->carInstance->physicsRoot, nullptr);
+  if (carFollow.directCameraFollowReady(carCamDevice))
+    return 33;
+  setLinkOwner(carNode->carInstance->physicsRoot, carRootNode);
+  if (!carFollow.directCameraFollowReady(carCamDevice))
+    return 34;
+
+  // An untargeted camera (a registered camera body whose device has no
+  // look/move targets) is skipped by the follow collection: the car step
+  // succeeds and the body stays at its pose instead of failing with
+  // "neither a car nor a camera follow".
+  GameWorld dealer;
+  auto* dealerRoot = dealer.addRoot();
+  auto* dealerHost =
+      dealerRoot ? dealer.addChild(*dealerRoot, "dealer camera", 0x21)
+                 : nullptr;
+  if (!dealerHost)
+    return 23;
+  dealerHost->nativeDevice = "camera";
+  dealerHost->cameraDevice =
+      std::make_shared<CameraDeviceResources>(dealer);
+  auto& dealerDevice = *dealerHost->cameraDevice;
+  dealerDevice.fieldOfView = 55;
+  dealerDevice.maxForce = 20;
+  dealerDevice.commands.torque = 1;
+  dealerDevice.commands.force = 2;
+  dealerDevice.commands.damping = 1;
+  dealerDevice.commands.perpendicularDamping = -0.5f;
+  dealerDevice.commands.moveDistance = 2;
+  auto dealerProto = std::make_shared<physics::BodyProto>(*cameraProto);
+  auto dealerBody = std::make_shared<physics::Body>(
+      physics::createBody(*dealerProto, {3, 1, 0}));
+  dealerBody->flags |= 0x4002;
+  const auto dealerPos = dealerBody->state[dealerBody->current].pos;
+  const auto dealerVel = dealerBody->state[dealerBody->current].vel;
+  auto* dealerNode = dealer.addTypedChild(*dealerRoot, 2, "camera body", 0);
+  if (!dealerNode ||
+      !dealer.registerDynamicBody(*dealerNode, dealerBody, dealerProto))
+    return 24;
+  setLinkOwner(dealerDevice.physics, dealerNode);
+  LiveCarStepHooks dealerHooks;
+  dealerHooks.gatherContacts =
+      [](std::vector<physics::DirectContact>&, std::string&) {
+        return true;
+      };
+  error.clear();
+  if (!dealer.stepRegisteredCars(0.02f, dealerHooks, error))
+    return 25;
+  if (dealerBody->state[dealerBody->current].pos != dealerPos ||
+      dealerBody->state[dealerBody->current].vel != dealerVel)
+    return 26;
   return 0;
 }

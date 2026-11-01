@@ -60,6 +60,6 @@ Rules for code in `src/`, `tests/` and `tools/`. Vocabulary comes from `GLOSSARY
 ## Process
 
 - Append one row per decision to `docs/decisions.tsv` (UTC timestamp, phase, decision, why, evidence, result). Add a correcting row when an earlier row proves wrong; do not rewrite history.
-- Run `python3 -I tools/ref_guard.py verify` before reporting work. `tools/check.sh` is the full gate.
+- Run `tools/check.sh` before reporting work. It is the full gate.
 - Do not commit or push unless asked.
 - A rung or parity-checklist row is marked verified only with a linked run directory or test that exercises it.

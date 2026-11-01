@@ -2,6 +2,7 @@
 #include "camera_device_factory.hpp"
 #include "camera_follow_force.hpp"
 #include "car_physics.hpp"
+#include "object_physics.hpp"
 #include "physics_compound_step.hpp"
 #include "ground_runtime.hpp"
 #include "resource_world.hpp"
@@ -9,6 +10,7 @@
 #include <algorithm>
 #include <cmath>
 #include <map>
+#include <unordered_map>
 
 namespace {
 uint32_t &globalFrameCounter() {
@@ -1123,6 +1125,7 @@ bool GameWorld::registerObjectPhysics(LinkOwner &owner,
   auto inserted = objectPhysics_.emplace(&owner, std::move(physics));
   for (auto *body : inserted.first->second.bodies())
     physicsWorld_.bodies.push_back(body);
+  ++objectPhysicsGeneration_;
   return true;
 }
 
@@ -1135,6 +1138,7 @@ bool GameWorld::unregisterObjectPhysics(LinkOwner &owner) {
                                            physicsWorld_.bodies.end(), body),
                                physicsWorld_.bodies.end());
   objectPhysics_.erase(found);
+  ++objectPhysicsGeneration_;
   return true;
 }
 
@@ -1708,29 +1712,24 @@ bool GameWorld::stepRegisteredCars(float seconds, const LiveCarStepHooks &hooks,
     error = "car step: invalid step";
     return false;
   }
-  // Scene objects: static, inactive and sleeping roots are skipped by stock
-  // (004a3f90/004a3bc0). Awake dynamic objects would need the object step
-  // (collision with the car, toppling, sleep); until that exists they stay
-  // registered but are not stepped, so they hold their placed pose and do not
-  // collide. This is a stated gap, noted once per count change.
-  size_t frozenObjects = 0;
-  for (const auto &entry : objectPhysics_) {
+  // Scene objects: stock 004a5190 walks every registered root each world
+  // step, and 004a3f90/004a3bc0 run their force/predict passes on any root
+  // that is active (flag 1), not asleep (flag 0x80) and not static (proto
+  // flag 4, massless). Awake dynamic objects (cones, barrels, trash cans)
+  // are stepped here with the same multi-root pass as the cars: they fall,
+  // collide with the sector ground and the car bodies, and commit through
+  // 004a4ed0. Sleeping dynamic trees remain collision candidates so an
+  // actual corrected contact wakes them in the same world solve pass.
+  steppedObjects_.clear();
+  std::unordered_map<physics::Body*, object::InstanceHandle*> dynamicObjects;
+  for (auto& entry : objectPhysics_) {
     auto *objectRoot = entry.second.root();
     if (objectRoot && objectRoot->proto &&
         !(objectRoot->proto->flags & physics::kProtoStatic) &&
-        (objectRoot->flags & physics::kBodyActive) &&
-        !(objectRoot->flags & physics::kBodyAsleep)) {
-      // The gap stays explicit until object force/contact/wake is modelled.
-      ++frozenObjects;
+        (objectRoot->flags & physics::kBodyActive)) {
+      dynamicObjects.emplace(objectRoot, &entry.second);
+      steppedObjects_.push_back(&entry.second);
     }
-  }
-  static size_t reportedFrozen = static_cast<size_t>(-1);
-  if (frozenObjects != reportedFrozen) {
-    reportedFrozen = frozenObjects;
-    runlog::event(runlog::EventKind::Note,
-                  "car step: %zu awake dynamic scene objects are frozen "
-                  "(object physics step unsupported)",
-                  frozenObjects);
   }
   std::vector<DirectCameraFollow> follows;
   for (const auto &entry : nodes_) {
@@ -1757,15 +1756,26 @@ bool GameWorld::stepRegisteredCars(float seconds, const LiveCarStepHooks &hooks,
   bool carAsleep = false;
   size_t awakeCars = 0;
   for (auto *body : physicsWorld_.bodies) {
-    // Static object bodies (roots and children) stay registered but are not
-    // stepped roots.
+    // Static/inactive instances stay unstepped. Sleeping dynamic roots
+    // remain registered collision candidates; prediction skips them until
+    // a corrected contact invokes FUN_004a7990.
     bool staticObjectBody = false;
     for (const auto &entry : objectPhysics_)
       for (const auto *objectBody : entry.second.bodies())
         if (objectBody == body)
           staticObjectBody = true;
-    if (staticObjectBody)
+    if (staticObjectBody) {
+      const auto awake = dynamicObjects.find(body);
+      if (awake == dynamicObjects.end())
       continue;
+      // The instance tree is root first in body-table order (00465bd0),
+      // exactly what predictCompound/commitCompound consume.
+      physics::BodyTree tree;
+      for (auto* objectBody : awake->second->bodies())
+        tree.push_back(objectBody);
+      roots.push_back(std::move(tree));
+      continue;
+    }
     std::shared_ptr<CarPhysics> car;
     for (const auto &entry : carBodies_)
       if (entry.second && entry.second->root.get() == body) {
@@ -1807,13 +1817,11 @@ bool GameWorld::stepRegisteredCars(float seconds, const LiveCarStepHooks &hooks,
           lastAsleep[car.get()] = asleepNow;
         }
       }
-      // A sleeping tree is skipped by every stock pass (004a3f90, 004a3bc0).
-      // Its suspensions and contacts then have no registered wheel bodies, so
-      // the car's per-frame work is not run while it sleeps.
-      if (tree[0]->flags & physics::kBodyAsleep) {
+      // FUN_004a3f90/004a3bc0 skip sleeping integration, not registration.
+      // An awake object may still correct a contact and wake this car.
+      if (tree[0]->flags & physics::kBodyAsleep)
         carAsleep = true;
-        continue;
-      }
+      else
       ++awakeCars;
       roots.push_back(std::move(tree));
       continue;
@@ -1857,9 +1865,12 @@ bool GameWorld::stepRegisteredCars(float seconds, const LiveCarStepHooks &hooks,
     callback.smoothing = &follow->device->followSmoothing;
     work.cameraCallbacks.push_back(callback);
   }
-  if (carAsleep && awakeCars == 0) {
+  const bool awakeSceneObject = std::any_of(steppedObjects_.begin(), steppedObjects_.end(),
+      [](const auto* instance) { return !(instance->root()->flags & physics::kBodyAsleep); });
+  if (carAsleep && awakeCars == 0 && !awakeSceneObject) {
     // Only camera follows advance: the sleeping cars' wheel and contact work
     // is not run, and a follow that targets a car reads its resting pose.
+    // Awake scene objects fall through to the full step below.
     static bool reported = false;
     if (!reported) {
       reported = true;

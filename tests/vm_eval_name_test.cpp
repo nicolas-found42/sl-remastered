@@ -18,9 +18,7 @@ void testDiscardedMismatchedReturn() {
   auto &factory = w.cls("test.VoidFactory");
   factory.method("noop", "()V", 0x49, {});
   const auto name = factory.t("noop");
-  factory.method("outer", "()Ltest.VoidFactory;", 9, {literal(0), node(0x24),
-      node(0x11, true, 1), node(0x12, true, name), node(0x07, true, 27),
-      node(0x28), ret});
+  factory.method("outer", "()Ltest.VoidFactory;", 9, {literal(0), node(0x24), node(0x11, true, 1), node(0x12, true, name), node(0x07, true, 27), node(0x28), ret});
   w.start();
   const std::vector<NativeEntry> natives{{"test.VoidFactory", "noop", "()V", "test", voidNative}};
   const std::vector<TufaNode> body{literal(0), node(0x24), node(0x11, true, 2),
@@ -52,9 +50,7 @@ NativeResult allocateFromNative(const std::vector<VmValue>&, const VmObject*, Vm
 
 void testNativeAllocation() {
   World w;
-  w.cls("test.Item").instanceField("marker", "I")
-      .markingConstructor("(I)", 42, "marker")
-      .method("handle", "(Ltest.Item;)I", 1, {literal(19), ret});
+  w.cls("test.Item").instanceField("marker", "I").markingConstructor("(I)", 42, "marker").method("handle", "(Ltest.Item;)I", 1, {literal(19), ret});
   w.cls("test.Factory").method("make", "()Ltest.Item;", 0x49, {});
   w.start();
   const std::vector<NativeEntry> natives{{"test.Factory", "make", "()Ltest.Item;", "test", allocateFromNative}};
@@ -168,15 +164,15 @@ void testFloatComparison() {
   std::memcpy(&second, &b, sizeof second);
   const auto result = vmExecute({node(0x07, true, 28), node(0x0a, true, first),
                                  node(0x07, true, 28), node(0x0a, true, second),
-                                 node(0x07, true, 8), ret}, {});
+                                 node(0x07, true, 8), ret},
+                                {});
   CHECK(result.ok && std::get<int32_t>(result.value) == 1);
 }
 
 void testStaticFieldChain() {
   World w;
   w.cls("test.Controller").constructor().method("get", "()I", 1, {literal(88), ret});
-  w.cls("test.Player").instanceField("value", "I")
-      .instanceField("controller", "Ltest.Controller;").constructor();
+  w.cls("test.Player").instanceField("value", "I").instanceField("controller", "Ltest.Controller;").constructor();
   auto &game = w.cls("test.Game");
   game.staticField("player", "Ltest.Player;", {}).constructor();
   const auto playerRef = game.ref("test.Game", "player", "Ltest.Player;");
@@ -194,8 +190,10 @@ void testStaticFieldChain() {
   CHECK(controllerObject.ok);
   if (!controllerObject.ok) return;
   fieldOf(player, "controller")->value = asObject(controllerObject.value);
-  for (auto &state : w.runtime->staticFields()) if (state.owner == &game.c)
-    for (auto &field : state.fields) if (field.name == "player") field.value = player;
+  for (auto& state : w.runtime->staticFields())
+    if (state.owner == &game.c)
+      for (auto& field : state.fields)
+        if (field.name == "player") field.value = player;
   const std::vector<TufaNode> body{node(0x11, true, 2), node(0x1b, true, playerRef),
                                    node(0x1b, true, valueRef), ret};
   const auto result = vmExecute(game.c, body, {asObject(gameObject.value)}, nullptr,
@@ -263,11 +261,7 @@ void testStaticDynamicSelf() {
 
 void testHostUpcalls() {
   World w;
-  w.cls("test.HostItem").instanceField("marker", "I")
-      .markingConstructor("(I)", 42, "marker")
-      .method("handle", "(Ltest.HostItem;)I", 1, {literal(19), ret})
-      .method("empty", "()V", 1, {})
-      .method("emptyValue", "()I", 1, {});
+  w.cls("test.HostItem").instanceField("marker", "I").markingConstructor("(I)", 42, "marker").method("handle", "(Ltest.HostItem;)I", 1, {literal(19), ret}).method("empty", "()V", 1, {}).method("emptyValue", "()I", 1, {});
   w.start();
   auto allocated = vmHostAllocate(w.arena, "test.HostItem", nullptr,
                                   &w.runtime->classes(), &w.runtime->staticFields());
@@ -337,8 +331,7 @@ void testSuperclassDynamicCall() {
   w.cls("test.Super").constructor().method("get", "()I", 1, {literal(11), ret});
   auto &child = w.cls("test.Sub", "test.Super");
   const auto name = child.t("get");
-  child.constructor().method("get", "()I", 1, {literal(22), ret})
-      .method("baseValue", "()I", 1, {literal(0), node(0x26, true, name), ret});
+  child.constructor().method("get", "()I", 1, {literal(22), ret}).method("baseValue", "()I", 1, {literal(0), node(0x26, true, name), ret});
   w.start();
   const auto allocated = w.alloc("test.Sub");
   CHECK(allocated.ok);
@@ -354,8 +347,7 @@ void testImplicitVirtualOverride() {
   World w;
   auto &base = w.cls("test.VirtualBase");
   const auto ref = base.ref("test.VirtualBase", "hook", "()I");
-  base.constructor().method("hook", "()I", 1, {literal(11), ret})
-      .method("run", "()I", 1, {literal(0), node(0x24), node(0x1a, true, ref), ret});
+  base.constructor().method("hook", "()I", 1, {literal(11), ret}).method("run", "()I", 1, {literal(0), node(0x24), node(0x1a, true, ref), ret});
   w.cls("test.VirtualChild", "test.VirtualBase").constructor().method("hook", "()I", 1, {literal(22), ret});
   w.start();
   const auto object = w.alloc("test.VirtualChild");
@@ -445,8 +437,7 @@ void testStackReceiverCall() {
 void testLocalFieldMethodCall() {
   World w;
   auto &value = w.cls("test.Value");
-  value.constructor().method("get", "()I", 1, {literal(42), ret})
-      .method("constant", "()I", 9, {literal(91), ret});
+  value.constructor().method("get", "()I", 1, {literal(42), ret}).method("constant", "()I", 9, {literal(91), ret});
   auto &child = w.cls("test.Child", "test.Value");
   child.constructor().method("get", "()I", 1, {literal(43), ret});
   auto &holder = w.cls("test.Holder");
@@ -474,6 +465,84 @@ void testLocalFieldMethodCall() {
   CHECK(staticResult.ok && std::get<int32_t>(staticResult.value) == 91);
   fieldOf(holderObject, "value")->value = static_cast<const VmObject *>(nullptr);
   CHECK(!w.run(call, {holderObject}).ok);
+}
+
+// Qualified-call receiver chain, deepest supported operands (case 0x24,
+// src/vm.cpp ~3017): for operand n >= 3 the receiver is a chain of n-1 nodes
+// (a class/local/field start followed by field loads) ending at the object
+// the qualified method is invoked on. operand 5 reaches through three field
+// dereferences, operand 8 through six — the maximum the port accepts.
+void testDeepQualifiedReceiverChain() {
+  World w;
+  w.cls("test.C0").instanceField("f1", "Ltest.C1;").constructor();
+  w.cls("test.C1").instanceField("f2", "Ltest.C2;").constructor();
+  w.cls("test.C2").instanceField("f3", "Ltest.C3;").constructor();
+  auto& c3 = w.cls("test.C3");
+  c3.instanceField("f4", "Ltest.C4;").constructor().method("get", "()I", 1, {literal(33), ret});
+  auto& c4 = w.cls("test.C4");
+  c4.instanceField("f5", "Ltest.C5;").constructor().method("get", "()I", 1, {literal(44), ret});
+  w.cls("test.C5").instanceField("f6", "Ltest.C6;").constructor();
+  w.cls("test.C6").constructor().method("get", "()I", 1, {literal(66), ret});
+  w.start();
+
+  const VmObject* objects[7] = {};
+  bool allocated = true;
+  for (int i = 0; i < 7; ++i) {
+    const auto result = w.alloc("test.C" + std::to_string(i));
+    allocated = allocated && result.ok;
+    objects[i] = result.ok ? asObject(result.value) : nullptr;
+  }
+  CHECK(allocated);
+  if (!allocated)
+    return;
+  for (int i = 0; i < 6; ++i) {
+    auto* field = fieldOf(objects[i], "f" + std::to_string(i + 1));
+    CHECK(field != nullptr);
+    if (field)
+      field->value = objects[i + 1];
+  }
+
+  // operand 5: local0.f1.f2.f3, then get() on the C3 object (33, not the
+  // intermediate C4's 44 — the intermediate get must not run).
+  const std::vector<TufaNode> call5{
+      literal(0), node(0x24), node(0x11, true, 5), node(0x01, true, 0),
+      node(0x1b, true, w.main.ref("test.C0", "f1", "Ltest.C1;")),
+      node(0x1b, true, w.main.ref("test.C1", "f2", "Ltest.C2;")),
+      node(0x1b, true, w.main.ref("test.C2", "f3", "Ltest.C3;")),
+      node(0x1a, true, w.main.ref("test.C3", "get", "()I")), ret};
+  const auto result5 = w.run(call5, {objects[0]});
+  CHECK(result5.ok && std::get_if<int32_t>(&result5.value) &&
+        std::get<int32_t>(result5.value) == 33);
+  if (!result5.ok)
+    std::printf("chain n=5: %s\n", result5.error.c_str());
+
+  // operand 8: local0.f1...f6, then get() on the final C6 object.
+  const std::vector<TufaNode> call8{
+      literal(0), node(0x24), node(0x11, true, 8), node(0x01, true, 0),
+      node(0x1b, true, w.main.ref("test.C0", "f1", "Ltest.C1;")),
+      node(0x1b, true, w.main.ref("test.C1", "f2", "Ltest.C2;")),
+      node(0x1b, true, w.main.ref("test.C2", "f3", "Ltest.C3;")),
+      node(0x1b, true, w.main.ref("test.C3", "f4", "Ltest.C4;")),
+      node(0x1b, true, w.main.ref("test.C4", "f5", "Ltest.C5;")),
+      node(0x1b, true, w.main.ref("test.C5", "f6", "Ltest.C6;")),
+      node(0x1a, true, w.main.ref("test.C6", "get", "()I")), ret};
+  const auto result8 = w.run(call8, {objects[0]});
+  CHECK(result8.ok && std::get_if<int32_t>(&result8.value) &&
+        std::get<int32_t>(result8.value) == 66);
+  if (!result8.ok)
+    std::printf("chain n=8: %s\n", result8.error.c_str());
+
+  // operand 9 is beyond the supported range.
+  const std::vector<TufaNode> call9{
+      literal(0), node(0x24), node(0x11, true, 9), node(0x01, true, 0),
+      node(0x1b, true, w.main.ref("test.C0", "f1", "Ltest.C1;")),
+      node(0x1b, true, w.main.ref("test.C1", "f2", "Ltest.C2;")),
+      node(0x1b, true, w.main.ref("test.C2", "f3", "Ltest.C3;")),
+      node(0x1b, true, w.main.ref("test.C3", "f4", "Ltest.C4;")),
+      node(0x1b, true, w.main.ref("test.C4", "f5", "Ltest.C5;")),
+      node(0x1b, true, w.main.ref("test.C5", "f6", "Ltest.C6;")),
+      node(0x1b, true, w.main.ref("test.C6", "get", "()I")), ret};
+  CHECK(!w.run(call9, {objects[0]}).ok);
 }
 
 // test.Osd { Object globalHandler; } and test.Me { Osd osd; } model the stock
@@ -623,6 +692,7 @@ int main() {
   testLocalArrayLength();
   testStackReceiverCall();
   testLocalFieldMethodCall();
+  testDeepQualifiedReceiverChain();
   testChainedStore();
   testChainedValueRead();
   testMostSpecificOverload();

@@ -2,6 +2,7 @@
 
 #include "car_config.hpp"
 #include "car_engine.hpp"
+#include "car_hud.hpp"
 #include "car_geometry.hpp"
 #include "car_physics.hpp"
 #include "car_sfx_table.hpp"
@@ -114,8 +115,17 @@ struct CarSeat {
   // Stock seat +0x70. FUN_00449680 walks 0x40 of these. An empty slot has a
   // null owner, and that is the only case where stock clears the cached id.
   std::array<OwnerLink, 0x40> links{};
+  // FUN_00449680/FUN_004518c0: native HUD text nodes belong to this seat.
+  std::array<std::shared_ptr<class SceneRenderInstance>, 13> hudText{};
+  std::array<std::shared_ptr<class SceneRenderInstance>, 6> hudModels{};
   ~CarSeat();
 };
+
+// FUN_0048a3b0 / FUN_0043c0a0: seat-local stock model and mode-4 lifecycle.
+// Model indices are cluster, needle, ABS, ASR, handbrake and engine warning.
+bool carHudModel(ResourceWorld& resources, GameWorld& world, CarSeat& seat,
+                 size_t index, uint32_t material, const std::array<float, 3>& position,
+                 float roll, bool visible, std::string& error);
 
 // The look, move, and zoom FUN_0048ce30 queues on the seat camera.
 struct SeatCameraPose {
@@ -200,6 +210,7 @@ struct CarRuntimeInstance {
   std::map<uint32_t, uint32_t> bodyTints;
   uint32_t renderType = 0;
   uint32_t textureId = 0;
+  uint32_t defaultTextureId = 0; // cfg texture replaced by Part.setTexture (FUN_00467ff0)
   uint32_t meshId = 0;
   float wear = 1.0f;
   float damageMultiplier = 1.0f;
@@ -232,12 +243,15 @@ struct CarRuntimeInstance {
   std::shared_ptr<CarPhysics> carPhysics;
   int32_t suspendUpdate = 0;
   float mileage = 0.0f;
+  float smoothedSpeed = 0.0f; // stock car +0x1f74
   std::array<float, 2> torqueScale{1.0f, 1.0f};
   int32_t hornOn = 0;
   int32_t transmissionMode = 0;
   float steerHelp = 0.0f;
   float asr = 0.0f;
-  float abs = 0.0f;
+  float abs = 0.0f; // reciprocal slip thresholds, prototype +0xa28/+0xa2c
+  float previousAbsSlip = 0, previousAsrSlip = 0;
+  bool absActive = false, asrActive = false; // stock flags 0x01000000/0x02000000
   float diffLock = 0.0f;
   float steeringState = 0.0f;
   float brakeState = 0.0f;
@@ -289,7 +303,7 @@ struct CarRuntimeInstance {
   // 004493c0 copies wheel prototype controls into the live car instance.
   void initializeWheelDrivetrain();
   float engineRpm = 0.0f;
-  float nitrous = 0.0f;
+  float nitrous = 0.0f; // stock car +0x1ef8: remaining tank contents
   int32_t coolingFan = 0;
   int32_t headlightsOn = 0;
   int32_t flareState = 0;
@@ -315,3 +329,8 @@ bool loadCarPrototype(ResourceWorld &world, ScriptNode &source,
                       const ResourceIdMapping &mapping, std::string_view text,
                       std::unique_ptr<CarPrototype> &result, std::string &error,
                       bool isCar = true);
+
+// Reads the loaded chassis tank_nitro and the installed slot-401 engine's
+// dynodata. No installed system is distinct from an installed empty system.
+CarHudOptionalValues carHudOptionalValues(GameWorld &world,
+                                         const CarRuntimeInstance &car);

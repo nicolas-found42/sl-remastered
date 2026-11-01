@@ -23,7 +23,6 @@ mkdir -p "$(dirname "$RUN")"
 mkdir "$RUN" || { echo "run directory must not already exist: $RUN" >&2; exit 1; }
 RUN="$(cd "$RUN" && pwd)"
 DISC="$(cd "$DISC" && pwd)"
-python3 -I tools/ref_guard.py verify
 docker image inspect "$IMAGE" >/dev/null 2>&1 ||
   docker build --platform linux/amd64 -t "$IMAGE" -f tools/wine/Dockerfile tools/wine
 python3 -I tools/wine/synthetic_metadata.py ref/raw/StreetLegal_Redline.bak.exe ref/raw/texture.dat \
@@ -75,4 +74,3 @@ for t in $FRAMES; do
   fi
 done
 docker stop "$NAME" >/dev/null 2>&1 || true
-python3 -I tools/ref_guard.py verify

@@ -5,6 +5,7 @@
 #include "resource_texture.hpp"
 #include "scene_raster3d.hpp"
 #include "scx.hpp"
+#include "skeleton.hpp"
 
 #include <array>
 #include <cstdint>
@@ -197,6 +198,21 @@ public:
     defaults_.lodBias = bias;
     defaults_.lodAmplitude = amplitude;
   }
+  // FUN_00541400: numbones lands at defaults +0x1c; the skeleton file named
+  // by the "skeleton" directive is parsed once into shared bind-pose bones
+  // that every instance pose copies. A declared file that failed to load
+  // leaves the material bound but skeletonPending, so sceneEnsureSkeleton
+  // reports the failure explicitly instead of rendering a static skeleton.
+  void setBones(uint32_t bones) { defaults_.bones = bones; }
+  const std::vector<SkeletonBone>& skeletonBones() const {
+    return skeletonBones_;
+  }
+  size_t skeletonBoneCount() const { return skeletonBones_.size(); }
+  bool skeletonPending() const { return skeletonPending_; }
+  void setSkeletonBones(std::vector<SkeletonBone> bones) {
+    skeletonBones_ = std::move(bones);
+  }
+  void setSkeletonPending() { skeletonPending_ = true; }
   uint32_t textureId(size_t index) const {
     return textures_.at(index)->cachedValue;
   }
@@ -210,6 +226,8 @@ private:
   SceneMaterialDefaults defaults_;
   OwnerLink mesh_;
   std::vector<std::unique_ptr<OwnerLink>> textures_;
+  std::vector<SkeletonBone> skeletonBones_;
+  bool skeletonPending_ = false;
 };
 
 struct SceneTextState {
@@ -248,6 +266,9 @@ public:
   // Stock render instance +0xcc, set by 0048c8c0; initial value is white.
   uint32_t instanceColor() const { return instanceColor_; }
   void setInstanceColor(uint32_t color) { instanceColor_ = color; }
+  // Camera-attached planar model geometry (native seat OSD), not a world mesh.
+  bool cameraPlane() const { return cameraPlane_; }
+  void setCameraPlane(bool value) { cameraPlane_ = value; }
   // Bounded first-bone case from 005411b0 and 00540270; no attachment.
   void prepareUnattachedGroundBone();
   const std::optional<SceneGroundBone> &groundBone() const {
@@ -263,6 +284,12 @@ public:
   // 00481240/004810b0: full Ypr basis + position*10 bone-local matrix
   // (0054ecd0 + 0054f4c0). Precision mirrors Vector3.rotate.
   void setBoneMatrix(const float position[3], const float ypr[3]);
+  // FUN_00482d30 (Navigator.updateNavigator) mode 0: patches the root bone
+  // translation from target x/z * 0.1, preserving height and rotation.
+  void setBoneTranslationKeepRotation(float x, float y, float z);
+  // FUN_00482d30 mode 1: rebuilds the camera bone from euler (yaw, -1.5, 0)
+  // with the translation offset by basis elements [2], [6] and [10] times 4.5.
+  void setNavigatorCameraBone(float targetX, float targetZ, float yaw);
   void setBoneTransform(const std::array<float, 3> &position,
                         const std::array<float, 12> &rotation);
   void processRootBoneUpdate();
@@ -270,15 +297,32 @@ public:
   bool attachPhysicsBone(GameWorld &world, WorldNode &physicsNode);
   void detachPhysicsBone();
   bool refreshPhysicsBone();
+  void setAttachmentOffset(const std::array<float, 16>& offset) {
+    attachmentOffset_ = offset;
+  }
+  void setDriverCar(LinkOwner* car) { setLinkOwner(driverCar_, car); }
   bool hasPhysicsBoneAttachment() const { return physicsBoneAttached_; }
   const std::optional<SceneTextState> &textState() const { return text_; }
   void setTextState(SceneTextState text) { text_ = std::move(text); }
+  // Stock material +0x38 points at the parsed skeleton; each render instance
+  // owns an independent pose built from the material's bind bones (00541400).
+  // Null until sceneEnsureSkeleton runs on a skeletal material.
+  const std::shared_ptr<SkeletonPose>& skeletonPose() const {
+    return skeletonPose_;
+  }
+  void setSkeletonPose(std::shared_ptr<SkeletonPose> pose) {
+    skeletonPose_ = std::move(pose);
+  }
 
 private:
   OwnerLink type_;
   uint32_t instanceColor_ = 0xffffffffu;
+  bool cameraPlane_ = false;
   OwnerLink physicsNode_;
+  OwnerLink driverCar_;
   bool physicsBoneAttached_ = false;
+  std::array<float, 16> attachmentOffset_{
+      {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1}};
   std::weak_ptr<physics::Body> physicsBody_;
   std::optional<SceneGroundBone> groundBone_;
   std::array<float, 16> boneMatrix_{
@@ -289,6 +333,7 @@ private:
       {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1}};
   bool rootBoneUpdatePending_ = false;
   std::optional<SceneTextState> text_;
+  std::shared_ptr<SkeletonPose> skeletonPose_;
 };
 
 class ResourceWorld;
@@ -300,6 +345,13 @@ struct SceneMaterialLoadResult {
 // Loads the bounded type-14 mesh/texture/flags payload. Destroy the result
 // before the ResourceWorld, which owns its linked nodes.
 SceneMaterialLoadResult sceneLoadMaterial(ResourceWorld &world, uint32_t id);
+
+// FUN_00541400 material creation: the instance pose copies the material's
+// parsed bind bones. Materials without a skeleton succeed with a null pose
+// (single-bone path); a declared skeleton file that failed to load fails with
+// error set instead of rendering a static skeleton.
+bool sceneEnsureSkeleton(ResourceWorld& world, SceneRenderInstance& instance,
+                         std::string& error);
 
 // Refreshes the first linked texture into host RGBA pixels. Failure clears the
 // output; this does not implement the stock renderer's complete cache refresh.
@@ -366,7 +418,7 @@ bool sceneRefreshMaterial(ResourceWorld &world,
                           const SceneMaterialResources &material,
                           const std::filesystem::path &root,
                           SceneMaterialCache &cache, std::string &error,
-                          bool requireCached = false);
+                          bool requireCached = false, bool textGeometry = false);
 
 struct SceneSpatialTexture {
   Raster3DTexture texture;

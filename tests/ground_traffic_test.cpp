@@ -76,6 +76,27 @@ int main() {
   const VmObject *ground = bindRef(arena, game, node.value);
   const int32_t groundHandle = std::get<int32_t>(ground->fields[0].value);
   setLinkOwner(game.bindings[groundHandle]->link, &node);
+  // The nearest crossing returns the road node, not the query point.
+  auto &roads = *preparation->files.roads;
+  roads.nodes[0].resize(2);
+  const float crossingA[3] = {10.f, 2.f, 3.f};
+  const float crossingB[3] = {30.f, 4.f, 5.f};
+  std::memcpy(roads.nodes[0][0].words.data(), crossingA, sizeof(crossingA));
+  std::memcpy(roads.nodes[0][1].words.data(), crossingB, sizeof(crossingB));
+  TufaClass vectorClass;
+  vectorClass.name = "java.lang.Vector3";
+  const std::vector<const TufaClass *> classes{&vectorClass};
+  const auto nearest = invokeNative("java.util.resource.GroundRef", "getNearestCross",
+      "(Ljava.lang.Vector3;F)Ljava.lang.Vector3;",
+      {VmValue{makeVector3(arena, 9.f, 2.f, 3.f)}, VmValue{0.f}}, ground, &arena, &classes);
+  const auto *nearestValue = std::get_if<VmValue>(&nearest);
+  assert(nearestValue && std::holds_alternative<const VmObject *>(*nearestValue));
+  const auto *crossing = std::get<const VmObject *>(*nearestValue);
+  assert(crossing && std::get<float>(crossing->fields[0].value) == 10.f &&
+         std::get<float>(crossing->fields[1].value) == 2.f &&
+         std::get<float>(crossing->fields[2].value) == 3.f);
+  roads.nodes[0].clear();
+
   const uint32_t taxi = 0x00350006;
   const VmObject *car = bindRef(arena, game, taxi);
 

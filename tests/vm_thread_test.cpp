@@ -30,6 +30,14 @@ static NativeResult callNested(const std::vector<VmValue> &, const VmObject *,
   return result.ok ? NativeResult{std::monostate{}}
                    : NativeResult{result.error};
 }
+static std::shared_ptr<VmHostTask> queuedTask;
+static NativeResult enqueueNested(const std::vector<VmValue> &, const VmObject *,
+                                  VmArena *arena,
+                                  const std::vector<const TufaClass *> *) {
+  const auto result = arena->scheduler->startHostTask(
+      callbackTarget, "run", {}, {}, queuedTask);
+  return result.ok ? NativeResult{std::monostate{}} : NativeResult{result.error};
+}
 static const VmObject *waitObject = nullptr;
 static NativeResult park(const std::vector<VmValue> &, const VmObject *,
                          VmArena *arena,
@@ -162,6 +170,46 @@ int main() {
                .ok);
   }
   {
+    // resolveScriptCall (src/vm.cpp ~3605): a script instance method whose
+    // tree is EMPTY resolves only when the declared return type is void;
+    // a non-void empty method is rejected. VmScheduler::startHostTask serves
+    // this path directly.
+    TufaClass cls;
+    cls.name = "test.EmptyHost";
+    cls.hasClassHeader = true;
+    cls.classHeader[3] = UINT32_MAX;
+    const auto text = [&](const char* s) {
+      cls.constants.push_back({0, s, 0, 0});
+      return static_cast<uint32_t>(cls.constants.size() - 1);
+    };
+    const auto runName = text("run"), runType = text("()V");
+    const auto valueName = text("value"), intType = text("()I");
+    cls.trees.emplace_back(); // tree 0: run, empty body
+    cls.trees.emplace_back(); // tree 1: value, empty body
+    cls.methods[0].push_back({{1, runName, runType, 0, 0}});
+    cls.methods[0].push_back({{1, valueName, intType, 1, 0}});
+    VmArena arena;
+    std::vector<const TufaClass*> classes{&cls};
+    std::vector<VmStaticFields> states;
+    std::vector<NativeEntry> natives;
+    VmScheduler scheduler(arena, &natives, &classes, &states,
+                          [] { return 0.0; });
+    auto* receiver = makeObject(arena, &cls);
+    bool alive = true;
+    std::shared_ptr<VmHostTask> task;
+    // Empty-body void method: resolves to no tree and finishes immediately.
+    CHECK(scheduler
+              .startHostTask(receiver, "run", {}, [&] { return alive; }, task)
+              .ok);
+    CHECK(task && task->finished && task->result.ok);
+    // Empty-body non-void method: "empty non-void method unsupported".
+    const auto rejected = scheduler.startHostTask(
+        receiver, "value", {}, [&] { return alive; }, task);
+    CHECK(!rejected.ok &&
+          std::strstr(rejected.error.c_str(),
+                      "empty non-void method unsupported") != nullptr);
+  }
+  {
     const auto quotient = vmExecute(
         {literal(-7), literal(2), node(0x07, 18, true), node(0x2b)}, {});
     CHECK(quotient.ok && std::get<int32_t>(quotient.value) == -3);
@@ -238,8 +286,7 @@ int main() {
     cls.hasClassHeader = true;
     cls.classHeader[3] = UINT32_MAX;
     cls.constants = {
-        {0, "test.Nested", 0, 0}, {4, {}, 0, 0}, {0, "child", 0, 0},
-        {0, "()I", 0, 0},         {7, {}, 2, 3}, {5, {}, 1, 4}};
+        {0, "test.Nested", 0, 0}, {4, {}, 0, 0}, {0, "child", 0, 0}, {0, "()I", 0, 0}, {7, {}, 2, 3}, {5, {}, 1, 4}};
     cls.methods[0].push_back({{8, 2, 3, 0, 0}});
     cls.trees.push_back({literal(42), node(0x2b)});
     const std::vector<TufaNode> outer{literal(0), node(0x24),
@@ -508,6 +555,39 @@ int main() {
     alive = false;
     CHECK(scheduler.tick(100).ok && task->finished && !task->result.ok);
     CHECK((events == std::vector<int>{11, 12, 11}));
+    waitObject = nullptr;
+  }
+  {
+    // A native hotkey callback may queue a modal script while its caller runs.
+    Script caller("test.Enqueue", 1, 2, false);
+    Script modal("test.Modal", 21, 22, true);
+    VmArena arena;
+    std::vector<const TufaClass *> classes{&caller.cls, &modal.cls};
+    std::vector<VmStaticFields> states;
+    std::vector<NativeEntry> natives{
+        {"test.Enqueue", "record", "(I)V", "test", enqueueNested},
+        {"test.Modal", "record", "(I)V", "test", record},
+        {"test.Modal", "sleep", "(F)V", "test", park}};
+    VmScheduler scheduler(arena, &natives, &classes, &states,
+                          [] { return 0.0; });
+    callbackTarget = makeObject(arena, &modal.cls);
+    waitObject = makeObject(arena, nullptr);
+    auto *source = makeObject(arena, &caller.cls);
+    // Only enqueue once, not at both record calls in the helper's run method.
+    caller.cls.trees[0].resize(5);
+    caller.cls.trees[0].push_back(node(0x2a));
+    std::shared_ptr<VmHostTask> sourceTask;
+    events.clear();
+    CHECK(scheduler.startHostTask(source, "run", {}, {}, sourceTask).ok);
+    CHECK(scheduler.tick(100).ok && sourceTask->finished);
+    CHECK(queuedTask && !queuedTask->finished && events.empty());
+    CHECK(scheduler.tick(100).ok && (events == std::vector<int>{21}));
+    CHECK(queuedTask && !queuedTask->finished);
+    CHECK(scheduler.notify(waitObject, false).ok && scheduler.tick(100).ok);
+    CHECK(queuedTask && queuedTask->finished && queuedTask->result.ok);
+    CHECK((events == std::vector<int>{21, 22}));
+    queuedTask.reset();
+    callbackTarget = nullptr;
     waitObject = nullptr;
   }
   {

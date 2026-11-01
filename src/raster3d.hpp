@@ -92,7 +92,11 @@ struct Raster3DLight {
   bool enabled = false;
   std::array<float, 3> toLight{
       {0.4f, 0.8f, 0.5f}}; // world-space direction towards the light
-  float ambient = 0.45f, diffuse = 0.65f;
+  // Fixed-function vertex colour per channel: ambient + diffuse * max(N.L, 0)
+  // (D3D directional-light convention; stock's per-vertex software lighting
+  // FUN_004bb7f0 writes the same two-term form into the vertex colours).
+  std::array<float, 3> ambient{{0.45f, 0.45f, 0.45f}};
+  std::array<float, 3> diffuse{{0.65f, 0.65f, 0.65f}};
 };
 struct Raster3DFixedDraw;
 

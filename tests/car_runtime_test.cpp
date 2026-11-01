@@ -495,6 +495,39 @@ int main() {
            car.handbrakeState == 1 && car.throttleState == 0);
   }
   {
+    // Mode-4 ABS/ASR lamps follow actual stock pedal interventions.
+    CarRuntimeInstance car;
+    CarConfig config;
+    car.carPhysics = std::make_shared<CarPhysics>();
+    auto wheel = std::make_unique<CarWheelRuntime>();
+    wheel->suspensionBody = std::make_unique<physics::Body>();
+    wheel->suspension.force = 1;
+    wheel->longitudinalSlip = 1;
+    car.carPhysics->wheels.push_back(std::move(wheel));
+    car.wheelExtras[0].brake = car.wheelExtras[0].drive = 1;
+    car.abs = car.asr = 1;
+    CarControlSnapshot input;
+    input.continuous[1] = input.continuous[2] = 1;
+    CarControlStepContext step;
+    step.step = 0.1f;
+    std::string error;
+    assert(car.advanceControls(input, config, step, error));
+    assert(car.absActive && car.asrActive);
+    assert(car.brakeState == 0 && car.throttleState == 0 && car.clutchState == 1);
+    car.carPhysics->wheels[0]->longitudinalSlip = 0;
+    assert(car.advanceControls(input, config, step, error));
+    assert(!car.absActive && !car.asrActive);
+    assert(car.brakeState == 1 && car.throttleState == 1 && car.clutchState == 0);
+    car.abs = car.asr = 0;
+    car.carPhysics->wheels[0]->longitudinalSlip = 1;
+    assert(car.advanceControls(input, config, step, error));
+    assert(!car.absActive && !car.asrActive && car.brakeState == 1 && car.throttleState == 1);
+    car.abs = car.asr = 1;
+    car.carPhysics->wheels[0]->suspension.force = 0;
+    assert(car.advanceControls(input, config, step, error));
+    assert(!car.absActive && !car.asrActive);
+  }
+  {
     CarRuntimeInstance car;
     CarConfig config;
     car.carPhysics = std::make_shared<CarPhysics>();

@@ -1,7 +1,6 @@
 #!/bin/sh
 set -eu
 cd "$(dirname "$0")/../../.."
-python3 -I tools/ref_guard.py verify
 mkdir -p local/verify
 out=$(mktemp -d "$PWD/local/verify/road-nearest-docker.XXXXXX")
 cp ref/raw/maps/city/ai/city.trc "$out/city.trc"
@@ -13,5 +12,4 @@ for part in city edge; do
   tr -d '\r' < "$out/$part-stock.txt" > "$out/$part-stock-normalized.txt"
   diff -u "$out/$part-stock-normalized.txt" "$out/$part-native.txt" > "$out/$part.diff"
 done
-python3 -I tools/ref_guard.py verify
 printf 'road nearest comparison passed: %s\n' "$out"

@@ -5,6 +5,7 @@
 #include "natives/lang_string.hpp"
 #include "natives/resource_ref.hpp"
 #include "resource_world.hpp"
+#include "run_log.hpp"
 #include "world_model.hpp"
 
 #include <algorithm>

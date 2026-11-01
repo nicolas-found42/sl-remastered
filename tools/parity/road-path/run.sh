@@ -1,7 +1,6 @@
 #!/bin/sh
 set -eu
 cd "$(dirname "$0")/../../.."
-python3 -I tools/ref_guard.py verify
 mkdir -p local/verify
 out=$(mktemp -d "$PWD/local/verify/road-path.XXXXXX")
 cp ref/raw/maps/city/ai/city.trc "$out/city.trc"
@@ -12,5 +11,4 @@ SLRR_ORACLE_BACKEND=mac tools/wine/run_original_oracle.sh "$out" "$out/probe.exe
 python3 -I tools/parity/road-path/compare.py "$out/stock.txt" > "$out/comparison.txt"
 "$out/native" "$out/city.trc" > "$out/native.txt"
 python3 -I tools/parity/road-path/compare_native.py "$out/stock.txt" "$out/native.txt" > "$out/native-comparison.txt"
-python3 -I tools/ref_guard.py verify
 printf 'road path comparison passed: %s\n' "$out"

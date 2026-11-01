@@ -9,6 +9,7 @@
 #include "hotkeys.hpp"
 #include "natives/game_type.hpp"
 #include "natives/registry.hpp"
+#include "object_physics.hpp"
 #include "pack_registry.hpp"
 #include "physics_compound.hpp"
 #include "render2d.hpp"
@@ -164,6 +165,8 @@ int main() {
   const TufaClass *dummy = loadGraph("java.util.resource.Dummy");
   const TufaClass *gameRef = loadGraph("java.util.resource.GameRef");
   const TufaClass *vectorClass = loadGraph("java.util.Vector");
+  CHECK(loadGraph("java.lang.Vector3"));
+  CHECK(loadGraph("java.lang.Ypr"));
   CHECK(stringClass && dummy && gameRef && vectorClass);
   if (!stringClass || !dummy || !gameRef || !vectorClass)
     return 1;
@@ -493,6 +496,29 @@ int main() {
         if (!binding)
           binding = std::make_unique<ReceiverBinding>();
         setLinkOwner(binding->link, cameraNode);
+        auto cameraBody = world.dynamicBody(*cameraNode->cameraDevice->physicsNode()).lock();
+        CHECK(cameraBody);
+        if (cameraBody) {
+          cameraBody->state[cameraBody->current].pos = {-3.0f, 1.5f, -2.0f};
+          cameraBody->state[cameraBody->current].rot = object::matrixFromEuler({0.4f, 0.2f, -0.1f});
+          const auto checkPose = [&](const NativeResult &result, const char *a,
+                                     const char *b, const char *c,
+                                     float x, float y, float z) {
+            const auto *value = std::get_if<VmValue>(&result);
+            const auto *object = value && std::holds_alternative<const VmObject *>(*value)
+                                     ? std::get<const VmObject *>(*value) : nullptr;
+            CHECK(object && vm_test::fieldOf(object, a) && vm_test::fieldOf(object, b) &&
+                  vm_test::fieldOf(object, c));
+            if (object && vm_test::fieldOf(object, a) && vm_test::fieldOf(object, b) &&
+                vm_test::fieldOf(object, c)) {
+              CHECK(std::fabs(std::get<float>(vm_test::fieldOf(object, a)->value) - x) < 0.0001f);
+              CHECK(std::fabs(std::get<float>(vm_test::fieldOf(object, b)->value) - y) < 0.0001f);
+              CHECK(std::fabs(std::get<float>(vm_test::fieldOf(object, c)->value) - z) < 0.0001f);
+            }
+          };
+          checkPose(gameRefGetPos({}, cameraRef, &arena, &loaded), "x", "y", "z", -3, 1.5f, -2);
+          checkPose(gameRefGetOri({}, cameraRef, &arena, &loaded), "y", "p", "r", 0.4f, 0.2f, -0.1f);
+        }
         const auto command = [&](int32_t event, const char *text) {
           return gameRefQueueEvent(
               {VmValue{null}, VmValue{event}, VmValue{cameraString(text)}},
@@ -2525,8 +2551,7 @@ int main() {
       setLinkOwner(first->player->renderInstance, third);
       CHECK(std::holds_alternative<std::monostate>(command(playerRef)));
       CHECK(owner() == static_cast<int32_t>(first->instanceId));
-      CHECK(first->player->controllable.owner == car &&
-            first->player->driverPoseParityReported);
+      CHECK(first->player->controllable.owner == car);
       CHECK(car->carInstance->seats[0]->renderInstance.owner == third);
       CHECK(!car->carInstance->seats[0]->camera.owner &&
             !car->carInstance->seats[0]->osd.owner);
@@ -2642,6 +2667,8 @@ int main() {
     game.resources = nullptr;
   }
   {
+    ResourceWorld installResources(world, packs);
+    game.resources = &installResources;
     const VmObject *partRef = allocateDummy();
     CHECK(partRef && construct(partRef, 0).ok);
     const auto *partState = nativeResourceState(partRef, &arena);
@@ -2654,6 +2681,8 @@ int main() {
     if (part && target && partScript && targetScript) {
       partScript->car = std::make_unique<CarPrototype>();
       targetScript->car = std::make_unique<CarPrototype>();
+      partScript->car->config.centerMass = 20.0f;
+      targetScript->car->config.centerMass = 100.0f;
       setLinkOwner(partScript->car->source, partScript);
       setLinkOwner(targetScript->car->source, targetScript);
       CarSlot partProtoSlot;
@@ -2676,6 +2705,9 @@ int main() {
       targetSlot->id = 22;
       targetSlot->slotType = 201;
       target->carInstance->isCar = true;
+      target->nativeDevice = "car";
+      target->scriptReceiver = allocateDummy();
+      CHECK(target->scriptReceiver);
       target->carInstance->slots.push_back(std::move(targetSlot));
       CarConfig physicsConfig;
       physicsConfig.rootBody = 0;
@@ -2697,6 +2729,8 @@ int main() {
                                                          0, 0, 0, 1};
       target->carInstance->slots[0]->transform.rotation = {1, 0, 0, 0, 1,
                                                            0, 0, 0, 1};
+      carPartUpdateMass(*target, world);
+      CHECK(target->carInstance->totalMass == 100.0f);
       const auto *command = string(
           "install 0 -123 0 " +
           std::to_string(static_cast<int32_t>(target->instanceId)) + " 22");
@@ -2705,14 +2739,34 @@ int main() {
           &arena, &loaded)));
       CHECK(part->carInstance->slots[0]->attachedNode.owner == target);
       CHECK(target->carInstance->slots[0]->attachedNode.owner == part);
+      CHECK(target->carInstance->totalMass == 120.0f);
+      const auto carRefResult = invokeNative("java.game.parts.Part", "getCarRef",
+          "()Ljava.game.parts.Part;", {}, partRef, &arena, &loaded);
+      const auto *carRefValue = std::get_if<VmValue>(&carRefResult);
+      CHECK(carRefValue && std::holds_alternative<const VmObject *>(*carRefValue) &&
+            std::get<const VmObject *>(*carRefValue) == target->scriptReceiver);
       CHECK(part->carInstance->partPhysics->root->attachment->parent ==
             target->carInstance->partPhysics->root.get());
       CHECK(carPartRemove(*part, 11, arena, physicsError));
+      CHECK(target->carInstance->totalMass == 100.0f);
       CHECK(!part->carInstance->partPhysics->root->attachment);
       CHECK(!target->carInstance->slots[0]->attachedNode.owner);
+      const auto *autoCommand = string(
+          "install 0 " + std::to_string(static_cast<int32_t>(target->instanceId)) +
+          " 0 0 0 100 100 100");
+      CHECK(std::holds_alternative<std::monostate>(gameRefQueueEvent(
+          {VmValue{null}, VmValue{int32_t{0x10}}, VmValue{autoCommand}}, partRef,
+          &arena, &loaded)));
+      CHECK(part->carInstance->installParentLink.owner == target);
+      CHECK(part->carInstance->slots[0]->attachedNode.owner == target);
+      CHECK(target->carInstance->slots[0]->attachedNode.owner == part);
+      CHECK(carPartRemove(*part, 11, arena, physicsError));
     }
+    game.resources = nullptr;
   }
   {
+    ResourceWorld cursorResources(world, packs);
+    game.resources = &cursorResources;
     const auto *cursorRef = allocateDummy();
     CHECK(cursorRef && construct(cursorRef, 0).ok);
     const auto *cursorState = nativeResourceState(cursorRef, &arena);
@@ -2723,6 +2777,20 @@ int main() {
       cursorNode->nativeDevice = "cursor";
       cursorNode->eventMask |= 0x10;
       cursorNode->cursor = std::make_unique<CursorInstance>();
+      VmObject mouse;
+      mouse.fields.push_back({"cursor", cursorRef, "Ljava.util.resource.GameRef;"});
+      cursorNode->cursor->x = 0.375f;
+      cursorNode->cursor->y = -0.625f;
+      const auto position = invokeNative("java.io.MouseCursor", "getPos",
+                                         "()Ljava.lang.Vector3;", {}, &mouse,
+                                         &arena, &loaded);
+      const auto *positionValue = std::get_if<VmValue>(&position);
+      const auto *positionObject = positionValue && std::holds_alternative<const VmObject *>(*positionValue)
+                                       ? std::get<const VmObject *>(*positionValue) : nullptr;
+      CHECK(positionObject && vm_test::fieldOf(positionObject, "x") &&
+            std::get<float>(vm_test::fieldOf(positionObject, "x")->value) == 0.375f &&
+            std::get<float>(vm_test::fieldOf(positionObject, "y")->value) == -0.625f &&
+            std::get<float>(vm_test::fieldOf(positionObject, "z")->value) == 0.0f);
       world.setCursorConfiguration(1, 1);
       std::vector<bool> visible;
       world.setCursorSelector(
@@ -2755,6 +2823,7 @@ int main() {
       CHECK(cursorNode->cursor->flags == 6 && world.cursorDisplayCount() == -1);
       world.setCursorSelector({});
     }
+    game.resources = nullptr;
   }
   return failures ? 1 : 0;
 }

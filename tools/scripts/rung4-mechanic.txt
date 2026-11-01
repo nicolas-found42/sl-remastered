@@ -1,0 +1,42 @@
+# Buy an affordable used car, enter mechanic mode and probe visible car parts.
+8 move 320 240
+9.5 move 250 96
+10.5 down
+11 up
+14 sdl_type Tester
+16 move 256 378
+16.5 down
+17 up
+19 move 318 376
+19.5 down
+20 up
+24.5 move 318 378
+25 down
+25.5 up
+28 move 208 38
+28.5 down
+29 up
+42 move 565 42
+42.5 down
+43 up
+48 move 220 378
+48.5 down
+49 up
+60 shot @run/garage-purchased.bmp
+62 move 380 38
+62.5 down
+63 up
+68 shot @run/mechanic-before.bmp
+70 move 250 240
+70.5 down
+71 up
+74 shot @run/mechanic-pick1.bmp
+76 move 320 240
+76.5 down
+77 up
+80 shot @run/mechanic-pick2.bmp
+82 move 440 240
+82.5 down
+83 up
+86 shot @run/mechanic-pick3.bmp
+89 quit

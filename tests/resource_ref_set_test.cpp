@@ -416,11 +416,13 @@ int main() {
     loopArgs[4] = int32_t{1};
     CHECK(isId(invokeNative("java.util.resource.SfxRef", "nplay",
                             "(Ljava.lang.Vector3;FFFII)I", loopArgs, ref,
-                            &host.arena, &host.classes), 7));
+                            &host.arena, &host.classes),
+               7));
     CHECK(effects->voiceCount() == 1 && effects->tick(error));
     CHECK(isId(invokeNative("java.util.resource.SfxRef", "nplay",
                             "(Ljava.lang.Vector3;FFFII)I", loopArgs, ref,
-                            &host.arena, &host.classes), 7));
+                            &host.arena, &host.classes),
+               7));
     CHECK(effects->tick(error) && effects->voiceCount() == 1);
     CHECK(effects->tick(error) && effects->voiceCount() == 0);
     loopArgs[4] = int32_t{2};
@@ -886,6 +888,49 @@ int main() {
     if (surface)
       SDL_DestroySurface(surface);
     SDL_Quit();
+  }
+  {
+    // RenderRef.setColor(I)V (handler 00480310 -> 0048c8c0): resolves the
+    // bound render instance and stores the color word at instance +0xcc
+    // through vmColorArg (the raw int32 bits); a receiver whose binding has
+    // no owner is a no-op success.
+    GameWorld world;
+    CHECK(world.addRoot());
+    ResourceWorld resources(world, packs);
+    VmGameState game{&packs, &world, {}, {}, &resources};
+    Host host;
+    host.arena.gameState = &game;
+    auto* renderNode =
+        world.addTypedChild(*world.defaultParent(), 3, "color-target", 0);
+    CHECK(renderNode != nullptr);
+    if (!renderNode)
+      return 1;
+    auto instance = std::make_shared<SceneRenderInstance>(nullptr);
+    CHECK(instance->instanceColor() == 0xffffffffu);
+    CHECK(resources.bindSceneRenderInstance(resources.resolve(renderNode),
+                                            instance));
+    const VmObject* ref = host.make();
+    CHECK(ok(host.newNative(ref)) && ok(host.set(ref, renderNode->instanceId)));
+    const uint32_t color = 0x11223344u;
+    int32_t colorArg;
+    std::memcpy(&colorArg, &color, sizeof colorArg);
+    const auto setColor = [&](const VmObject* receiver) {
+      return invokeNative("java.util.resource.RenderRef", "setColor", "(I)V",
+                          {VmValue{colorArg}}, receiver, &host.arena,
+                          &host.classes);
+    };
+    CHECK(ok(setColor(ref)));
+    CHECK(instance->instanceColor() == color);
+    // Non-int arguments are rejected.
+    CHECK(contains(errorOf(invokeNative(
+                       "java.util.resource.RenderRef", "setColor", "(I)V",
+                       {VmValue{1.0f}}, ref, &host.arena, &host.classes)),
+                   "invalid RenderRef.setColor call"));
+    // A receiver whose binding resolved to nothing (missing id): the
+    // binding has no owner, so setColor is a no-op success.
+    const VmObject* unbound = host.make();
+    CHECK(ok(host.newNative(unbound)) && ok(host.set(unbound, systemMissing)));
+    CHECK(ok(setColor(unbound)));
   }
   if (failures) {
     std::printf("%d failure(s)\n", failures);

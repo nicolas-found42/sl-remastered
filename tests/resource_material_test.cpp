@@ -9,15 +9,15 @@
 #include <vector>
 
 static int failures = 0;
-#define CHECK(c)                                                               \
-  do {                                                                         \
-    if (!(c)) {                                                                \
-      std::printf("FAIL line %d: %s\n", __LINE__, #c);                         \
-      ++failures;                                                              \
-    }                                                                          \
+#define CHECK(c)                                       \
+  do {                                                 \
+    if (!(c)) {                                        \
+      std::printf("FAIL line %d: %s\n", __LINE__, #c); \
+      ++failures;                                      \
+    }                                                  \
   } while (0)
 
-static ResourceMaterialResult fixture(const std::string &text,
+static ResourceMaterialResult fixture(const std::string& text,
                                       uint8_t type = 14) {
   std::vector<uint8_t> bytes(text.begin(), text.end());
   PackResource r{};
@@ -36,6 +36,18 @@ int main() {
   const auto parsed = resourceMaterialParse(material);
   CHECK(parsed.ok && parsed.mesh == 0xd9 &&
         parsed.textures == std::vector<uint32_t>{0xaf} && parsed.flags == 4096);
+  // FUN_00541400 scan: skeleton path and numbones directives parse, and a
+  // duplicated directive still rejects the payload.
+  {
+    const auto skel = fixture(
+        "mesh 0x1\r\nskeleton humans\\drivers\\vin.skl\r\nnumbones 21\r\n");
+    CHECK(skel.ok && skel.bones == 21 &&
+          skel.skeleton == "humans\\drivers\\vin.skl");
+    const auto dup = fixture("mesh 0x1\r\nnumbones 3\r\nnumbones 4\r\n");
+    CHECK(!dup.ok);
+    const auto unknown = fixture("mesh 0x1\r\nskeletonfoo x\r\n");
+    CHECK(!unknown.ok);
+  }
   uint32_t meshId = 0, textureId = 0;
   PackResource mesh{}, texture{};
   CHECK(registry.resolveLiteral("frontend.rpk", parsed.mesh, meshId, error));

@@ -303,5 +303,46 @@ int main() {
         return onePerRoot ? 22 : 23;
     }
   }
+  // Sleeping dynamic roots remain registered contact targets. A real
+  // correction wakes them in-pass; a later gather failure rolls the wake,
+  // activity seed and modified velocities back with the complete tree.
+  {
+    Body sleeper, striker;
+    sleeper.proto = striker.proto = &proto;
+    sleeper.flags = kBodyActive | kBodyNoRotation | kBodyAsleep;
+    striker.flags = kBodyActive | kBodyNoRotation;
+    striker.state[0].vel = {-2, 0, 0};
+    World wakeWorld;
+    wakeWorld.params.gravityEnabled = false;
+    wakeWorld.bodies = {&sleeper, &striker};
+    MultiRootWork wakeWork;
+    wakeWork.contacts = true;
+    unsigned gather = 0;
+    bool injectFailure = true;
+    wakeWork.gatherContacts = [&](std::vector<DirectContact>& out, std::string& why) {
+      if (gather++) {
+        if (injectFailure) { why = "injected failure after contact wake"; return false; }
+        return true;
+      }
+      DirectContact c;
+      c.a = &sleeper;
+      c.b = &striker;
+      c.normal = {-1, 0, 0};
+      c.separation = 0.025f;
+      out.push_back(c);
+      return true;
+    };
+    const std::vector<BodyTree> wakeRoots{{&sleeper}, {&striker}};
+    if (stepMultiRootWorld(wakeWorld, wakeRoots, 0.01f, wakeWork, error) !=
+            FreeBodyStepResult::Unsupported || !(sleeper.flags & kBodyAsleep) ||
+        sleeper.activity != Vec3{} || sleeper.state[0].vel != Vec3{} || wakeWorld.time != 0)
+      return 24;
+    injectFailure = false;
+    gather = 0;
+    if (stepMultiRootWorld(wakeWorld, wakeRoots, 0.01f, wakeWork, error) !=
+            FreeBodyStepResult::Advanced || (sleeper.flags & kBodyAsleep) ||
+        sleeper.activity[1] < 1000 || sleeper.state[sleeper.current].vel[0] >= 0)
+      return 25;
+  }
   return 0;
 }

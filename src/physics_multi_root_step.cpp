@@ -25,8 +25,6 @@ bool validate(const std::vector<BodyTree> &roots, std::string &error) {
         const char *why = nullptr;
         if (!(b->flags & kBodyActive))
           why = "inactive";
-        else if (b->flags & kBodyAsleep)
-          why = "asleep";
         else if (b->proto->flags & kProtoStatic)
           why = "static prototype";
         else if (b->attachment)
@@ -231,6 +229,8 @@ bool predictRootSet(const std::vector<BodyTree> &roots, float dt,
   }
   Snapshot snapshot(roots);
   for (const auto &tree : roots) {
+    if (tree[0]->flags & kBodyAsleep)
+      continue;
     const bool ok =
         tree.size() == 1 ? stepBody(*tree[0], dt) : predictCompound(tree, dt);
     if (!ok) {
@@ -295,9 +295,18 @@ FreeBodyStepResult stepMultiRootWorld(World &world,
             work.suspensions.begin() + i)
       return fail("multi-root: unsupported suspension");
   }
+  // A follow's look/move targets are only read (pose copies below), never
+  // stepped: stock's camera force (00438b60) runs while the world step
+  // skips sleeping trees in every pass, reading their resting pose. A
+  // follow may therefore target an asleep body that is not a root -- e.g.
+  // the chase camera of a sleeping car beside awake scene objects.
+  const auto followTargetUsable = [&](const Body *body) {
+    return isRoot(body) || (body && (body->flags & kBodyAsleep) != 0);
+  };
   for (const auto &cb : work.cameraCallbacks) {
-    if (!isRoot(cb.camera) || !isRoot(cb.look) || !isRoot(cb.move) ||
-        !cb.smoothing || !cb.input.otherBranchesInactive)
+    if (!isRoot(cb.camera) || !followTargetUsable(cb.look) ||
+        !followTargetUsable(cb.move) || !cb.smoothing ||
+        !cb.input.otherBranchesInactive)
       return fail("multi-root: unsupported camera callback");
   }
   const float total = dt + world.pending;
@@ -400,6 +409,7 @@ FreeBodyStepResult stepMultiRootWorld(World &world,
           return fail("multi-root: unsupported selected suspension contact");
         }
       }
+      for (auto& contact : contacts) contact.processed = false;
       bool corrected = false;
       // Contacts that may be corrected in this pass (indexes into `contacts`).
       std::vector<bool> allowed(contacts.size(), true);
@@ -423,6 +433,9 @@ FreeBodyStepResult stepMultiRootWorld(World &world,
         });
         std::set<const Body *> used;
         for (const size_t i : order) {
+          // State 7 resting constraints do not own the one-pending-impact
+          // mark (FUN_004a35d0 only consumes state 6).
+          if (contacts[i].resting) { allowed[i] = true; continue; }
           // Static roots (the ground) never hold a pending mark: 0049b830
           // checks the dynamic body's root only.
           const auto dynamicRoot = [&](const Body *body) -> const Body * {
@@ -441,27 +454,57 @@ FreeBodyStepResult stepMultiRootWorld(World &world,
           allowed[i] = true;
         }
       }
-      for (size_t contactIndex = 0; contactIndex < contacts.size();
-           ++contactIndex) {
-        auto &contact = contacts[contactIndex];
-        if (!allowed[contactIndex])
-          continue;
+      // FUN_004a3900: compute all resting RHS/diagonal results before
+      // applying any force. Pending impacts (004a35d0) follow this batch.
+      for (const auto& contact : contacts) {
         if (!usableContactBody(contact.a) || !usableContactBody(contact.b)) {
-          rollback();
-          return fail("multi-root: unsupported contact body");
+          rollback(); return fail("multi-root: unsupported contact body");
         }
-        const int result = correctDirectContact(contact, contactWorld);
-        if (result < 0) {
-          rollback();
-          return fail("multi-root: contact correction unsupported");
+      }
+      if (solveRestingContacts(contacts, contactWorld) < 0) {
+        rollback(); return fail("multi-root: resting contact unsupported");
+      }
+      // FUN_004a5190 (121102-121136): retained direct contacts settle
+      // before 004a2540/004a35d0 admit and correct new pending impacts.
+      for (unsigned stage = 0; stage < 2; ++stage) {
+        // The shipped count-19 escape (004a53c5 -> 004a53cb) still
+        // discovers new impacts even when retained rows keep correcting.
+        if (stage != 0 && corrected && iteration != 18)
+          break;
+        for (size_t contactIndex = 0; contactIndex < contacts.size();
+             ++contactIndex) {
+          auto &contact = contacts[contactIndex];
+          if (contact.resting != (stage == 0) || contact.constraintRow ||
+              !allowed[contactIndex])
+            continue;
+          if (!usableContactBody(contact.a) || !usableContactBody(contact.b)) {
+            rollback();
+            return fail("multi-root: unsupported contact body");
+          }
+          contact.processed = true;
+          const int result = correctDirectContact(contact, contactWorld);
+          if (result < 0) {
+            rollback();
+            return fail("multi-root: contact correction unsupported");
+          }
+          corrected |= result != 0;
+          contact.resting = true;
         }
-        corrected |= result != 0;
       }
       if (work.finishContacts)
         work.finishContacts(contacts);
       // 004a3bc0 predicts only invalidated roots after each solve pass.
+      size_t snapshotIndex = 0;
       for (const auto &tree : roots) {
+        const bool rootWasAsleep = snapshot.bodies[snapshotIndex].flags & kBodyAsleep;
+        snapshotIndex += tree.size();
         Body &root = *tree[0];
+        if (root.flags & kBodyAsleep)
+          continue;
+        // FUN_004a7990 recursively wakes descendants. The direct corrector
+        // wakes the root; complete its registered tree before prediction.
+        if (rootWasAsleep)
+          for (Body* member : tree) member->flags &= ~kBodyAsleep;
         if (root.state[root.current ^ 1].stepFlags & 1u)
           continue;
         const bool ok = tree.size() == 1 ? stepBody(root, total)
@@ -478,6 +521,8 @@ FreeBodyStepResult stepMultiRootWorld(World &world,
     // Suspension forces can invalidate prediction even without contact work.
     for (const auto &tree : roots) {
       Body &root = *tree[0];
+      if (root.flags & kBodyAsleep)
+        continue;
       if (root.state[root.current ^ 1].stepFlags & 1u)
         continue;
       const bool ok = tree.size() == 1 ? stepBody(root, total)
@@ -488,8 +533,11 @@ FreeBodyStepResult stepMultiRootWorld(World &world,
       }
     }
   }
-  world.stepsDone += static_cast<uint32_t>(roots.size());
+  world.stepsDone += static_cast<uint32_t>(std::count_if(roots.begin(), roots.end(),
+      [](const BodyTree& tree) { return !(tree[0]->flags & kBodyAsleep); }));
   for (const auto &tree : roots) {
+    if (tree[0]->flags & kBodyAsleep)
+      continue;
     if (tree.size() == 1) {
       const auto status = commit(*tree[0]);
       if (status == CommitResult::WentToSleep)

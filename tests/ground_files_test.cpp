@@ -1,5 +1,6 @@
 #include "ground_files.hpp"
 #include "ground_runtime.hpp"
+#include "game_spatial_payload.hpp"
 #include "road_other_initial.hpp"
 #include "resource_world.hpp"
 #include "scene_2d.hpp"
@@ -35,6 +36,34 @@ int main() {
   assert(payload.parameters);
   GameResourcePayload preparedPayload;
   assert(resources.prepareGamePayload(*found.node.packNode, preparedPayload, error));
+  {
+    // Stock 0053e1a0 reads the POLY chunk's version word and discards it: a
+    // garbage version must not fail preparation, and the POLY data is
+    // retained exactly as supplied.
+    GameResourcePayload polyPayload;
+    GamePolygonChunk poly;
+    poly.version = 0xdeadbeef;
+    GamePolygonGroup group;
+    group.kind = 3;
+    group.records.push_back({1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14});
+    group.triples.push_back({15, 16, 17});
+    poly.groups.push_back(group);
+    polyPayload.geometryChunks.push_back(poly);
+    PreparedSpatialGamePayload preparedPoly;
+    assert(prepareSpatialGamePayload(polyPayload, preparedPoly, error));
+    assert(preparedPoly.polygons && preparedPoly.polygons->version == 0xdeadbeef);
+    assert(preparedPoly.polygons->groups.size() == 1 &&
+           preparedPoly.polygons->groups[0].kind == 3 &&
+           preparedPoly.polygons->groups[0].records.size() == 1 &&
+           preparedPoly.polygons->groups[0].records[0][13] == 14 &&
+           preparedPoly.polygons->groups[0].triples.size() == 1 &&
+           preparedPoly.polygons->groups[0].triples[0][2] == 17);
+    // A second POLY chunk is rejected instead of silently replacing the first.
+    polyPayload.geometryChunks.push_back(poly);
+    PreparedSpatialGamePayload rejected;
+    assert(!prepareSpatialGamePayload(polyPayload, rejected, error));
+    assert(error.find("multiple POLY") != std::string::npos);
+  }
   auto cityMaterial = sceneLoadMaterial(resources, (uint32_t(slot) << 16) | 0x10);
   assert(cityMaterial.material);
   ScxModel cityMesh;
@@ -117,11 +146,22 @@ int main() {
     auto put32 = [&](uint32_t value) {
       for (int i = 0; i < 4; ++i) bytes.push_back(static_cast<uint8_t>(value >> (8 * i)));
     };
-    put32(0x200); put32(0); put32(0);
-    put32(46); put32(2); put32(0); put32(0);
+    put32(0x200);
+    put32(0);
+    put32(0);
+    put32(46);
+    put32(2);
+    put32(0);
+    put32(0);
     for (uint32_t id : {3u, 9u}) {
-      put32(0); put32(id); bytes.push_back(6); bytes.push_back(0);
-      put32(0); put32(0); put32(0); bytes.push_back(0);
+      put32(0);
+      put32(id);
+      bytes.push_back(6);
+      bytes.push_back(0);
+      put32(0);
+      put32(0);
+      put32(0);
+      bytes.push_back(0);
     }
     {
       std::ofstream file(std::filesystem::path(dir) / "system.rpk", std::ios::binary);
@@ -228,4 +268,78 @@ int main() {
   parameters.roadPath = "maps\\city\\meshes\\city.scm";
   assert(!prepareGroundFiles(registry.root(), parameters, 1.0f, files, error));
   assert(!files.materials && !files.roads);
+  {
+    // A ground without a material file (bindGroundFallbackMaterial) accepts
+    // any material word during face resolution, but its faces yield no
+    // per-face material, so no tire material can be inherited.
+    ResourceNode* sector = found.node.packNode;
+    assert(sector && sector->type == 1 && !sector->children.empty());
+    ResourceNode* leaf = nullptr;
+    for (auto* child : sector->children)
+      if (child->type == 1 && !child->loaded()) {
+        leaf = child;
+        break;
+}
+    assert(leaf);
+    auto ground = std::make_shared<GroundPreparation>();
+    ground->physics = createGroundRuntime({}, 1.0f);
+    assert(ground->physics &&
+           ground->physics->body.proto == &ground->physics->prototype);
+    assert(!ground->files.materials);
+    assert(bindGroundFallbackMaterial(resources, *ground, error));
+    assert(ground->fallbackMaterial);
+    auto* body = resources.addGameChild(*sector, "ground body", 0);
+    assert(body);
+    body->type = 2;
+    body->loaded = true;
+    body->groundBody = ground->physics;
+    setLinkOwner(ground->bodyResource, body);
+    auto factory = std::make_shared<GroundFactoryResult>();
+    factory->preparation = ground;
+    setLinkOwner(factory->city, sector);
+    sector->groundFactory = factory;
+    const auto savedSectorState = sector->stateWord;
+    sector->stateWord |= 1;
+    const auto savedLeafState = leaf->stateWord;
+    leaf->stateWord |= 1;
+    auto leafPayload = std::make_shared<PreparedSpatialGamePayload>();
+    leafPayload->physics = GamePhysicsGeometry{};
+    leafPayload->physics->triangles.resize(2);
+    leafPayload->physics->triangles[0].materialWord = 0xdead;
+    leafPayload->physics->triangles[1].materialWord = 0xbeef;
+    leaf->spatialPayload = leafPayload;
+    setLinkOwner(leaf->sectorLink, sector);
+    {
+      // Any material word resolves through the fallback material...
+      auto face = resolveSpatialGroundFace(resources, *leaf, 1, error);
+      assert(face && face->valid());
+      assert(face->leafOwner() == static_cast<LinkOwner*>(leaf));
+      assert(face->body() == ground->physics.get());
+      assert(face->bodyOwner() == ground->physics);
+      assert(face->geometry() == &*leafPayload->physics);
+      assert(face->face() && face->face()->materialWord == 0xbeef);
+      // ...but the face carries no per-face (tire) material.
+      assert(!face->material());
+      // An unloaded leaf stops resolving; reloading restores the same face.
+      leaf->stateWord &= ~uint32_t{1};
+      assert(!resolveSpatialGroundFace(resources, *leaf, 1, error));
+      leaf->stateWord |= 1;
+      assert(resolveSpatialGroundFace(resources, *leaf, 1, error));
+    }
+    // With a material table installed, the same out-of-range word is rejected
+    // instead of falling back, and in-range words resolve against the table.
+    ground->files.materials = GroundConfig{};
+    ground->files.materials->materials.resize(2);
+    assert(!resolveSpatialGroundFace(resources, *leaf, 1, error));
+    leafPayload->physics->triangles[1].materialWord = 1;
+    auto faced = resolveSpatialGroundFace(resources, *leaf, 1, error);
+    assert(faced && faced->valid() &&
+           faced->material() == &ground->files.materials->materials[1]);
+    faced.reset();
+    leaf->spatialPayload.reset();
+    leaf->stateWord = savedLeafState;
+    setLinkOwner(leaf->sectorLink, nullptr);
+    sector->groundFactory.reset();
+    sector->stateWord = savedSectorState;
+  }
 }

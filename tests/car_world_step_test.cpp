@@ -173,6 +173,17 @@ int main() {
   root.state[1] = root.state[0];
 
   CarWorldStepper stepper(world, resources);
+  auto& runtime = *carNode->carInstance;
+  runtime.smoothedSpeed = 3; // inject previous +0x1f74 without perturbing the landing.
+  const float stepSeconds = 1.0f / 60.0f;
+  assert(stepper.step(stepSeconds, error));
+  assert(std::fabs(runtime.smoothedSpeed - 2.4f) < 0.00001f);
+  assert(std::fabs(runtime.mileage - stepSeconds * 2.4f) < 0.00001f);
+  runtime.damageEnabled = false;
+  const float mileage = runtime.mileage;
+  assert(stepper.step(stepSeconds, error));
+  assert(runtime.mileage == mileage);
+  runtime.damageEnabled = true;
   for (int i = 0; i < 400; ++i)
     assert(stepper.step(1.0f / 60.0f, error) && error.empty());
   const float settledY = root.state[root.current].pos[1];
@@ -233,6 +244,72 @@ int main() {
     // The rebuilt car settled onto the plane again.
     assert(newRoot.state[newRoot.current].pos[1] > 0.0f &&
            newRoot.state[newRoot.current].pos[1] < 2.0f);
+  }
+
+  // --- Mixed sleep/awake: a suspended car is skipped while its awake
+  // neighbour is stepped (004a3f90/004a3bc0 skip sleeping trees in every
+  // pass; the multi-root step only ever sees the awake trees).
+  {
+    auto parked = buildDetachedCarPhysics(*script->car, "0,0,0,0,0,0,0", 0,
+                                          {0, physics::k::gravityY, 0}, error);
+    assert(parked && error.empty());
+    auto* parkedNode =
+        world.addTypedChild(*world.defaultParent(), 1, "parked", 0);
+    assert(parkedNode);
+    parkedNode->nativeDevice = "car";
+    parkedNode->carInstance = std::make_unique<CarRuntimeInstance>();
+    parkedNode->carInstance->isCar = true;
+    parkedNode->carInstance->carPhysics =
+        std::shared_ptr<CarPhysics>(std::move(parked));
+    setLinkOwner(parkedNode->carInstance->prototypeSource, script);
+    world.noteInstanceCreated(*parkedNode);
+    world.markLoaded(*parkedNode);
+    assert(world.registerCarPhysics(*parkedNode,
+                                    parkedNode->carInstance->carPhysics, error));
+    auto& parkedRoot = *parkedNode->carInstance->carPhysics->root;
+    // On the ground plane but beside the raised box, held suspended: no
+    // contact can wake it.
+    parkedRoot.state[0].pos = {2.5f, 0.8f, 0};
+    parkedRoot.state[1] = parkedRoot.state[0];
+    suspendCar(*parkedNode->carInstance->carPhysics);
+    assert(parkedRoot.flags & physics::kBodyAsleep);
+
+    // The settled car from the erase/recreate block is woken and lifted, so
+    // it genuinely moves this frame.
+    auto settledNodes = world.children(*world.defaultParent());
+    WorldNode* settledNode = nullptr;
+    assert(settledNodes);
+    for (auto* candidate : *settledNodes)
+      if (candidate->name == "car2") settledNode = candidate;
+    assert(settledNode && settledNode->carInstance &&
+           settledNode->carInstance->carPhysics);
+    auto& settledRoot = *settledNode->carInstance->carPhysics->root;
+    wakeCar(*settledNode->carInstance->carPhysics);
+    settledRoot.state[0].pos = {0, 2.0f, 0};
+    settledRoot.state[1] = settledRoot.state[0];
+
+    const auto parkedState0 = parkedRoot.state[0];
+    const auto parkedState1 = parkedRoot.state[1];
+    const auto parkedCurrent = parkedRoot.current;
+    const auto parkedFlags = parkedRoot.flags;
+    const float timeBefore = world.physicsTime();
+
+    for (int i = 0; i < 60; ++i)
+      assert(stepper.step(1.0f / 60.0f, error) && error.empty());
+
+    // The awake car was integrated: it fell from the lifted pose.
+    assert(settledRoot.state[settledRoot.current].pos[1] < 2.0f);
+    // The sleeping car was skipped by every pass: neither state buffer, the
+    // current index, nor the asleep flag changed.
+    assert(world.physicsTime() > timeBefore);
+    assert(parkedRoot.current == parkedCurrent);
+    assert(parkedRoot.flags == parkedFlags);
+    assert(parkedRoot.flags & physics::kBodyAsleep);
+    assert(parkedRoot.state[0].pos == parkedState0.pos &&
+           parkedRoot.state[0].vel == parkedState0.vel &&
+           parkedRoot.state[0].time == parkedState0.time);
+    assert(parkedRoot.state[1].pos == parkedState1.pos &&
+           parkedRoot.state[1].vel == parkedState1.vel);
   }
 
   return 0;

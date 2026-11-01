@@ -55,8 +55,10 @@ bool discoverDynamicRootPairs(const World &world,
                               std::vector<DynamicRootPair> &pairs,
                               std::string &error);
 // Conservative leaf candidates using 0049c8f0 sphere/oriented-bound rejection
-// and child recursion. Special swept/wheel paths return false, not clearance.
-// Leaves still require closest-core narrowphase and caller-owned retention.
+// and child recursion, including ordinary wheel candidates. Body flag 0x800
+// remains unsupported; flag 0x20 and Empty/Hull shapes are excluded by gates.
+// Leaves still require swept/closest-core narrowphase and caller-owned retention;
+// candidate discovery alone does not establish clearance.
 bool discoverDynamicLeafPairs(const BodyTree &first, const BodyTree &second,
                               std::vector<DynamicRootPair> &pairs,
                               std::string &error);

@@ -59,6 +59,8 @@ struct ScxMesh {
 	std::vector<float> tangents;
 	std::vector<uint8_t> color;
 	std::vector<uint8_t> emissive;
+	// Chunk 2/3 maps mesh-local blend indices to skeleton palette entries.
+	std::vector<uint32_t> bonePalette;
 	std::vector<uint8_t> boneIndices;
 	std::vector<uint8_t> weights;
 	uint32_t weightBytesPerVertex = 0;

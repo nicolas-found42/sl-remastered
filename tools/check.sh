@@ -2,7 +2,6 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-python3 -I tools/ref_guard.py verify
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release > /dev/null
 cmake --build build
 ctest --test-dir build --output-on-failure

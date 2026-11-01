@@ -77,6 +77,32 @@ static void checkLiteralMethod(const char *path, const char *name,
   CHECK(false);
 }
 
+// Synthetic-class builders for the regression tests below. The vm_test target
+// links no class loader, so classes are assembled by hand: kind-0 text
+// constants, kind-4 owner refs, kind-7 name/signature pairs, kind-5 member
+// refs, and one tree index per method.
+static uint32_t addTextConstant(TufaClass& cls, const std::string& text) {
+  cls.constants.push_back({0, text, 0, 0});
+  return static_cast<uint32_t>(cls.constants.size() - 1);
+}
+static uint32_t addConstant(TufaClass& cls, uint32_t kind, uint32_t a,
+                            uint32_t b) {
+  cls.constants.push_back({kind, {}, a, b});
+  return static_cast<uint32_t>(cls.constants.size() - 1);
+}
+static uint32_t addTree(TufaClass& cls, std::vector<TufaNode> nodes) {
+  cls.trees.push_back(std::move(nodes));
+  return static_cast<uint32_t>(cls.trees.size() - 1);
+}
+static TufaNode intLiteral(int32_t value) {
+  return {0x27, 0, true, static_cast<uint32_t>(value)};
+}
+static std::vector<TufaNode> floatLiteral(float value) {
+  uint32_t bits;
+  std::memcpy(&bits, &value, sizeof(bits));
+  return {{0x07, 0, true, 28}, {0x0a, 0, true, bits}};
+}
+
 int main() {
   {
     const auto parsed = tufaLoadFile("ref/raw/parts/scripts/Part.class");
@@ -565,9 +591,7 @@ int main() {
                         ori = std::get<const VmObject *>(field.value);
                     }
                     const std::vector<TufaNode> wrong{
-                        {0x01, 0, true, 0},  {0x01, 0, true, 1},
-                        {0x01, 0, true, 2},  {0x27, 0, true, 2},
-                        {0x21, 0, false, 0}, {0x2b, 0, false, 0}};
+                        {0x01, 0, true, 0}, {0x01, 0, true, 1}, {0x01, 0, true, 2}, {0x27, 0, true, 2}, {0x21, 0, false, 0}, {0x2b, 0, false, 0}};
                     CHECK(!vmExecute(cls, wrong, {p, ori, pos}, nullptr,
                                      &classes, &states, &arena)
                                .ok);
@@ -1148,9 +1172,7 @@ int main() {
           for (const auto bits : {uint32_t{0x3ff33333}, uint32_t{0xbff33333},
                                   uint32_t{0x7fc00000}, uint32_t{0x4f000000}}) {
             const std::vector<TufaNode> conversion{
-                {0x07, 0, true, 28}, {0x0a, 0, true, bits}, (*tree)[165],
-                (*tree)[166],        (*tree)[165],          {0x28, 0, false, 0},
-                {0x2b, 0, false, 0}};
+                {0x07, 0, true, 28}, {0x0a, 0, true, bits}, (*tree)[165], (*tree)[166], (*tree)[165], {0x28, 0, false, 0}, {0x2b, 0, false, 0}};
             const auto value = vmExecute(c, conversion, {}, nullptr, &classes,
                                          &states, &arena);
             if (bits == 0x3ff33333)
@@ -1250,8 +1272,7 @@ int main() {
       const uint32_t textIndex = static_cast<uint32_t>(cls.constants.size());
       cls.constants.push_back({0, "argument", 0, 0});
       const std::vector<TufaNode> caller{
-          {0x07, 0, true, 28}, {0x09, 0, true, textIndex}, {0x27, 0, true, 1},
-          {0x24, 0, false, 0}, {0x1a, 0, true, ref},       {0x2b, 0, false, 0}};
+          {0x07, 0, true, 28}, {0x09, 0, true, textIndex}, {0x27, 0, true, 1}, {0x24, 0, false, 0}, {0x1a, 0, true, ref}, {0x2b, 0, false, 0}};
       std::vector<const TufaClass *> classes{&cls, &stringClass};
       std::vector<VmStaticFields> states{{&stringClass, {}}};
       VmArena arena;
@@ -1976,8 +1997,7 @@ int main() {
             firstObject->fields[0].name == "number" &&
             std::get<int32_t>(firstObject->fields[0].value) == 0);
       const std::vector<TufaNode> construct{
-          {0x07, 0, true, 30}, {0x06, 0, true, type}, {0x27, 0, true, 42},
-          {0x27, 0, true, 1},  {0x21, 0, false, 0},   {0x2b, 0, false, 0}};
+          {0x07, 0, true, 30}, {0x06, 0, true, type}, {0x27, 0, true, 42}, {0x27, 0, true, 1}, {0x21, 0, false, 0}, {0x2b, 0, false, 0}};
       const auto constructed =
           vmExecute(integer, construct, {}, nullptr, &classes, &states, &arena);
       CHECK(constructed.ok &&
@@ -2334,9 +2354,7 @@ int main() {
       cls.constants.push_back({7, {}, name, signature});
       const uint32_t ref = static_cast<uint32_t>(cls.constants.size());
       cls.constants.push_back({5, {}, owner, pair});
-      std::vector<TufaNode> caller = {{0x27, 0, true, 42}, {0x27, 0, true, 1},
-                                      {0x24, 0, false, 0}, {0x1a, 0, true, ref},
-                                      {0x07, 0, true, 27}, {0x2b, 0, false, 0}};
+      std::vector<TufaNode> caller = {{0x27, 0, true, 42}, {0x27, 0, true, 1}, {0x24, 0, false, 0}, {0x1a, 0, true, ref}, {0x07, 0, true, 27}, {0x2b, 0, false, 0}};
       VmObject receiver{&cls, {}};
       const auto result = vmExecute(cls, caller, {&receiver});
       CHECK(result.ok && std::get<int32_t>(result.value) == 0);
@@ -2400,8 +2418,7 @@ int main() {
   CHECK(immediateResult.ok && std::get_if<int32_t>(&immediateResult.value) &&
         std::get<int32_t>(immediateResult.value) == -1);
   const std::vector<TufaNode> conditional{
-      {0x01, 0, true, 0},  {0x15, 0, true, 3}, {0x27, 0, true, 7},
-      {0x2b, 0, false, 0}, {0x27, 0, true, 9}, {0x2b, 0, false, 0}};
+      {0x01, 0, true, 0}, {0x15, 0, true, 3}, {0x27, 0, true, 7}, {0x2b, 0, false, 0}, {0x27, 0, true, 9}, {0x2b, 0, false, 0}};
   const auto zero = vmExecute(conditional, {int32_t{0}});
   const auto nonzero = vmExecute(conditional, {int32_t{1}});
   CHECK(zero.ok && std::get<int32_t>(zero.value) == 9);
@@ -2410,6 +2427,15 @@ int main() {
   branchTrue[1].op = 0x16;
   CHECK(std::get<int32_t>(vmExecute(branchTrue, {int32_t{1}}).value) == 9);
   CHECK(std::get<int32_t>(vmExecute(branchTrue, {int32_t{0}}).value) == 7);
+  // LoadingScreen.show branches directly on its float time-limit argument.
+  for (float value : {0.0f, -0.0f, 0.5f, -2.0f}) {
+    const auto falseBranch = vmExecute(conditional, {value});
+    const auto trueBranch = vmExecute(branchTrue, {value});
+    CHECK(falseBranch.ok &&
+          std::get<int32_t>(falseBranch.value) == (value == 0.0f ? 9 : 7));
+    CHECK(trueBranch.ok &&
+          std::get<int32_t>(trueBranch.value) == (value == 0.0f ? 7 : 9));
+  }
   const VmObject *nullObject = nullptr;
   CHECK(std::get<int32_t>(vmExecute(conditional, {nullObject}).value) == 9);
   CHECK(std::get<int32_t>(vmExecute(conditional, {&a}).value) == 7);
@@ -2432,10 +2458,7 @@ int main() {
   // and the combining 07 node, otherwise 07 (1 = or, 5 = and) joins both.
   const auto shortCircuit = [](uint8_t test, uint32_t combine) {
     return std::vector<TufaNode>{
-        {0x01, 0, true, 0}, {0x07, 0, true, 28},      {0x0b, 0, true, 1024},
-        {0x07, 0, true, 8}, {test, 0, false, 0},      {0x14, 0, true, 6},
-        {0x01, 0, true, 1}, {0x07, 0, true, 28},      {0x0b, 0, true, 768},
-        {0x07, 0, true, 8}, {0x07, 0, true, combine}, {0x2b, 0, false, 0}};
+        {0x01, 0, true, 0}, {0x07, 0, true, 28}, {0x0b, 0, true, 1024}, {0x07, 0, true, 8}, {test, 0, false, 0}, {0x14, 0, true, 6}, {0x01, 0, true, 1}, {0x07, 0, true, 28}, {0x0b, 0, true, 768}, {0x07, 0, true, 8}, {0x07, 0, true, combine}, {0x2b, 0, false, 0}};
   };
   const auto truth = [](const VmResult &result) {
     return result.ok && std::get_if<int32_t>(&result.value)
@@ -2622,6 +2645,120 @@ int main() {
               std::get<float>(result.value) == 1.5f);
       }
     }
+  }
+  {
+    // Non-wide 0x18 is the switch fall-through: after every wide 0x17 case
+    // test failed, the no-operand 0x18 discards the switch subject and
+    // execution continues with the next node (stock Brake/Integer/Garage/City
+    // sites). The wide form is rejected.
+    const std::vector<TufaNode> fallThrough{
+        intLiteral(7), {0x18, 0, false, 0}, intLiteral(42), {0x2b, 0, false, 0}};
+    const auto result = vmExecute(fallThrough, {});
+    CHECK(result.ok && std::get_if<int32_t>(&result.value) &&
+          std::get<int32_t>(result.value) == 42);
+    // The subject was consumed: a second 0x18 finds an empty stack.
+    const std::vector<TufaNode> twice{intLiteral(7),
+                                      {0x18, 0, false, 0},
+                                      {0x18, 0, false, 0},
+                                      {0x2b, 0, false, 0}};
+    const auto underflow = vmExecute(twice, {});
+    CHECK(!underflow.ok &&
+          std::strstr(underflow.error.c_str(), "switch subject stack underflow") !=
+              nullptr);
+    // Wide 0x18 (an operand) is unsupported.
+    const std::vector<TufaNode> wide{intLiteral(7),
+                                     {0x18, 0, true, 0},
+                                     intLiteral(42),
+                                     {0x2b, 0, false, 0}};
+    const auto wideResult = vmExecute(wide, {});
+    CHECK(!wideResult.ok &&
+          std::strstr(wideResult.error.c_str(),
+                      "unsupported operation 0x18 with operand") != nullptr);
+  }
+  {
+    // ReturnKind::Integer accepts a float return value: stock FUN_00423ba0
+    // pushes the returned box unchanged, which is why the installed
+    // Vehicle.getTotalPrice()I can return Chassis.currentPrice()F. A method
+    // declared ()I whose body returns a float constant executes fine and the
+    // result keeps its float type; the same class proves ()I returning int.
+    TufaClass cls;
+    cls.name = "test.Price";
+    cls.hasClassHeader = true;
+    cls.classHeader[3] = UINT32_MAX;
+    const auto initName = addTextConstant(cls, "<init>");
+    const auto voidDesc = addTextConstant(cls, "()V");
+    const auto intDesc = addTextConstant(cls, "()I");
+    const auto priceName = addTextConstant(cls, "price");
+    const auto countName = addTextConstant(cls, "count");
+    const auto ownerName = addTextConstant(cls, "test.Price");
+    const auto initTree = addTree(cls, {{0x2a, 0, false, 0}});
+    const auto priceTree =
+        addTree(cls, floatLiteral(12.5f)); // completed below with 0x2b
+    cls.trees[priceTree].push_back({0x2b, 0, false, 0});
+    const auto countTree =
+        addTree(cls, {intLiteral(7), {0x2b, 0, false, 0}});
+    const auto owner = addConstant(cls, 4, ownerName, 0);
+    const auto priceRef =
+        addConstant(cls, 5, owner, addConstant(cls, 7, priceName, intDesc));
+    const auto countRef =
+        addConstant(cls, 5, owner, addConstant(cls, 7, countName, intDesc));
+    cls.methods[0].push_back({{1, initName, voidDesc, initTree, 0}});
+    cls.methods[0].push_back({{1, priceName, intDesc, priceTree, 0}});
+    cls.methods[0].push_back({{1, countName, intDesc, countTree, 0}});
+    std::vector<const TufaClass*> classes{&cls};
+    std::vector<VmStaticFields> states;
+    VmArena arena;
+    VmObject receiver{&cls, {}};
+    const std::vector<TufaNode> callPrice{intLiteral(0),
+                                          {0x24, 0, false, 0},
+                                          {0x1a, 0, true, priceRef},
+                                          {0x2b, 0, false, 0}};
+    const auto price = vmExecute(cls, callPrice, {&receiver}, nullptr,
+                                 &classes, &states, &arena);
+    CHECK(price.ok && std::get_if<float>(&price.value) &&
+          std::get<float>(price.value) == 12.5f);
+    const std::vector<TufaNode> callCount{intLiteral(0),
+                                          {0x24, 0, false, 0},
+                                          {0x1a, 0, true, countRef},
+                                          {0x2b, 0, false, 0}};
+    const auto count = vmExecute(cls, callCount, {&receiver}, nullptr,
+                                 &classes, &states, &arena);
+    CHECK(count.ok && std::get_if<int32_t>(&count.value) &&
+          std::get<int32_t>(count.value) == 7);
+  }
+  {
+    // Sync-invoke of an empty-body non-void method: stock 0041fbc0 skips the
+    // null body but still pushes one zeroed value of the declared return
+    // type, so calling an empty ()I method yields int32 0 without executing
+    // any node.
+    TufaClass cls;
+    cls.name = "test.Empty";
+    cls.hasClassHeader = true;
+    cls.classHeader[3] = UINT32_MAX;
+    const auto initName = addTextConstant(cls, "<init>");
+    const auto voidDesc = addTextConstant(cls, "()V");
+    const auto intDesc = addTextConstant(cls, "()I");
+    const auto zeroName = addTextConstant(cls, "zero");
+    const auto ownerName = addTextConstant(cls, "test.Empty");
+    const auto initTree = addTree(cls, {{0x2a, 0, false, 0}});
+    const auto emptyTree = addTree(cls, {}); // null body
+    const auto owner = addConstant(cls, 4, ownerName, 0);
+    const auto zeroRef =
+        addConstant(cls, 5, owner, addConstant(cls, 7, zeroName, intDesc));
+    cls.methods[0].push_back({{1, initName, voidDesc, initTree, 0}});
+    cls.methods[0].push_back({{1, zeroName, intDesc, emptyTree, 0}});
+    std::vector<const TufaClass*> classes{&cls};
+    std::vector<VmStaticFields> states;
+    VmArena arena;
+    VmObject receiver{&cls, {}};
+    const std::vector<TufaNode> call{intLiteral(0),
+                                     {0x24, 0, false, 0},
+                                     {0x1a, 0, true, zeroRef},
+                                     {0x2b, 0, false, 0}};
+    const auto result = vmExecute(cls, call, {&receiver}, nullptr, &classes,
+                                  &states, &arena);
+    CHECK(result.ok && std::get_if<int32_t>(&result.value) &&
+          std::get<int32_t>(result.value) == 0);
   }
   checkLiteralMethod("ref/raw/system/Scripts/lang/GameType.class", "getInfo",
                      "(I)I", 0);

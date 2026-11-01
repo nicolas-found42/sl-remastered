@@ -40,15 +40,34 @@ int main() {
   a.state[1].stepFlags = 3;
   ContactGeometryWorld geometryWorld;
   geometryWorld.stepReady = 5;
-  auto query = [](const State &x, const State &y) -> std::optional<CorePair> {
+  auto query = [](const State& x, const State& y) -> std::optional<CorePair> {
     return sphereCoreClosest(x, y);
   };
   pair = query(a.state[1], b.state[1]).value();
   assert(updateDirectContactGeometryWithSearch(c, pair, 0.5f, 0.5f, point,
                                                geometryWorld, query) ==
          ContactGeometryResult::Updated);
-  assert(geometryWorld.queries == 12 && geometryWorld.stepReady == 0 &&
+  assert(geometryWorld.queries == 11 && geometryWorld.stepReady == 0 &&
          a.state[1].stepFlags == 2);
+  {
+    // 0049c8f0: the predicted pair is clear enough to enter the time search
+    // (0 < distance <= radii) but every sampled pose has intersecting cores.
+    // Stock creates no contact; it does not fall back to the step-start pose.
+    CorePair predicted = pair;
+    predicted.distance = 0.5f;
+    CorePair overlapping = pair;
+    overlapping.distance = -0.2f;
+    auto overlapQuery = [&](const State&, const State&) -> std::optional<CorePair> {
+      return overlapping;
+    };
+    ContactGeometryWorld deepWorld;
+    Vec3 deepPoint{};
+    assert(updateDirectContactGeometryWithSearch(c, predicted, 0.5f, 0.5f,
+                                                 deepPoint, deepWorld,
+                                                 overlapQuery) ==
+           ContactGeometryResult::Dropped);
+    assert(deepWorld.queries == 11);
+  }
   before = c;
   beforePoint = point;
   auto saved = geometryWorld;
@@ -84,6 +103,26 @@ int main() {
   assert(updateGroundFacePair(face, faceWorld, point) ==
          ContactGeometryResult::Updated);
   assert(face.contact.separation > 0.029f && face.contact.separation < 0.031f);
+  {
+    Body crossing = ball;
+    crossing.state[0].pos = crossing.state[1].pos = {-2.01f, 0.53f, -2.01f};
+    GroundFacePair retained;
+    assert(createGroundFacePair(crossing, ground, triangle, {0, 1, 0},
+                                retained, error));
+    assert(updateGroundFacePair(retained, faceWorld, point) ==
+           ContactGeometryResult::Updated);
+    const auto oldFeature = retained.triangleFeature;
+    retained.contact.resting = true;
+    retained.contact.normalImpulse = 3;
+    retained.contact.normalForce = 4;
+    retained.contact.frictionForce = 5;
+    crossing.state[0].pos = crossing.state[1].pos = {0, 0.53f, 0};
+    assert(updateGroundFacePair(retained, faceWorld, point) ==
+           ContactGeometryResult::Updated);
+    assert(retained.triangleFeature != oldFeature);
+    assert(!retained.contact.resting && retained.contact.normalImpulse == 0 &&
+           retained.contact.normalForce == 0 && retained.contact.frictionForce == 0);
+  }
   // Ground contacts carry the stored PHYS face normal (0049b830 constructs
   // them from the face); the aligned core normal passes the deviation check.
   assert(face.contact.normal == Vec3({0, 1, 0}));
@@ -118,5 +157,73 @@ int main() {
          ContactGeometryResult::Dropped);
   second.flags |= 0x40u;
   assert(updateDynamicBodyPair(dynamic, dynamicWorld, point) ==
-         ContactGeometryResult::Unsupported);
+         ContactGeometryResult::Dropped);
+  {
+    // FUN_0049c8f0: endpoint spheres miss, but the displacement segment
+    // passes the object. A bound-only implementation must not pass the miss.
+    Body swept, obstacle;
+    swept.proto = obstacle.proto = &sphere;
+    swept.flags = kBodyActive | 0x800u;
+    obstacle.flags = kBodyActive | kBodyAsleep;
+    swept.state[0].pos = {-2, 0.75f, 0};
+    swept.state[1].pos = {2, 0.75f, 0};
+    DynamicBodyPair crossing;
+    assert(createDynamicBodyPair(swept, obstacle, crossing, error));
+    ContactGeometryWorld crossingWorld;
+    assert(updateDynamicBodyPair(crossing, crossingWorld, point) ==
+           ContactGeometryResult::Updated);
+    // FUN_0049c8f0 (all.c 116233-116246) accepts a separated sample
+    // within the 0.02 band when the predicted-space witness dot is negative.
+    // Fractions .5,.25,.375,.3125,.34375,.328125 select x=-.6875:
+    // sqrt(.6875^2 + .75^2) - (ra+rb) = .017426287, not < .01.
+    assert(crossingWorld.queries == 7);
+    assert(crossing.contact.separation > 0.0174f &&
+           crossing.contact.separation < 0.0175f);
+    // Rotating the swept body must not rotate its world displacement: the
+    // replacement segment lives in the predicted *local* frame.
+    swept.state[0].quat = swept.state[1].quat = {0, 0, 0.70710677f, 0.70710677f};
+    swept.state[0].rot = swept.state[1].rot = matrixFromQuat(swept.state[0].quat);
+    assert(updateDynamicBodyPair(crossing, crossingWorld, point) ==
+           ContactGeometryResult::Updated);
+    // Same near broad-phase pair, no geometric intersection with its radius.
+    swept.state[0].pos[1] = swept.state[1].pos[1] = 1.5f;
+    assert(updateDynamicBodyPair(crossing, crossingWorld, point) ==
+           ContactGeometryResult::Dropped);
+  }
+  {
+    // FUN_0049c540: wheel edge / rounded object tilts the normal along the
+    // axle and subtracts only the object's radius, with no ten-step search.
+    BodyProto wheelProto = sphere;
+    wheelProto.shape.type = ShapeType::CylinderX;
+    wheelProto.shape.core = std::make_shared<CollisionCore>(
+        segmentCore({-0.2f, 0, 0}, {0.2f, 0, 0}));
+    Body wheel, obstacle;
+    wheel.proto = &wheelProto;
+    obstacle.proto = &sphere;
+    wheel.flags = kBodyActive | 0x40u;
+    obstacle.flags = kBodyActive | kBodyAsleep;
+    obstacle.state[0].pos = obstacle.state[1].pos = {0, 0.75f, 0};
+    DynamicBodyPair wheelPair;
+    assert(createDynamicBodyPair(wheel, obstacle, wheelPair, error));
+    ContactGeometryWorld wheelWorld;
+    assert(updateDynamicBodyPair(wheelPair, wheelWorld, point) ==
+           ContactGeometryResult::Updated);
+    assert(wheelWorld.queries == 1);
+    assert(wheelPair.contact.separation > 0.249f &&
+           wheelPair.contact.separation < 0.251f);
+    assert(wheelPair.contact.normal[0] > 0.66f &&
+           wheelPair.contact.normal[0] < 0.67f);
+    assert(wheelPair.contact.normal[1] == -0.75f);
+    DynamicBodyPair reversed;
+    assert(createDynamicBodyPair(obstacle, wheel, reversed, error));
+    assert(updateDynamicBodyPair(reversed, wheelWorld, point) ==
+           ContactGeometryResult::Updated);
+    assert(reversed.contact.normal[0] == -wheelPair.contact.normal[0]);
+    assert(reversed.contact.normal[1] == -wheelPair.contact.normal[1]);
+    assert(reversed.contact.pointB == wheelPair.contact.pointA);
+    assert(reversed.contact.separation == wheelPair.contact.separation);
+    obstacle.state[0].pos[1] = obstacle.state[1].pos[1] = 1.5f;
+    assert(updateDynamicBodyPair(wheelPair, wheelWorld, point) ==
+           ContactGeometryResult::Dropped);
+  }
 }

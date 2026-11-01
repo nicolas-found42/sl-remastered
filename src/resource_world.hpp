@@ -420,6 +420,18 @@ public:
   bool loadSceneLight(ResourceNode &node, std::string &error);
   bool bindSceneLight(const ResolvedNode &node, SceneRenderLight light);
   const SceneRenderLight *sceneLight(const ResolvedNode &node);
+  // Marks the light node the cfg configured via RenderRef.setLight (stock's
+  // scene sun: the setLight native FUN_00486ab0 -> FUN_0048c9d0 writes the
+  // look's colours onto that node). Lighting picks it first.
+  void markConfiguredLight(uint32_t nodeHandle) {
+    configuredLightHandle_ = nodeHandle;
+  }
+  // First bound scene light in stable handle order (stock keeps an ordered
+  // per-renderer light-record array, FUN_004bb430). Returns nullptr when no
+  // light is bound. `kind` receives the light node handle. The cfg's
+  // configured light wins; kinds 0/4/5 stay skipped like stock's inactive
+  // marks (FUN_00508890).
+  const SceneRenderLight* firstSceneLight(uint32_t& kind) const;
   bool bindSceneRenderInstance(const ResolvedNode &node,
                                std::shared_ptr<SceneRenderInstance> instance);
   std::shared_ptr<SceneRenderInstance>
@@ -500,6 +512,8 @@ private:
     SceneRenderLight light;
   };
   std::unordered_map<uint32_t, std::unique_ptr<SceneLightSlot>> sceneLights_;
+  // Node handle of the light the cfg configured via RenderRef.setLight.
+  uint32_t configuredLightHandle_ = 0;
   struct SceneRenderSlot {
     ~SceneRenderSlot() { setLinkOwner(owner, nullptr); }
     OwnerLink owner;

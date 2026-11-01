@@ -1,0 +1,9 @@
+# Main menu Free Ride: enter the driving world and capture the loaded scene.
+10 move 420 127
+13 down
+13.5 up
+20 shot @run/city-loaded.bmp
+21 sdl_keydown Up
+30 shot @run/city-driving.bmp
+32 sdl_keyup Up
+35 quit

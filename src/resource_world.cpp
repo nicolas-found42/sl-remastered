@@ -216,7 +216,19 @@ std::optional<uint64_t> stockMeshVertexBytesUpperBound(const ScxModel &model) {
   constexpr uint64_t kMaxStride = 12 + 28 + 4 + 12 + 4 + 4 + 240;
   uint64_t total = 0;
   for (const auto &mesh : model.meshes) {
-    const uint64_t bytes = static_cast<uint64_t>(mesh.vertexCount) * kMaxStride;
+    uint64_t stride = kMaxStride;
+    if (mesh.materialIndex && *mesh.materialIndex < model.materials.size()) {
+      const auto &material = model.materials[*mesh.materialIndex];
+      // 004befc0 / 004c68e0 select position, normal, optional colors and at
+      // most three two-float UV sets for type 0 (00503400 / 004fe980).
+      if (material.flags == 0)
+        stride = 56;
+      // 004d71f0 selects 004dbcd0 for type 12 with function word zero:
+      // position, normal and one two-float UV set.
+      else if (material.flags == 12 && material.functionWord == 0)
+        stride = 32;
+    }
+    const uint64_t bytes = static_cast<uint64_t>(mesh.vertexCount) * stride;
     if (bytes > std::numeric_limits<uint64_t>::max() - total)
       return std::nullopt;
     total += bytes;
@@ -1588,6 +1600,37 @@ const SceneRenderLight *ResourceWorld::sceneLight(const ResolvedNode &node) {
        !it->second->attV.owner))
     return nullptr;
   return &it->second->light;
+}
+
+const SceneRenderLight* ResourceWorld::firstSceneLight(uint32_t& kind) const {
+  // Deterministic pick: the cfg's configured light (RenderRef.setLight, stock
+  // FUN_00486ab0 -> FUN_0048c9d0) first, else the lowest bound handle, like
+  // stock's ordered light-record array (FUN_004bb430 stores the array,
+  // FUN_004bb4b0 walks it by index). Source kinds 0/4/5 are inactive in stock
+  // (FUN_00508890) and stay excluded. Attenuation-texture slots must be
+  // loaded, like sceneLight().
+  const SceneLightSlot* best = nullptr;
+  uint32_t bestHandle = 0xffffffffu;
+  for (const auto& entry : sceneLights_) {
+    const auto& slot = entry.second;
+    if (!slot || !slot->owner.owner || entry.first >= bestHandle)
+      continue;
+    if (entry.first != configuredLightHandle_ &&
+        (slot->light.sourceKind == 0 || slot->light.sourceKind == 4 ||
+         slot->light.sourceKind == 5))
+      continue;
+    if ((slot->light.attHTextureId && *slot->light.attHTextureId &&
+         !slot->attH.owner) ||
+        (slot->light.attVTextureId && *slot->light.attVTextureId &&
+         !slot->attV.owner))
+      continue;
+    bestHandle = entry.first;
+    best = slot.get();
+  }
+  if (!best)
+    return nullptr;
+  kind = bestHandle;
+  return &best->light;
 }
 
 bool ResourceWorld::hasActiveSceneMaterialForMesh(uint32_t meshId) const {

@@ -1,5 +1,22 @@
 #!/usr/bin/env python3
-"""Record one native Free Ride attempt with its initial save and trace."""
+"""Record one native Free Ride attempt with its initial save, script and trace.
+
+Modes:
+  rapid (default) -- bundled tools/scripts/free-ride-fast.txt; waits for the
+      real menu and a real driving scene, then a short throttle burst.
+  --cold-start -- same driving wait and post-ready throttle burst, but the
+      menu is entered with the legacy fixed-timed click (10/13/13.5 s).
+  --script FILE -- caller-supplied script instead of a bundled one.
+
+Every run snapshots the --save fixture into a fresh data root (the fixture is
+never modified), copies the exact script that ran into the output directory,
+and points the probe's run recorder (SLRR_RUN_DIR) at <output>/run so
+`shot @run/...` lines work and run telemetry stays inside the record. The
+probe runs from the repository root because its Reference Folder guard is the
+cwd-relative `ref`; scripts should therefore use `@run/` shot paths. A nonzero
+exit or subprocess timeout is a failure; screenshots and exit codes alone do
+not prove driving or parity.
+"""
 import argparse
 import datetime
 import hashlib
@@ -18,23 +35,42 @@ data_spec = importlib.util.spec_from_file_location('diagnostic_data', Path(__fil
 data_module = importlib.util.module_from_spec(data_spec)
 data_spec.loader.exec_module(data_module)
 
+TOOLS_DIR = Path(__file__).resolve().parent.parent
+RAPID_SCRIPT = TOOLS_DIR / 'scripts' / 'free-ride-fast.txt'
+# Cold start keeps the legacy fixed-timed menu entry, then shares the rapid
+# route's driving wait and post-ready throttle burst for a comparable scene.
+COLD_SCRIPT_TEXT = (
+    '# Cold-start Free Ride: legacy timed menu click, then wait driving and\n'
+    '# the same post-ready throttle burst as free-ride-fast.txt.\n'
+    '10 move 420 127\n13 down\n13.5 up\n13.5 wait driving 60\n'
+    '13.5 shot @run/driving-ready.bmp\n13.6 keydown Up\n15.6 keyup Up\n'
+    '15.7 shot @run/driving-throttle.bmp\n15.8 quit\n')
+DEFAULT_TIMEOUT = 120.0
+
 
 def digest(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description=__doc__,
+                                     formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('output', help='new output directory outside ref/')
     parser.add_argument('--probe', required=True, help='built startup_probe')
     parser.add_argument('--game', required=True, help='extracted 2005 game directory')
     parser.add_argument('--save', required=True, help='save directory to copy before the run')
-    parser.add_argument('--timeout', type=float, default=60, help='maximum seconds (default 60)')
+    parser.add_argument('--script', help='script file to run instead of the bundled mode script')
+    parser.add_argument('--cold-start', action='store_true',
+                        help='legacy timed menu entry instead of wait menu; same driving wait')
+    parser.add_argument('--timeout', type=float,
+                        help='maximum seconds (default: 120)')
     args = parser.parse_args()
     try:
+        mode = 'cold' if args.cold_start else 'rapid'
         probe, game, save = (Path(p).resolve(strict=True) for p in (args.probe, args.game, args.save))
         out = Path(args.output).resolve()
-        if args.timeout <= 0:
+        timeout = args.timeout if args.timeout is not None else DEFAULT_TIMEOUT
+        if timeout <= 0:
             raise ValueError('timeout must be positive')
         if out == snapshot_module.REF or snapshot_module.REF in out.parents:
             raise ValueError('output must be outside ref/')
@@ -42,6 +78,21 @@ def main():
             raise ValueError('probe must be a file; game and save must be directories')
         if any(out == source or source in out.parents or out in source.parents for source in (game, save)):
             raise ValueError('output and game/save directories must not contain one another')
+        if args.script:
+            script_source = Path(args.script).resolve(strict=True)
+            if not script_source.is_file():
+                raise ValueError('--script must be a file')
+            script_label = 'caller'
+            # Plain `shot PATH` writes anywhere the probe can; only run-local
+            # `@run/` shots keep a custom scenario out of game and save trees.
+            for number, line in enumerate(script_source.read_text().splitlines(), 1):
+                fields = line.split()
+                if len(fields) >= 2 and fields[1] == 'shot' and (
+                        len(fields) < 3 or not fields[2].startswith('@run/')):
+                    raise ValueError(f'--script line {number}: shot must use @run/NAME')
+        else:
+            script_source = RAPID_SCRIPT.resolve(strict=True) if mode == 'rapid' else None
+            script_label = f'bundled-{mode}'
         out.mkdir(parents=True, exist_ok=False)
         manifest_path = out / 'game-data-manifest.json'
         try:
@@ -54,21 +105,38 @@ def main():
         data = out / 'data'
         data.mkdir()
         shutil.copytree(out / 'initial-save/save', data / 'save')
-        script = out / 'input.txt'
-        script.write_text('# Seconds from native frame loop start; 640x480 window points.\n10 move 420 127\n13 down\n13.5 up\n40 quit\n')
-        cmd = [str(probe), '--init', '--renderer', '--loop', '--visible', '--no-run-log', '--script', str(script), '--data-root', str(data), str(game)]
+        # Record the exact bytes the probe ran; bundled cold text is materialized
+        # the same way so every run's script is verifiable from the output alone.
+        script = out / 'script.txt'
+        if script_source is not None:
+            shutil.copyfile(script_source, script)
+        else:
+            script.write_text(COLD_SCRIPT_TEXT)
+        run_dir = out / 'run'
+        run_dir.mkdir()
+        cmd = [str(probe), '--init', '--renderer', '--loop', '--visible',
+               '--script', str(script), '--data-root', str(data), str(game)]
         metadata = {'probe': str(probe), 'probe_sha256': digest(probe), 'game': str(game),
                     'game_data': data_identity,
-                    'script_sha256': digest(script), 'command': cmd, 'timeout_seconds': args.timeout,
+                    'mode': mode, 'script_source': script_label,
+                    'script_path': str(script), 'script_sha256': digest(script),
+                    'run_dir': str(run_dir),
+                    'command': cmd, 'timeout_seconds': timeout,
                     'trace': {'SLRR_TRACE_RANDOM_SEED': '1', 'SLRR_TRACE_CAR_CREATION': '1'},
                     'started_utc': datetime.datetime.now(datetime.timezone.utc).isoformat()}
         (out / 'metadata.json').write_text(json.dumps(metadata, indent=2) + '\n')
         environment = os.environ.copy()
         environment.update(metadata['trace'])
+        # Run-local recorder: @run shots and run telemetry land inside the record.
+        environment['SLRR_RUN_DIR'] = str(run_dir)
         start = time.monotonic()
+        # The probe resolves its Reference Folder guard as the cwd-relative
+        # `ref`, so it must run from the repository root; scripts write shots
+        # into the record with `shot @run/...`.
         with (out / 'stdout.log').open('w') as stdout, (out / 'stderr.log').open('w') as stderr:
             try:
-                result = subprocess.run(cmd, env=environment, stdout=stdout, stderr=stderr, timeout=args.timeout)
+                result = subprocess.run(cmd, env=environment, cwd=snapshot_module.REF.parent,
+                                        stdout=stdout, stderr=stderr, timeout=timeout)
                 status = {'exit_code': result.returncode, 'timed_out': False}
             except subprocess.TimeoutExpired:
                 status = {'exit_code': None, 'timed_out': True}

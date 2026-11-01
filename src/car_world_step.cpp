@@ -1,6 +1,9 @@
 #include "car_world_step.hpp"
+#include "vm.hpp"
 #include "car_physics.hpp"
 #include "car_runtime.hpp"
+#include "car_hud.hpp"
+#include "scene_2d.hpp"
 #include "car_wheel_runtime.hpp"
 #include "physics_contact_geometry.hpp"
 #include "physics_core_pair.hpp"
@@ -41,7 +44,111 @@ struct TraceLine {
 };
 } // namespace
 
+bool CarWorldStepper::considerDynamicPair(
+    physics::Body* objectBody, physics::Body* other,
+    physics::ContactGeometryWorld& geometryWorld,
+    std::vector<physics::DirectContact>& contacts,
+    std::set<DynamicPairKey>& seen, std::set<DynamicPairKey>& pendingErase,
+    std::string& why) {
+  using namespace physics;
+  if (!objectBody || !other || objectBody == other || !objectBody->proto ||
+      !other->proto)
+    return true;
+  // FUN_0049c8f0: wheel and swept shapes use real core queries below.
+  // Segment-only/no-core special branches remain outside this dispatcher.
+  if ((objectBody->flags | other->flags) &
+      (0x20u | 0x400u | 0x10000u | 0x20000u)) {
+    if (!notedDynamicSkip_) {
+      notedDynamicSkip_ = true;
+      runlog::event(runlog::EventKind::Note,
+                    "object step: segment-only/no-core special body pairs "
+                    "(flags 0x20/0x400/0x10000/0x20000) remain unsupported");
+    }
+    return true;
+  }
+  const auto& shapeA = objectBody->proto->shape;
+  const auto& shapeB = other->proto->shape;
+  if (objectBody->current > 1 || other->current > 1 ||
+      !std::isfinite(shapeA.boundRadius) || shapeA.boundRadius < 0 ||
+      !std::isfinite(shapeB.boundRadius) || shapeB.boundRadius < 0) {
+    why = "car step: dynamic pair bounds unsupported";
+    return false;
+  }
+  // 0049c8f0 bound rejection on the predicted states.
+  const auto& sa = objectBody->state[objectBody->current ^ 1];
+  const auto& sb = other->state[other->current ^ 1];
+  const Vec3 delta{sa.pos[0] - sb.pos[0], sa.pos[1] - sb.pos[1],
+                   sa.pos[2] - sb.pos[2]};
+  const auto sweptLength = [](const Body& body) {
+    if (!(body.flags & 0x800u))
+      return 0.0f;
+    const auto& a = body.state[body.current].pos;
+    const auto& b = body.state[body.current ^ 1].pos;
+    const float x = a[0] - b[0], y = a[1] - b[1], z = a[2] - b[2];
+    return std::sqrt(x * x + y * y + z * z);
+  };
+  const float radius = shapeA.boundRadius + shapeB.boundRadius + k::skin +
+                       sweptLength(*objectBody) + sweptLength(*other);
+  const float distance2 =
+      delta[0] * delta[0] + delta[1] * delta[1] + delta[2] * delta[2];
+  if (radius * radius < distance2)
+    return true;
+  // Non-sphere shapes need their collision core (built before traversal).
+  if ((shapeA.type != ShapeType::Sphere && !shapeA.core) ||
+      (shapeB.type != ShapeType::Sphere && !shapeB.core))
+    return true;
+  const bool ordered = objectBody < other;
+  Body* first = ordered ? objectBody : other;
+  Body* second = ordered ? other : objectBody;
+  const DynamicPairKey key{first, second};
+  seen.insert(key);
+  auto entry = dynamicPairs_.find(key);
+  if (entry == dynamicPairs_.end()) {
+    auto retained = std::make_unique<RetainedDynamicPair>();
+    if (!createDynamicBodyPair(*first, *second, retained->pair, why)) {
+      why = "car step: dynamic pair unsupported: " + why;
+      return false;
+    }
+    retained->firstPrototype = first->proto;
+    retained->secondPrototype = second->proto;
+    entry = dynamicPairs_.emplace(key, std::move(retained)).first;
+  }
+  RetainedDynamicPair& retained = *entry->second;
+  if (retained.pair.contact.a->proto != retained.firstPrototype ||
+      retained.pair.contact.b->proto != retained.secondPrototype) {
+    pendingErase.insert(key);
+    seen.erase(key);
+    return true;
+  }
+  Vec3 point{};
+  const auto result =
+      updateDynamicBodyPair(retained.pair, geometryWorld, point);
+  if (result == ContactGeometryResult::Unsupported) {
+    why = "car step: dynamic pair update unsupported";
+    return false;
+  }
+  if (result == ContactGeometryResult::Dropped) {
+    pendingErase.insert(key);
+    seen.erase(key);
+    return true;
+  }
+  // Offer retained 0049b830 geometry while it updates: the pending impact
+  // pass and resting normal-row solve own correction state, not traversal.
+  contacts.push_back(retained.pair.contact);
+  lastOffers_.push_back(OfferedContact{nullptr, nullptr, &retained});
+  return true;
+}
+
 bool CarWorldStepper::step(float seconds, std::string& error) {
+  const VmMeasurementState stockMeasurement{};
+  const auto& measurement = measurement_ ? *measurement_ : stockMeasurement;
+  // Object instances come and go with node load/destroy; retained per-body
+  // contact state must not outlive the bodies it names.
+  if (world_.objectPhysicsGeneration() != lastObjectGeneration_) {
+    lastObjectGeneration_ = world_.objectPhysicsGeneration();
+    objectPairs_.clear();
+    dynamicPairs_.clear();
+  }
   const auto cars = world_.carNodes();
   if (cars.empty()) {
     if (world_.dynamicBodyCount() == 0)
@@ -59,6 +166,7 @@ bool CarWorldStepper::step(float seconds, std::string& error) {
     decltype(resources_.groundSectorsAt({}, 0)) sectors;
     CarSeat* seat = nullptr;
     const CarPrototype* prototype = nullptr;
+    float smoothedSpeed = 0;
   };
   std::vector<StepCar> stepCars;
   size_t primaryIndex = 0;
@@ -66,7 +174,15 @@ bool CarWorldStepper::step(float seconds, std::string& error) {
     StepCar entry;
     entry.instance = carNode->carInstance.get();
     entry.car = entry.instance->carPhysics;
+    entry.smoothedSpeed = entry.instance->smoothedSpeed;
     const auto& state = entry.car->root->state[entry.car->root->current];
+    // FUN_00454500 +0x1f74 is a per-frame 0.8/0.2 speed filter.
+    // +0x20fc integrates that speed in world-distance units, not HUD units.
+    if (seconds >= 0.0001f) {
+      const auto& v = state.vel;
+      entry.smoothedSpeed = entry.smoothedSpeed * 0.8f +
+          std::sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]) * 0.2f;
+    }
     entry.sectors = resources_.groundSectorsAt(
         {state.pos[0], state.pos[1], state.pos[2]}, 6.0f);
     if (entry.sectors.empty()) {
@@ -82,6 +198,57 @@ bool CarWorldStepper::step(float seconds, std::string& error) {
         entry.seat = candidate.get();
     if (entry.seat)
       primaryIndex = stepCars.size();
+    // FUN_004518c0 formats a single stock gear-table character. The cars.rpk
+    // font owns the ordinal glyph artwork; never synthesize suffix strings.
+    if (entry.seat && entry.seat->hudText[0]) {
+      auto text = *entry.seat->hudText[0]->textState();
+      text.text = carHudGear(entry.instance->currentGear);
+      entry.seat->hudText[0]->setTextState(std::move(text));
+      // 0x452560 loads car +0x13bc, NOT the wheel-record array (+0x13e4).
+      // Body +0x20c selects a 0xd4-byte state: +0x64 +0x0c is State.vel.
+      const auto& velocity = entry.car->root->state[entry.car->root->current].vel;
+      const float speed = std::sqrt(velocity[0] * velocity[0] +
+                                    velocity[1] * velocity[1] +
+                                    velocity[2] * velocity[2]);
+      if (entry.seat->hudText[1]) {
+        auto speedText = *entry.seat->hudText[1]->textState();
+        speedText.text = carHudValue(carHudSpeed(), speed / measurement.product);
+        entry.seat->hudText[1]->setTextState(std::move(speedText));
+      }
+      if (entry.seat->hudText[2]) {
+        auto scoreText = *entry.seat->hudText[2]->textState();
+        // all.c:47614 initializes 0063c73c = 10 / distance-unit length.
+        scoreText.text = carHudValue(carHudScore(),
+                                     entry.instance->mileage * measurement.quotient);
+        entry.seat->hudText[2]->setTextState(std::move(scoreText));
+      }
+    }
+    if (entry.seat && entry.seat->hudText[0]) {
+      auto& runtime = *entry.instance;
+      auto& seat = *entry.seat;
+      const float rpm = std::fabs(runtime.displayedEngineSpeed * 9.549296f);
+      const uint32_t pack = seat.hudText[0]->typeId() & 0xffff0000u;
+      if (!carHudModel(resources_, world_, seat, 1, pack | 0x56,
+                       {1.43f, -4.36f, -3.58f}, carHudNeedle(rpm), true, error))
+        return false;
+      const auto optional = carHudOptionalValues(world_, runtime);
+      const std::array<std::optional<float>, 2> values{optional.nitro, optional.turbo};
+      for (size_t i = 0; i < values.size(); ++i)
+        if (values[i] && seat.hudText[11 + i]) {
+          auto text = *seat.hudText[11 + i]->textState();
+          const CarHudElement bar{0x5c, 2, -0.17f, i ? 0.91f : 0.8f,
+                                  0xff000000, "%01.0f", 0, 8, 0, 8};
+          text.text = carHudValue(bar, *values[i]);
+          seat.hudText[11 + i]->setTextState(std::move(text));
+        }
+      const std::array<bool, 4> lamps{
+          runtime.absActive, runtime.asrActive, carHudLamp(runtime.handbrakeState),
+          carHudWarning(runtime.engineTemperature, rpm, runtime.maximumRpm, runtime.rpmLimit)};
+      for (size_t i = 0; i < lamps.size(); ++i)
+        if (!carHudModel(resources_, world_, seat, i + 2, pack | (0x61u + uint32_t(i)),
+                         {3.24f, -2.4f, -3.58f}, 0, lamps[i], error))
+          return false;
+    }
     stepCars.push_back(std::move(entry));
   }
   // Diagnostics and the cartrace line describe the seated car (else the first).
@@ -339,6 +506,9 @@ bool CarWorldStepper::step(float seconds, std::string& error) {
     // Separation range of each pass's contacts, and how many were corrected.
     std::array<float, 8> iterSepMin{}, iterSepMax{};
     std::array<unsigned short, 8> iterCorrected{};
+    // Accumulated positional shift (0.021 correction) of the car root after
+    // each pass, y component.
+    std::array<float, 8> iterRootShiftY{};
     float worstImpulse = 0, worstSeparation = 0;
     physics::Vec3 worstNormal{};
     char worstBody[96] = "-";
@@ -352,6 +522,8 @@ bool CarWorldStepper::step(float seconds, std::string& error) {
   // the previous frame's collision traversal.
   hooks.beforePrediction = [&, seconds](std::string& why) {
     for (auto& stepCar : stepCars) {
+      if (stepCar.car->root->flags & physics::kBodyAsleep)
+        continue;
       CarRuntimeInstance& instance = *stepCar.instance;
       const std::shared_ptr<CarPhysics>& car = stepCar.car;
       const CarPrototype* prototype = stepCar.prototype;
@@ -472,7 +644,13 @@ bool CarWorldStepper::step(float seconds, std::string& error) {
                              std::string& why) {
     contacts.clear();
     CarGroundContacts found;
-    for (const auto& stepCar : stepCars)
+    for (const auto& stepCar : stepCars) {
+      // A tree that fell asleep skips every pass (004a3f90/004a3bc0); its
+      // bodies are not registered roots this step, so gathering contacts
+      // for it would name unregistered contact bodies. With awake scene
+      // objects keeping the full step alive, this is reachable in-run.
+      if (stepCar.car->root->flags & physics::kBodyAsleep)
+        continue;
       for (auto* sector : stepCar.sectors) {
         auto part = collectCarGroundContacts(resources_, *sector, stepCar.car);
         if (!part.passiveTraversalComplete) {
@@ -483,6 +661,7 @@ bool CarWorldStepper::step(float seconds, std::string& error) {
           found.pairs.push_back(std::move(pair));
         for (auto& wheel : part.wheels)
           found.wheels.push_back(std::move(wheel));
+      }
       }
     for (auto& hit : found.wheels) {
       CarWheelRuntime* runtime = nullptr;
@@ -586,7 +765,7 @@ bool CarWorldStepper::step(float seconds, std::string& error) {
       }
       lastHadHit = hadHit;
     }
-    lastPairs_.clear();
+    lastOffers_.clear();
     std::set<PairKey> seen;
     // Two loaded city sectors can carry the same face; a body must meet each
     // triangle once or its contact is applied twice. Keyed by the triangle's
@@ -624,26 +803,286 @@ bool CarWorldStepper::step(float seconds, std::string& error) {
         seen.erase(key);
         continue;
       }
-      if (pair.correctedOnce) {
-        // State 7: resting, never re-offered (004a35d0 gate). Still detected,
-        // so it is no longer scheduled for removal.
-        pendingErase_.erase(key);
-        seen.insert(key);
-        continue;
-      }
+      // FUN_004a2d10 replaces an invalid cached-feature row before the
+      // new state-6 impact stage; an unchanged state 7 uses normal forces.
+      if (!pair.pair.contact.resting)
+        pair.correctedOnce = false;
+      pair.pair.contact.resting = pair.correctedOnce;
+      pendingErase_.erase(key);
       // Offered to the corrector: 004a35d0 writes state 7 after the vfunc
-      // regardless of its result. Transactional: the pair rests only after
-      // the whole step succeeds (see offeredThisStep_).
+      // regardless of its result. finishContacts promotes selected records;
+      // the accumulator/lifecycle snapshots restore that state on failure.
       seen.insert(key);
       contacts.push_back(pair.pair.contact);
-      lastPairs_.push_back(&pair);
+      lastOffers_.push_back(OfferedContact{&pair, nullptr, nullptr});
     }
     // Pairs whose face the wheel/body no longer overlaps are scheduled for
     // removal (transactionally, with the rest of the collector state).
     for (const auto& entry : pairs_)
       if (!seen.count(entry.first))
         pendingErase_.insert(entry.first);
-    scratch.pairs = std::max(scratch.pairs, lastPairs_.size());
+
+    // --- Stepped dynamic scene objects ------------------------------------
+    // Stock 004a5190 steps every registered root, so awake objects (cones,
+    // barrels, trash cans) fall, collide and sleep like the cars. Their
+    // ground traversal is the same 004a1560 -> 004a0aa0 -> 0049fa60 passive
+    // walk the car uses, with 0049f4d0 body/face records retained across
+    // gathers, plus 0049b830 body/body records against the other stepped
+    // roots.
+    const auto& objects = world_.steppedObjectPhysics();
+    std::set<PairKey> seenObject;
+    std::set<DynamicPairKey> seenDynamic;
+    std::vector<physics::Body*> carBodies;
+    for (const auto& stepCar : stepCars) {
+      // Sleeping cars remain registered narrow-phase targets; only their
+      // own ground traversal/force/prediction passes are skipped.
+      carBodies.push_back(stepCar.car->root.get());
+      for (const auto& childEntry : stepCar.car->bodyChildren)
+        // The map keys the bodies as const pointers; the bodies themselves
+        // are the same mutable physics bodies the car tree steps.
+        if (childEntry.first)
+          carBodies.push_back(const_cast<physics::Body*>(childEntry.first));
+    }
+    // Bounding proxies never produce contacts; only narrow-phase geometry
+    // can wake a sleeping tree through the registered direct corrector.
+    const auto degenerate = [](const physics::Body* body) {
+      const auto& s = body->proto->shape;
+      // A mesh body without geometry is a bounding proxy (the port's car
+      // root, an object aggregate root); stock's compound roots carry the
+      // aggregate geometry instead, so these take no body pair.
+      return (s.type == physics::ShapeType::Mesh ||
+              s.type == physics::ShapeType::Hull) &&
+             s.vertices.empty() && s.triangles.empty();
+    };
+    // Stock resolves an object through the sector its body is queued in; the
+    // port has no body-sector queue, so each object uses the loaded sectors
+    // whose bounds contain its predicted centre (the same approximation the
+    // car step uses).
+    for (size_t handleIndex = 0; handleIndex < objects.size(); ++handleIndex) {
+      auto* handle = objects[handleIndex];
+      auto* objectRoot = handle->root();
+      if (!objectRoot || !objectRoot->proto || objectRoot->current > 1) {
+        why = "car step: object root unavailable";
+        return false;
+      }
+      // 004a5e80 builds each shape's collision core on first use.
+      for (auto* body : handle->bodies()) {
+        if (!body || !body->proto || body->proto->shape.core)
+          continue;
+        auto* proto = const_cast<physics::BodyProto*>(body->proto);
+        if (!physics::buildShapeCore(*proto, proto->shape.core, error)) {
+          why = "car step: object collision core: " + error;
+          return false;
+        }
+      }
+      if ((objectRoot->flags & physics::kBodyAsleep) == 0) {
+      const auto& rootState = objectRoot->state[objectRoot->current ^ 1];
+      const float rootRadius = objectRoot->proto->shape.boundRadius;
+      const auto objectSectors =
+          resources_.groundSectorsAt(rootState.pos, rootRadius + 2.0f);
+      if (objectSectors.empty()) {
+        why = "car step: object has no loaded ground sector";
+        return false;
+      }
+      std::array<float, 3> minimum{}, maximum{};
+      for (size_t axis = 0; axis < 3; ++axis) {
+        minimum[axis] = rootState.pos[axis] - rootRadius;
+        maximum[axis] = rootState.pos[axis] + rootRadius;
+      }
+      // Object slots all attach to the compound root (00465bd0), so the tree
+      // is the root plus its direct children in body-table order.
+      std::vector<physics::Body*> leaves;
+      for (auto* body : handle->bodies())
+        if (body && body != objectRoot && body->attachment &&
+            body->attachment->parent == objectRoot)
+          leaves.push_back(body);
+      const bool compound = !leaves.empty();
+      if (!compound)
+        leaves.push_back(objectRoot);
+      for (auto* sector : objectSectors) {
+        auto candidates = queryPassiveSpatialCandidates(resources_, *sector,
+                                                        minimum, maximum);
+        if (!candidates.passiveTraversalComplete) {
+          // A spatial node whose payload needs factory actions the port
+          // cannot prepare (shop triggers and similar) has unknown collision
+          // coverage. Keep returned candidates but log the missing coverage;
+          // do not claim those omitted nodes are collision-free in stock.
+          if (candidates.detail.find("spatial load incomplete") ==
+              std::string::npos) {
+            why = "car step: object ground traversal incomplete: " +
+                  candidates.detail;
+            return false;
+          }
+          static bool objectSkipNoted = false;
+          if (!objectSkipNoted) {
+            objectSkipNoted = true;
+            runlog::event(runlog::EventKind::Note,
+                          "object step: spatial nodes with unpreparable "
+                          "factory actions have unknown object collision coverage "
+                          "(%s)",
+                          candidates.detail.c_str());
+          }
+        }
+        for (const auto& spatial : candidates.candidates) {
+          auto& node = *spatial.node;
+          const auto& geometry = *spatial.payload->physics;
+          for (size_t faceIndex = 0; faceIndex < geometry.triangles.size();
+               ++faceIndex) {
+            if (compound) {
+              const auto mask = queryParentFace(geometry, faceIndex,
+                                                *objectRoot, *node.bounds,
+                                                false);
+              if (mask == ParentFaceMask::Rejected)
+                continue;
+              if (mask == ParentFaceMask::Unsupported) {
+                why = "car step: object parent face filter unsupported";
+                return false;
+              }
+            }
+            for (auto* leaf : leaves) {
+              if (leaf->current > 1 ||
+                  !std::isfinite(leaf->proto->shape.boundRadius) ||
+                  leaf->proto->shape.boundRadius < 0) {
+                why = "car step: object spatial bounds unsupported";
+                return false;
+              }
+              bool outside = false;
+              for (size_t axis = 0; axis < 3; ++axis) {
+                const float coordinate =
+                    leaf->state[leaf->current ^ 1].pos[axis];
+                if (!std::isfinite(coordinate)) {
+                  why = "car step: object spatial bounds unsupported";
+                  return false;
+                }
+                if (leaf->proto->shape.boundRadius +
+                        node.bounds->values[axis + 3] <
+                    std::fabs(coordinate - node.bounds->values[axis])) {
+                  outside = true;
+                  break;
+                }
+              }
+              if (outside)
+                continue;
+              std::string faceError;
+              auto face = resolveSpatialGroundFace(resources_, node,
+                                                   faceIndex, faceError);
+              if (!face) {
+                why = "car step: object ground face unavailable: " + faceError;
+                return false;
+              }
+              // Two loaded city sectors can carry the same face; a body must
+              // meet each triangle once or its contact is applied twice.
+              const auto& triangle = geometry.triangles[faceIndex];
+              std::array<float, 10> signature{};
+              signature[0] = static_cast<float>(
+                  reinterpret_cast<std::uintptr_t>(leaf) & 0xffffff);
+              bool badVertex = false;
+              for (size_t v = 0; v < 3 && v < triangle.vertices.size(); ++v) {
+                if (triangle.vertices[v] >= geometry.vertices.size()) {
+                  badVertex = true;
+                  break;
+                }
+                for (size_t a = 0; a < 3; ++a)
+                  signature[1 + v * 3 + a] =
+                      geometry.vertices[triangle.vertices[v]][a];
+              }
+              if (badVertex)
+                continue;
+              if (!triangles.insert(signature).second)
+                continue;
+              const PairKey key{leaf, face->leafOwner(), faceIndex};
+              auto entry = objectPairs_.find(key);
+              if (entry == objectPairs_.end()) {
+                auto ground = face->bodyOwner();
+                if (!ground) {
+                  why = "car step: object ground body unavailable";
+                  return false;
+                }
+                std::array<physics::Vec3, 3> vertices{};
+                for (size_t v = 0; v < 3; ++v) {
+                  if (triangle.vertices[v] >= geometry.vertices.size()) {
+                    why = "car step: object ground face vertex unavailable";
+                    return false;
+                  }
+                  vertices[v] = geometry.vertices[triangle.vertices[v]];
+                }
+                auto retained = std::make_unique<ObjectGroundFacePair>();
+                if (!physics::createGroundFacePair(*leaf, ground->body,
+                                                   vertices, triangle.normal,
+                                                   retained->pair, faceError)) {
+                  why = "car step: object ground pair unsupported: " +
+                        faceError;
+                  return false;
+                }
+                retained->face = std::move(face);
+                retained->prototype = leaf->proto;
+                entry = objectPairs_.emplace(key, std::move(retained)).first;
+              }
+              ObjectGroundFacePair& pair = *entry->second;
+              if (!pair.valid()) {
+                pendingObjectErase_.insert(key);
+                continue;
+              }
+              physics::Vec3 point{};
+              const auto result = physics::updateGroundFacePair(
+                  pair.pair, geometryWorld, point);
+              if (result == physics::ContactGeometryResult::Unsupported) {
+                why = "car step: object ground pair update unsupported";
+                return false;
+              }
+              if (result == physics::ContactGeometryResult::Dropped) {
+                pendingObjectErase_.insert(key);
+                seenObject.erase(key);
+                continue;
+              }
+              if (!pair.pair.contact.resting)
+                pair.correctedOnce = false;
+              pair.pair.contact.resting = pair.correctedOnce;
+              pendingObjectErase_.erase(key);
+              seenObject.insert(key);
+              contacts.push_back(pair.pair.contact);
+              lastOffers_.push_back(OfferedContact{nullptr, &pair, nullptr});
+            }
+          }
+        }
+      }
+      } // Sleeping candidates skip static ground, not awake body pairs.
+      // 0049b830 body/body records against the bodies of the stepped cars.
+      for (auto* body : handle->bodies()) {
+        if (!body || degenerate(body))
+          continue;
+        for (auto* other : carBodies) {
+          if (!other || degenerate(other))
+            continue;
+          if (!considerDynamicPair(body, other, geometryWorld, contacts,
+                                   seenDynamic, pendingDynamicErase_, why))
+            return false;
+        }
+      }
+    }
+    for (size_t i = 0; i < objects.size(); ++i) {
+      for (size_t j = i + 1; j < objects.size(); ++j) {
+        if ((objects[i]->root()->flags & physics::kBodyAsleep) != 0 &&
+            (objects[j]->root()->flags & physics::kBodyAsleep) != 0)
+          continue;
+        for (auto* body : objects[i]->bodies())
+          for (auto* other : objects[j]->bodies()) {
+            if (!body || !other || degenerate(body) || degenerate(other))
+              continue;
+            if (!considerDynamicPair(body, other, geometryWorld, contacts,
+                                     seenDynamic, pendingDynamicErase_, why))
+              return false;
+          }
+      }
+    }
+    for (const auto& entry : objectPairs_)
+      if (!seenObject.count(entry.first))
+        pendingObjectErase_.insert(entry.first);
+    for (const auto& entry : dynamicPairs_)
+      if (!seenDynamic.count(entry.first))
+        pendingDynamicErase_.insert(entry.first);
+
+    scratch.pairs = std::max(scratch.pairs, lastOffers_.size());
     // Enumerate the near-rest support contacts once in a while: what holds
     // the root at its resting height.
     {
@@ -690,8 +1129,34 @@ bool CarWorldStepper::step(float seconds, std::string& error) {
   size_t contactIterations = 0;
   float maxImpulse = 0;
   hooks.finishContacts = [&](const std::vector<physics::DirectContact>& done) {
+    if (!done.empty() && !notedWheelEdgewalk_) {
+      notedWheelEdgewalk_ = true;
+      runlog::event(runlog::EventKind::Note,
+          "car step: dynamic wheel contact subgap: FUN_0049c540 wheel face crossing uses a convex-face fallback rather than the complete cached feature edgewalk");
+    }
     const size_t slot = std::min<size_t>(contactIterations, 7);
     ++contactIterations;
+    // done[i] maps to lastOffers_[i]: every offered contact's write-back
+    // target, in collector order (car and object ground pairs, dynamic pairs).
+    const auto offerFace = [&](size_t index) -> const SpatialGroundFace* {
+      if (index >= lastOffers_.size())
+        return nullptr;
+      if (lastOffers_[index].carPair)
+        return lastOffers_[index].carPair->face.get();
+      if (lastOffers_[index].objectPair)
+        return lastOffers_[index].objectPair->face.get();
+      return nullptr;
+    };
+    const auto offerGroundPair =
+        [&](size_t index) -> const physics::GroundFacePair* {
+      if (index >= lastOffers_.size())
+        return nullptr;
+      if (lastOffers_[index].carPair)
+        return &lastOffers_[index].carPair->pair;
+      if (lastOffers_[index].objectPair)
+        return &lastOffers_[index].objectPair->pair;
+      return nullptr;
+    };
 
     float iterationMax = 0;
     float sepMin = 0, sepMax = 0;
@@ -707,13 +1172,12 @@ bool CarWorldStepper::step(float seconds, std::string& error) {
         scratch.minSepPointB = c.pointB;
         std::snprintf(scratch.minSepBody, sizeof scratch.minSepBody, "%s",
                       bodyLabel(c.a).substr(0, 90).c_str());
-        if (ci < lastPairs_.size() && lastPairs_[ci]->face &&
-            lastPairs_[ci]->face->face()) {
-          const auto& t = lastPairs_[ci]->pair.triangle;
+        if (offerFace(ci) && offerFace(ci)->face()) {
+          const auto& t = offerGroundPair(ci)->triangle;
           std::snprintf(
               scratch.minSepFace, sizeof scratch.minSepFace,
               "mat=0x%x [%.2f,%.2f,%.2f] [%.2f,%.2f,%.2f] [%.2f,%.2f,%.2f]",
-              lastPairs_[ci]->face->face()->materialWord,
+              offerFace(ci)->face()->materialWord,
               t.vertices[0].position[0], t.vertices[0].position[1],
               t.vertices[0].position[2], t.vertices[1].position[0],
               t.vertices[1].position[1], t.vertices[1].position[2],
@@ -724,13 +1188,12 @@ bool CarWorldStepper::step(float seconds, std::string& error) {
       const float impulse = std::fabs(c.normalImpulse);
       iterationMax = std::max(iterationMax, impulse);
       if (impulse > scratch.worstImpulse) {
-        if (ci < lastPairs_.size() && lastPairs_[ci]->face &&
-            lastPairs_[ci]->face->face()) {
-          const auto& t = lastPairs_[ci]->pair.triangle;
+        if (offerFace(ci) && offerFace(ci)->face()) {
+          const auto& t = offerGroundPair(ci)->triangle;
           std::snprintf(
               scratch.worstFace, sizeof scratch.worstFace,
               "mat=0x%x [%.2f,%.2f,%.2f] [%.2f,%.2f,%.2f] [%.2f,%.2f,%.2f]",
-              lastPairs_[ci]->face->face()->materialWord,
+              offerFace(ci)->face()->materialWord,
               t.vertices[0].position[0], t.vertices[0].position[1],
               t.vertices[0].position[2], t.vertices[1].position[0],
               t.vertices[1].position[1], t.vertices[1].position[2],
@@ -753,8 +1216,20 @@ bool CarWorldStepper::step(float seconds, std::string& error) {
     scratch.iterSepMin[slot] = sepMin;
     scratch.iterSepMax[slot] = sepMax;
     scratch.iterCorrected[slot] = static_cast<unsigned short>(correctedCount);
-    for (size_t i = 0; i < done.size() && i < lastPairs_.size(); ++i)
-      lastPairs_[i]->pair.contact = done[i];
+    scratch.iterRootShiftY[slot] = car->root->state[car->root->current].shift[1];
+    for (size_t i = 0; i < done.size() && i < lastOffers_.size(); ++i) {
+      const auto& offer = lastOffers_[i];
+      if (offer.carPair) {
+        offer.carPair->pair.contact = done[i];
+        if (done[i].processed) offer.carPair->correctedOnce = true;
+      } else if (offer.objectPair) {
+        offer.objectPair->pair.contact = done[i];
+        if (done[i].processed) offer.objectPair->correctedOnce = true;
+      } else if (offer.dynamicPair) {
+        offer.dynamicPair->pair.contact = done[i];
+        if (done[i].processed) offer.dynamicPair->pair.contact.resting = true;
+      }
+    }
   };
   const auto speedOf = [&] {
     const auto& v = car->root->state[car->root->current].vel;
@@ -776,7 +1251,38 @@ bool CarWorldStepper::step(float seconds, std::string& error) {
     accumulatorSnapshot_[entry.first] = {
         entry.second->pair.contact.normalImpulse,
         entry.second->pair.contact.frictionForce,
-        entry.second->correctedOnce ? 1.0f : 0.0f};
+        entry.second->correctedOnce ? 1.0f : 0.0f,
+        entry.second->pair.contact.normalForce,
+        entry.second->pair.contact.resting ? 1.0f : 0.0f};
+  objectAccumulatorSnapshot_.clear();
+  for (const auto& entry : objectPairs_)
+    objectAccumulatorSnapshot_[entry.first] = {
+        entry.second->pair.contact.normalImpulse,
+        entry.second->pair.contact.frictionForce,
+        entry.second->correctedOnce ? 1.0f : 0.0f,
+        entry.second->pair.contact.normalForce,
+        entry.second->pair.contact.resting ? 1.0f : 0.0f};
+  dynamicAccumulatorSnapshot_.clear();
+  for (const auto& entry : dynamicPairs_)
+    dynamicAccumulatorSnapshot_[entry.first] = {
+        entry.second->pair.contact.normalImpulse,
+        entry.second->pair.contact.frictionForce,
+        entry.second->pair.contact.normalForce,
+        entry.second->pair.contact.resting ? 1.0f : 0.0f};
+  // State 7 normal-row multipliers belong to this world solve, not the
+  // retained pair lifetime. Failure restores the pre-step snapshot below.
+  for (auto& entry : pairs_) {
+    entry.second->pair.contact.normalForce = 0;
+    entry.second->pair.contact.frictionForce = 0;
+  }
+  for (auto& entry : objectPairs_) {
+    entry.second->pair.contact.normalForce = 0;
+    entry.second->pair.contact.frictionForce = 0;
+  }
+  for (auto& entry : dynamicPairs_) {
+    entry.second->pair.contact.normalForce = 0;
+    entry.second->pair.contact.frictionForce = 0;
+  }
   const bool stepped = world_.stepRegisteredCars(seconds, hooks, error);
   if (const auto delta = physics::corePairDiagnosticsDelta(); !delta.empty())
     runlog::event(runlog::EventKind::Note,
@@ -788,10 +1294,26 @@ bool CarWorldStepper::step(float seconds, std::string& error) {
   // only when no car was registered, which froze the chase camera at its spawn
   // pose once a car existed.
   if (stepped) {
+    if (seconds >= 0.0001f) {
+      for (const auto& entry : stepCars) {
+        auto& runtime = *entry.instance;
+        runtime.smoothedSpeed = entry.smoothedSpeed;
+        // FUN_00454500 excludes damage-disabled cars (flag 0x400).
+        if (runtime.damageEnabled &&
+            (runtime.smoothedSpeed > 0.01f ||
+             std::fabs(runtime.engineAngularSpeed) > 0.01f ||
+             std::fabs(runtime.drivenWheelSpeed) > 0.01f))
+          runtime.mileage = seconds * runtime.smoothedSpeed + runtime.mileage;
+      }
+    }
     // Pairs still scheduled were not re-detected this step: remove them.
     // Re-detected ones returned to resting state 7 above.
     for (const auto& key : pendingErase_)
       pairs_.erase(key);
+    for (const auto& key : pendingObjectErase_)
+      objectPairs_.erase(key);
+    for (const auto& key : pendingDynamicErase_)
+      dynamicPairs_.erase(key);
   } else {
     for (const auto& snap : accumulatorSnapshot_) {
       auto found = pairs_.find(snap.first);
@@ -800,9 +1322,32 @@ bool CarWorldStepper::step(float seconds, std::string& error) {
       found->second->pair.contact.normalImpulse = snap.second[0];
       found->second->pair.contact.frictionForce = snap.second[1];
       found->second->correctedOnce = snap.second[2] != 0.0f;
+      found->second->pair.contact.normalForce = snap.second[3];
+      found->second->pair.contact.resting = snap.second[4] != 0.0f;
+    }
+    for (const auto& snap : objectAccumulatorSnapshot_) {
+      auto found = objectPairs_.find(snap.first);
+      if (found == objectPairs_.end())
+        continue;
+      found->second->pair.contact.normalImpulse = snap.second[0];
+      found->second->pair.contact.frictionForce = snap.second[1];
+      found->second->correctedOnce = snap.second[2] != 0.0f;
+      found->second->pair.contact.normalForce = snap.second[3];
+      found->second->pair.contact.resting = snap.second[4] != 0.0f;
+    }
+    for (const auto& snap : dynamicAccumulatorSnapshot_) {
+      auto found = dynamicPairs_.find(snap.first);
+      if (found == dynamicPairs_.end())
+        continue;
+      found->second->pair.contact.normalImpulse = snap.second[0];
+      found->second->pair.contact.frictionForce = snap.second[1];
+      found->second->pair.contact.normalForce = snap.second[2];
+      found->second->pair.contact.resting = snap.second[3] != 0.0f;
     }
   }
   pendingErase_.clear();
+  pendingObjectErase_.clear();
+  pendingDynamicErase_.clear();
 
   {
     // One structured line per step. The ring is always on (formatting is a few
@@ -905,6 +1450,9 @@ bool CarWorldStepper::step(float seconds, std::string& error) {
     for (size_t i = 0; i < shownIterations; ++i)
       line.add("%s[%.3f,%.3f,%u]", i ? "," : "", scratch.iterSepMin[i],
                scratch.iterSepMax[i], unsigned(scratch.iterCorrected[i]));
+    line.add("],\"shy\":[");
+    for (size_t i = 0; i < shownIterations; ++i)
+      line.add("%s%.3f", i ? "," : "", scratch.iterRootShiftY[i]);
     line.add(
         "],\"worst\":{\"imp\":%.0f,\"sep\":%.3f,\"n\":[%.2f,%.2f,%.2f],"
         "\"on\":\"%s\",\"face\":\"%s\","

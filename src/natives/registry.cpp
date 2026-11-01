@@ -24,6 +24,8 @@
 #include "resource_texture_cache.hpp"
 #include "world_model.hpp"
 
+#include <cstring>
+
 namespace {
 
 bool readVector3Components(const VmObject *object, float &x, float &y, float &z) {
@@ -386,6 +388,32 @@ GroundFactoryResult *linkedGroundFactory(const VmObject *receiver, VmArena *aren
   return resolved.packNode->groundFactory.get();
 }
 
+// FUN_00483d00 queries the road manager using FUN_00581a00 and returns
+// the selected crossing's coordinates as a Vector3.
+NativeResult groundGetNearestCross(const std::vector<VmValue> &args,
+                                   const VmObject *receiver, VmArena *arena,
+                                   const std::vector<const TufaClass *> *classes) {
+  if (!arena || args.size() != 2 || !std::holds_alternative<const VmObject *>(args[0]) ||
+      !std::holds_alternative<float>(args[1]))
+    return std::string{"GroundRef.getNearestCross: invalid arguments"};
+  const VmObject *position = std::get<const VmObject *>(args[0]);
+  GroundFactoryResult *factory = linkedGroundFactory(receiver, arena);
+  if (!position || !factory || !factory->preparation || !factory->preparation->files.roads)
+    return VmValue{static_cast<const VmObject *>(nullptr)};
+  std::array<float, 3> query{};
+  if (!readVector3Components(position, query[0], query[1], query[2]))
+    return std::string{"GroundRef.getNearestCross: invalid position"};
+  const auto &roads = *factory->preparation->files.roads;
+  const auto nearest = roadNearestCrossing(roads, query, std::get<float>(args[1]), false);
+  if (!nearest)
+    return std::string{"GroundRef.getNearestCross: no supported crossing"};
+  const size_t group = nearest->kind == RoadRecordKind::FirstNode ? 0 : 1;
+  const auto &words = roads.nodes[group][nearest->index].words;
+  std::array<float, 3> coordinates{};
+  std::memcpy(coordinates.data(), words.data(), sizeof(coordinates));
+  return allocateVector3(arena, classes, coordinates[0], coordinates[1], coordinates[2]);
+}
+
 NativeResult groundAddTrafficN(const std::vector<VmValue> &args, const VmObject *receiver,
                                VmArena *arena, const std::vector<const TufaClass *> *) {
   if (!arena || args.size() != 5 || !std::holds_alternative<const VmObject *>(args[0]) ||
@@ -526,6 +554,10 @@ const std::vector<NativeEntry> entries{
      physicsCreateBox},
     {"java.util.resource.PhysicsRef", "setMatrix",
      "(Ljava.lang.Vector3;Ljava.lang.Ypr;)V", "00480920", physicsSetMatrix},
+    {"java.util.resource.PhysicsRef", "getPos", "()Ljava.lang.Vector3;",
+     "00480b00", physicsGetPos},
+    {"java.util.resource.PhysicsRef", "getOri", "()Ljava.lang.Ypr;", "00480c10",
+     physicsGetOri},
     {"java.render.Viewport", "activate", "(I)V", "00481680", viewportActivate},
     {"java.render.Viewport", "deactivate", "()V", "004816c0",
      viewportDeactivate},
@@ -600,6 +632,8 @@ const std::vector<NativeEntry> entries{
     {"java.io.Input", "checkHotkeys",
      "(Ljava.util.resource.GameRef;Ljava.render.Osd;)V", "0047cd40",
      inputCheckHotkeys},
+    {"java.io.MouseCursor", "getPos", "()Ljava.lang.Vector3;", "00487970",
+     mouseCursorGetPos},
     {"java.io.Input", "lastKey", "()I", "0047cc10", inputLastKey},
     {"java.io.Input", "getAxis", "(II)F", "0047c990", inputGetAxis},
     {"java.io.File", "exists", "(Ljava.lang.String;)I", "00486170", fileExists},
@@ -981,6 +1015,8 @@ const std::vector<NativeEntry> entries{
     {"java.game.Vehicle", "getSpeedSquare", "()F", "00480500",
      vehicleGetSpeedSquare},
     {"java.game.Vehicle", "hasCrime", "()F", "00440bf0", vehicleHasCrime},
+    {"java.util.resource.GroundRef", "getNearestCross",
+     "(Ljava.lang.Vector3;F)Ljava.lang.Vector3;", "00483d00", groundGetNearestCross},
     {"java.util.resource.GroundRef", "addTrafficN",
      "(Ljava.util.resource.GameRef;IFFF)I", "00484050", groundAddTrafficN},
     {"java.util.resource.GroundRef", "setPedestrianDensityN", "(F)V", "00484d30",

@@ -773,8 +773,7 @@ int main() {
     SceneCameraRenderer frameRenderer(resources, *renderer);
     auto &liveCandidates = frameRenderer.candidates();
     const CameraTraversalParams cameraParams{
-        {0, 0, 0}, 1, camera.lodBias, camera.lodAmplitude, 1, 0, 0, false,
-        {},        {}};
+        {0, 0, 0}, 1, camera.lodBias, camera.lodAmplitude, 1, 0, 0, false, {}, {}};
     CameraType1Records type1Records;
     CHECK(traverseCameraCandidates(world, *frameRoot, liveCandidates,
                                    cameraParams, error, &type1Records));
@@ -1207,6 +1206,95 @@ int main() {
       CHECK(!cached.expired());
     }
     CHECK(cached.expired());
+  }
+  // FUN_00541400/FUN_00531e90: humans.rpk materials declare a skeleton file;
+  // loading parses shared bind bones and each render instance gets its own
+  // pose, while unskinned materials keep a null pose (single-bone path).
+  {
+    GameWorld skeletonWorld;
+    CHECK(skeletonWorld.addRoot());
+    ResourceWorld skeletonResources(skeletonWorld, registry);
+    uint32_t skeletonMaterialId = 0;
+    uint32_t candidateCount = 0;
+    {
+      uint16_t humansSlot = 0;
+      CHECK(registry.registerPackName("humans.rpk", humansSlot, error));
+      PackView humansView;
+      CHECK(registry.view(humansSlot, humansView, error) ==
+            PackViewStatus::Ok);
+      candidateCount =
+          static_cast<uint32_t>(humansView.pack->entries.size());
+    }
+    for (uint32_t local = 1; local <= candidateCount && !skeletonMaterialId;
+         ++local) {
+      uint32_t resolved = 0;
+      if (!registry.resolveLiteral("humans.rpk", local, resolved, error) ||
+          !resolved)
+        continue;
+      PackResource resource;
+      if (!registry.lookup(resolved, resource, error) || !resource.packBytes ||
+          resource.entry.resType != 14)
+        continue;
+      const std::string payload(
+          reinterpret_cast<const char*>(resource.packBytes->data()) +
+              resource.entry.payloadOffset,
+          resource.entry.payloadSize);
+      if (payload.find("skeleton") != std::string::npos)
+        skeletonMaterialId = resolved;
+    }
+    CHECK(skeletonMaterialId);
+    auto loaded = sceneLoadMaterial(skeletonResources, skeletonMaterialId);
+    CHECK(loaded.material && loaded.material->skeletonBoneCount() > 0);
+    // Real skl records are not root-first (humans/drivers/vin.skl starts at
+    // "Bip01 Spine" parent 3); only the hierarchy itself is a fixed invariant.
+    const auto& bindBones = loaded.material->skeletonBones();
+    CHECK(bindBones.size() > 1);
+    CHECK(std::count_if(bindBones.begin(), bindBones.end(),
+                        [](const SkeletonBone& bone) {
+                          return bone.parent < 0;
+                        }) == 1);
+    CHECK(std::all_of(bindBones.begin(), bindBones.end(),
+                      [&](const SkeletonBone& bone) {
+                        return bone.parent < 0 ||
+                               static_cast<size_t>(bone.parent) <
+                                   bindBones.size();
+                      }));
+    const auto root = std::find_if(bindBones.begin(), bindBones.end(),
+                                   [](const SkeletonBone& bone) {
+                                     return bone.parent < 0;
+                                   });
+    CHECK(root != bindBones.end());
+    const auto materialNode =
+        skeletonResources.lookup(skeletonMaterialId, 14);
+    CHECK(materialNode.status == LookupStatus::Found);
+    auto owned =
+        std::shared_ptr<SceneMaterialResources>(std::move(loaded.material));
+    CHECK(skeletonResources.bindSceneMaterial(materialNode.node, owned));
+    SceneRenderInstance instance(materialNode.node.owner);
+    std::string skeletonError;
+    CHECK(sceneEnsureSkeleton(skeletonResources, instance, skeletonError));
+    const auto& pose = instance.skeletonPose();
+    CHECK(pose && pose->palette().size() == owned->skeletonBoneCount());
+    CHECK(pose && pose->findBone(root->name) ==
+                      static_cast<int>(root - bindBones.begin()));
+    CHECK(pose && pose->findBone(bindBones.front().name) == 0);
+    // A second instance owns an independent pose over the same bind bones.
+    SceneRenderInstance second(materialNode.node.owner);
+    CHECK(sceneEnsureSkeleton(skeletonResources, second, skeletonError));
+    CHECK(second.skeletonPose() && second.skeletonPose() != pose);
+    // Unskinned frontend material: ensure succeeds with a null pose.
+    uint32_t plainId = 0;
+    CHECK(registry.resolveLiteral("frontend.rpk", 0xd7, plainId, error));
+    auto plain = sceneLoadMaterial(skeletonResources, plainId);
+    CHECK(plain.material && !plain.material->skeletonBoneCount());
+    const auto plainNode = skeletonResources.lookup(plainId, 14);
+    CHECK(plainNode.status == LookupStatus::Found);
+    auto plainOwned =
+        std::shared_ptr<SceneMaterialResources>(std::move(plain.material));
+    CHECK(skeletonResources.bindSceneMaterial(plainNode.node, plainOwned));
+    SceneRenderInstance plainInstance(plainNode.node.owner);
+    CHECK(sceneEnsureSkeleton(skeletonResources, plainInstance, skeletonError));
+    CHECK(!plainInstance.skeletonPose());
   }
   std::puts("render kind, pass, mesh scaling and resource replacement: ok");
 }

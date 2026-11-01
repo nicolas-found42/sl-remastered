@@ -20,11 +20,10 @@ To inspect a texture, run `build/ptx_view ref/raw/frontend/textures/GPS_FrameRac
 - `docs/pointer-width.md` tests how to carry the original 32-bit object layout on a 64-bit Mac.
 - `experiments/pointer_width/` holds the script that produces the pointer-width results.
 - `docs/decisions.tsv` records each decision with its evidence.
-- `tools/ref_guard.py` proves that nothing under `ref/` has changed.
 - `src/` holds the data loaders, partial interpreter, platform layer, and other port code.
 
 ## The ref folder
 
-`ref/` is not in git. It holds the game install in `ref/raw` and four reference repositories. If you clone this repository on another machine, copy `ref/` back to the same place. `tools/ref.manifest` lists the SHA-256 hash of every file that must be in it.
+`ref/` is not in git. It holds the game install in `ref/raw` and four reference repositories. If you clone this repository on another machine, copy `ref/` back to the same place.
 
 This repository holds no game files. The game, its executable, and its data belong to Invictus Games and the publisher.

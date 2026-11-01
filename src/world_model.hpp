@@ -193,7 +193,6 @@ struct PlayerInstance {
   OwnerLink viewport;
   OwnerLink camera;
   OwnerLink renderTarget;
-  bool driverPoseParityReported = false;
   bool scriptedControlOverride = false;
   // Stock player device +0x242c. Only console "AI" command handlers write it
   // (all.c:39537, all.c:90422); car activate stores the message 0x15 reply
@@ -608,12 +607,23 @@ public:
   // Applies cameraFollowForce while other dynamic bodies stay registered.
   // Does not solve collision, joints, or wheel contacts.
   bool stepArmedCameraFollow(float seconds, std::string &error);
-  // Bounded 004a5190 for the registered car trees plus armed camera follows.
-  // The hooks supply the per-frame car work that stock runs through its world
-  // callbacks and collision traversal (see LiveCarStepHooks). Fails, leaving
-  // every body unchanged, when other dynamic work is registered.
+  // Bounded 004a5190 for the registered car trees plus armed camera follows
+  // and awake dynamic scene objects (cones, barrels, trash cans: every
+  // registered root stock's world step walks). The hooks supply the per-frame
+  // car work that stock runs through its world callbacks and collision
+  // traversal (see LiveCarStepHooks). Fails, leaving every body unchanged,
+  // when other dynamic work is registered.
   bool stepRegisteredCars(float seconds, const LiveCarStepHooks &hooks,
                           std::string &error);
+  // Awake dynamic object instances stepped by the last stepRegisteredCars
+  // call (cleared at the start of the next one). Borrowed pointers: the
+  // handles stay owned by objectPhysics_ for the whole step.
+  const std::vector<object::InstanceHandle *> &steppedObjectPhysics() const {
+    return steppedObjects_;
+  }
+  // Bumped on every register/unregisterObjectPhysics: lets long-lived
+  // steppers drop retained per-body contact state before it can dangle.
+  uint64_t objectPhysicsGeneration() const { return objectPhysicsGeneration_; }
   // Instance nodes of registered cars (a car body is registered with physics).
   std::vector<WorldNode *> carNodes();
   // True when stepEmptyPhysics will apply cameraFollowForce to this camera.
@@ -693,6 +703,8 @@ private:
   std::map<WorldNode *, std::shared_ptr<CarPhysics>> carBodies_;
   std::map<WorldNode *, std::shared_ptr<physics::Body>> carChildBodies_;
   std::map<LinkOwner *, object::InstanceHandle> objectPhysics_;
+  std::vector<object::InstanceHandle *> steppedObjects_;
+  uint64_t objectPhysicsGeneration_ = 0;
   physics::World physicsWorld_;
   std::map<uint32_t, std::vector<LinkOwner *>> recentlyUsed_;
   std::map<uint32_t, std::vector<LinkOwner *>> loadedNodes_;

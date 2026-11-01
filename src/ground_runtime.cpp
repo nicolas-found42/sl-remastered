@@ -3,6 +3,7 @@
 #include <cmath>
 #include <limits>
 #include "resource_world.hpp"
+#include "run_log.hpp"
 #include "world_model.hpp"
 
 #include <utility>
@@ -281,6 +282,19 @@ constexpr float kStockFogDistanceScale = 10.f;
 } // namespace
 
 void addGroundFog(GroundFactoryResult &result, int32_t color, float nearDist, float farDist) {
+  // One-shot time-of-day signature: the script's setFog colour/range
+  // identifies the active scene look in the run log (stock applies the same
+  // values to D3DRS_FOGCOLOR/FOGSTART/FOGEND via FUN_004bbe80).
+  static bool fogLogged = false;
+  if (!fogLogged) {
+    fogLogged = true;
+    runlog::event(runlog::EventKind::Note,
+                  "GroundRef.setFog: color=0x%06x near=%.1f far=%.1f "
+                  "(x10: %.1f..%.1f)",
+                  static_cast<uint32_t>(color) & 0xffffffu, nearDist, farDist,
+                  nearDist * kStockFogDistanceScale,
+                  farDist * kStockFogDistanceScale);
+  }
   result.fogSetting = GroundFactoryResult::FogSetting{
       color, nearDist * kStockFogDistanceScale, farDist * kStockFogDistanceScale};
 }

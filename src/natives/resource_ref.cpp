@@ -505,6 +505,18 @@ NativeResult renderRefCreate(const std::vector<VmValue> &args,
       return std::string{"RenderRef.create: name string unavailable"};
     name = found->first.substr(0, 30);
   }
+  // Scene.class selects the config in script; Track.enter supplies GameLogic.getTime().
+  // Free ride initializes it with (Math.random()*14+4)*3600 in MainMenuDialog.
+  if (name.rfind("egbolt-", 0) == 0) {
+    static bool timeConfigLogged = false;
+    if (!timeConfigLogged) {
+      timeConfigLogged = true;
+      runlog::event(runlog::EventKind::Note,
+                    "scene time config: seconds=%d skydome=%s type=0x%x",
+                    game.gameTimeOfDay, name.c_str(),
+                    type && type.worldNode ? type.worldNode->instanceId : 0u);
+    }
+  }
   {
     static unsigned createCount = 0;
     if (createCount < 12) {
@@ -617,12 +629,24 @@ NativeResult renderRefSetLight(const std::vector<VmValue> &args,
   const uint32_t first = vmColorArg(args[0], 0xffffff);
   const uint32_t second = vmColorArg(args[1], 0x404040);
   const uint32_t third = vmColorArg(args[2], 0xffffff);
+  // One-shot time-of-day signature: with the sky config these three colours
+  // (diffuse/ambient/specular after FUN_0048c9d0's channel order) identify
+  // the active scene look in the run log.
+  static bool setLightLogged = false;
+  if (!setLightLogged) {
+    setLightLogged = true;
+    runlog::event(runlog::EventKind::Note,
+                  "RenderRef.setLight: diffuse=0x%06x ambient=0x%06x "
+                  "specular=0x%06x",
+                  first & 0xffffffu, second & 0xffffffu, third & 0xffffffu);
+  }
   SceneRenderLight light = game.resources->sceneLight(node)
                                ? *game.resources->sceneLight(node)
                                : SceneRenderLight::stockDefaults();
   light.applySetLight(first, second, third);
   if (!game.resources->bindSceneLight(node, light))
     return std::string{"RenderRef.setLight: light binding failed"};
+  game.resources->markConfiguredLight(node.id);
   return std::monostate{};
 }
 

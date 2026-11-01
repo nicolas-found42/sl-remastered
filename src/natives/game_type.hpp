@@ -236,6 +236,8 @@ NativeResult gameRefGetInfoIntString(const std::vector<VmValue> &,
                                      const std::vector<const TufaClass *> *);
 NativeResult gameRefGetOri(const std::vector<VmValue> &, const VmObject *,
                            VmArena *, const std::vector<const TufaClass *> *);
+NativeResult mouseCursorGetPos(const std::vector<VmValue> &, const VmObject *,
+                               VmArena *, const std::vector<const TufaClass *> *);
 NativeResult gameRefGetPos(const std::vector<VmValue> &, const VmObject *,
                            VmArena *, const std::vector<const TufaClass *> *);
 NativeResult gameRefGetScriptInstance(const std::vector<VmValue> &,

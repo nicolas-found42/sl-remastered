@@ -67,7 +67,14 @@ int main() {
   TufaClass cls;
   cls.name = "java.util.resource.ResourceRef";
   cls.hasClassHeader = true;
-  std::vector<const TufaClass *> classes{&cls};
+  // Vector3/Ypr are needed by the PhysicsRef pose natives (allocateVector3).
+  TufaClass vector3Cls;
+  vector3Cls.name = "java.lang.Vector3";
+  vector3Cls.hasClassHeader = true;
+  TufaClass yprCls;
+  yprCls.name = "java.lang.Ypr";
+  yprCls.hasClassHeader = true;
+  std::vector<const TufaClass *> classes{&cls, &vector3Cls, &yprCls};
   const auto makeObject = [&]() -> const VmObject * {
     auto object = std::make_unique<VmObject>();
     object->runtimeClass = &cls;
@@ -144,6 +151,74 @@ int main() {
         body->state[1].pos != body->state[0].pos ||
         std::fabs(body->state[0].rot[2] - std::sin(0.5f)) > 1e-6f ||
         physicsNode->bounds.mode != 1 || physicsNode->bounds.values[3] != prototype->shape.boundRadius) return 1;
+    {
+      auto r1 = physicsSetMatrix({&position, &orientation}, dynamicObject,
+                                 &arena, &classes);
+      auto r2 = physicsGetPos({}, dynamicObject, &arena, &classes);
+      if (!std::holds_alternative<std::monostate>(r1)) {
+        if (const auto *msg = std::get_if<std::string>(&r1))
+          std::fprintf(stderr, "setMatrix: %s\n", msg->c_str());
+        return 1;
+      }
+      if (!std::holds_alternative<VmValue>(r2)) {
+        if (const auto *msg = std::get_if<std::string>(&r2))
+          std::fprintf(stderr, "getPos: %s\n", msg->c_str());
+        return 1;
+      }
+    }
+    {
+      // FUN_00480b00 / FUN_00480c10: the pose natives report the record's
+      // current state; the rotation goes through FUN_00551c90's Ypr.
+      body->state[0].pos = {7.0f, 8.0f, 9.0f};
+      body->state[0].rot = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0};
+      body->state[1] = body->state[0];
+      body->current = 1;
+      auto pos = physicsGetPos({}, dynamicObject, &arena, &classes);
+      const auto *posObj = std::get_if<VmValue>(&pos);
+      const auto *vector = posObj ? std::get_if<const VmObject *>(posObj) : nullptr;
+      if (!vector || !*vector) return 1;
+      const auto field = [&](const char *name) {
+        for (const auto &f : (*vector)->fields)
+          if (f.name == name) {
+            if (const auto *v = std::get_if<float>(&f.value)) return *v;
+          }
+        return -1.0f;
+      };
+      if (field("x") != 7.0f || field("y") != 8.0f || field("z") != 9.0f) return 1;
+      auto ori = physicsGetOri({}, dynamicObject, &arena, &classes);
+      const auto *oriObj = std::get_if<VmValue>(&ori);
+      const auto *ypr = oriObj ? std::get_if<const VmObject *>(oriObj) : nullptr;
+      if (!ypr || !*ypr) return 1;
+      const auto yprField = [&](const char *name) {
+        for (const auto &f : (*ypr)->fields)
+          if (f.name == name) {
+            if (const auto *v = std::get_if<float>(&f.value)) return *v;
+          }
+        return -1.0f;
+      };
+      // Identity basis takes the general branch: yaw=atan2(m2,m10),
+      // roll=atan2(m4,m5), pitch=atan2(-(cos(roll)*m6), m5).
+      if (std::fabs(yprField("y")) > 1e-5f ||
+          std::fabs(yprField("p")) > 1e-5f ||
+          std::fabs(yprField("r")) > 1e-5f) return 1;
+      body->state[0].rot = {0.5f, 0.0f, 0.2f, 0, 0.0f, 0.5f, 0.4f, 0, 0.0f, 0.0f, 0.5f, 0};
+      body->current = 0;
+      auto ori2 = physicsGetOri({}, dynamicObject, &arena, &classes);
+      const auto *y2 = std::get_if<VmValue>(&ori2);
+      const auto *ypr2 = y2 ? std::get_if<const VmObject *>(y2) : nullptr;
+      if (!ypr2 || !*ypr2) return 1;
+      const auto f2 = [&](const char *name) {
+        for (const auto &f : (*ypr2)->fields)
+          if (f.name == name) {
+            if (const auto *v = std::get_if<float>(&f.value)) return *v;
+          }
+        return -1.0f;
+      };
+      if (std::fabs(f2("y") - std::atan2(0.2f, 0.5f)) > 1e-5f ||
+          std::fabs(f2("r") - std::atan2(0.0f, 0.5f)) > 1e-5f ||
+          std::fabs(f2("p") - std::atan2(-0.4f, 0.5f)) > 1e-5f)
+        return 1;
+    }
     if (!world.destroy(*physicsNode)) return 1;
   }
   if (!std::holds_alternative<std::monostate>(invokeNative("java.util.resource.GameRef", "setFlags", "(I)V",

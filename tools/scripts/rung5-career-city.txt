@@ -1,0 +1,43 @@
+# Buy the used dealer's selected car, inspect ownership, then enter the city.
+8 move 320 240
+9.5 move 250 96
+10.5 down
+11 up
+14 sdl_type Tester
+16 move 256 378
+16.5 down
+17 up
+19 move 318 376
+19.5 down
+20 up
+24.5 move 318 378
+25 down
+25.5 up
+28 move 208 38
+28.5 down
+29 up
+40 shot @run/dealer-car.bmp
+42 move 565 42
+42.5 down
+43 up
+46 shot @run/buy-confirmation.bmp
+48 move 220 378
+48.5 down
+49 up
+60 shot @run/purchased-garage.bmp
+62 move 150 38
+62.5 down
+63 up
+70 shot @run/owned-carlot.bmp
+72 move 619 42
+72.5 down
+73 up
+80 shot @run/owned-garage.bmp
+82 move 20 38
+82.5 down
+83 up
+90 shot @run/city-prompt.bmp
+92 sdl_keydown Return
+92.2 sdl_keyup Return
+105 shot @run/career-city.bmp
+108 quit

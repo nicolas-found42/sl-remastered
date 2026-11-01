@@ -1,5 +1,7 @@
 #include "physics_friction.hpp"
 #include <cassert>
+#include <cmath>
+#include <limits>
 using namespace physics;
 int main() {
  BodyProto p, wall; wall.flags=kProtoStatic; Body a,b; a.proto=&p; b.proto=&p;
@@ -42,4 +44,60 @@ int main() {
  auto unchanged=x.state[0];
  assert(correctDirectContact(off,movingWorld)==-1);
  assert(x.state[0].vel==unchanged.vel && movingWorld.corrections==2);
+ // Stock batch normal rows: signed/unbounded diagonal solutions, no
+ // projected friction, no immediate predicted-velocity or pose mutation.
+ BodyProto dynamicProto, staticProto;
+ dynamicProto.invMass=1; staticProto.invMass=0; staticProto.flags=kProtoStatic;
+ Body dynamicBody, staticBody;
+ dynamicBody.proto=&dynamicProto; staticBody.proto=&staticProto;
+ dynamicBody.state[0].invInertiaWorld=matrixIdentity();
+ dynamicBody.state[1].stepFlags=1; staticBody.state[1].stepFlags=1;
+ dynamicBody.state[1].vel={0,-1,0};
+ DirectContact resting{&dynamicBody,&staticBody,{0,1,0},0.02f};
+ resting.resting=true; resting.constraintRow=true; resting.friction=10;
+ std::vector<DirectContact> rows{resting,resting};
+ DirectContactWorld batchWorld{0,0.1f};
+ const State predicted=dynamicBody.state[1];
+ assert(solveRestingContacts(rows,batchWorld)==1);
+ // RHS=.02-(1+0)*((-1+.2)+.2)=.62; each row /1 /dt.
+ assert(std::abs(dynamicBody.state[0].force[1]-12.4f)<0.00001f);
+ assert(dynamicBody.state[1].vel==predicted.vel);
+ assert(dynamicBody.state[1].stepFlags==predicted.stepFlags);
+ assert(dynamicBody.state[0].vel==Vec3{} && dynamicBody.state[0].shift==Vec3{});
+ assert(rows[0].processed && rows[1].processed);
+ assert(rows[0].frictionForce==0 && rows[0].normalImpulse==0);
+ // Invalid prediction activates the positional RHS, not velocity projection.
+ dynamicBody.state[0].force={}; dynamicBody.state[1].vel={};
+ dynamicBody.state[1].stepFlags=0;
+ rows={resting};
+ assert(solveRestingContacts(rows,batchWorld)==1);
+ assert(std::abs(dynamicBody.state[0].force[1]-1.0f)<0.00001f);
+ // No nonnegative bound in 004927f0: signed resting response is retained.
+ dynamicBody.state[0].force={}; dynamicBody.state[1].stepFlags=1;
+ resting.separation=-0.01f; rows={resting};
+ assert(solveRestingContacts(rows,batchWorld)==1);
+ assert(std::abs(dynamicBody.state[0].force[1]+0.1f)<0.00001f);
+ // A malformed later row must reject the whole batch before force apply.
+ const State savedBatch=dynamicBody.state[0];
+ rows={resting,resting}; rows[1].normal[0]=std::numeric_limits<float>::quiet_NaN();
+ assert(solveRestingContacts(rows,batchWorld)==-1);
+ assert(dynamicBody.state[0].force==savedBatch.force);
+ assert(!rows[0].processed);
+ // Ordinary contacts stay in world+0x118, not the generic constraint list.
+ rows={resting}; rows[0].constraintRow=false;
+ assert(solveRestingContacts(rows,batchWorld)==0);
+ assert(dynamicBody.state[0].force==savedBatch.force);
+ // 00496fe0 calls 00496050 for type7 too: force-stage normal and
+ // Coulomb-limited tangent forces, never normal impact momentum.
+ Body directBody; directBody.proto=&dynamicProto;
+ directBody.state[0].invInertiaWorld=matrixIdentity();
+ directBody.state[1].vel={1,-1,0};
+ directBody.state[1].stepFlags=0; staticBody.state[1].stepFlags=0;
+ DirectContact direct{&directBody,&staticBody,{0,1,0},0.02f};
+ direct.resting=true; direct.friction=0.5f;
+ assert(correctDirectContact(direct,batchWorld)==1); // positional shift overrides sliding status
+ assert(std::abs(directBody.state[0].force[1]-9.0f)<0.00001f);
+ assert(std::abs(directBody.state[0].force[0]+4.5f)<0.00001f);
+ assert(directBody.state[0].vel==Vec3{} && direct.normalImpulse==0);
+ assert(std::abs(direct.normalForce-9.0f)<0.00001f);
 }

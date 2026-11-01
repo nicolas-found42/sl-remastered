@@ -1,9 +1,22 @@
 #include "car_engine.hpp"
+#include "car_hud.hpp"
 #include <cassert>
 #include <cmath>
 #include <limits>
 
 int main() {
+  assert(!carHudNitro(0, 0));
+  assert(carHudNitro(0, 10) == 0.0f);
+  assert(carHudNitro(5, 10) == 0.5f);
+  CarHudTurbo turbo{1, 4000, 0, 2000, 4, 4};
+  assert(carHudTurboValue(turbo, 4000));
+  assert(std::fabs(*carHudTurboValue(turbo, 4000) - (std::sqrt(5.0f) - 1)) < 1e-6f);
+  assert(*carHudTurboValue(turbo, 6000) == 0);
+  assert(std::fabs(*carHudTurboValue(turbo, 5000) - (std::sqrt(3.0f) - 1)) < 1e-6f);
+  turbo.wastePressure = 0;
+  assert(carHudTurboValue(turbo, 4000) == 0.0f);
+  turbo.rpmMultiplier = 0;
+  assert(!carHudTurboValue(turbo, 4000));
   CarConfig config;
   assert(config.enginePowerCopy == 300 && config.drag[0] == 0);
   assert(sampleCarTorqueCurve(config.torqueCurve, 0) == 0);

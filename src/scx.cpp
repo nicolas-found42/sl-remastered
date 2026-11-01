@@ -393,6 +393,7 @@ bool parseV4(ScxReader& r, ScxModel& m) {
 
 	bool haveGroup = false;
 	std::optional<uint32_t> groupMaterial;
+	std::vector<uint32_t> groupBones;
 	bool awaitingIndices = false;
 	uint64_t chunkCount = 0;
 	while (fileEnd - r.pos >= 8) {
@@ -423,15 +424,36 @@ bool parseV4(ScxReader& r, ScxModel& m) {
 			if (!readMaterialChunk(r, mat)) {
 				return false;
 			}
+			groupBones.clear();
 			groupMaterial = static_cast<uint32_t>(m.materials.size());
 			m.materials.push_back(std::move(mat));
 			haveGroup = true;
 			awaitingIndices = false;
 		} else if (type == kChunkPhysics && physicsOnly) {
+			groupBones.clear();
 			groupMaterial.reset();
 			haveGroup = true;
 			awaitingIndices = false;
-		} else if (type == kChunkPhysics || type == kChunkBoneA || type == kChunkBoneB) {
+		} else if (type == kChunkBoneA || type == kChunkBoneB) {
+			// FUN_00502de0 skips the first payload word. Chunk 2 has two
+			// bone IDs; chunk 3 has a count followed by that many bone IDs.
+			uint32_t reserved = 0;
+			uint32_t count = 2;
+			if (!r.u32(reserved, "truncated bone map header") ||
+			    (type == kChunkBoneB && !r.u32(count, "truncated bone map count"))) {
+				return false;
+			}
+			if (!count || r.limit - r.pos != uint64_t(count) * 4) {
+				return r.fail("bone map chunk size mismatch");
+			}
+			groupBones.resize(count);
+			for (uint32_t& bone : groupBones) {
+				if (!r.u32(bone, "truncated bone map")) return false;
+			}
+			haveGroup = true;
+			awaitingIndices = false;
+		} else if (type == kChunkPhysics) {
+			groupBones.clear();
 			m.rawChunks.push_back({type, start + 8, size - 8});
 		} else if (type == kChunkVertices) {
 			if (!haveGroup) {
@@ -440,8 +462,12 @@ bool parseV4(ScxReader& r, ScxModel& m) {
 			}
 			ScxMesh mesh;
 			mesh.materialIndex = groupMaterial;
+			mesh.bonePalette = groupBones;
 			if (!readVertexChunk(r, mesh, start, end)) {
 				return false;
+			}
+			if (mesh.bonePalette.empty() && (!mesh.boneIndices.empty() || !mesh.weights.empty())) {
+				return r.fail("skinned vertices without bone map");
 			}
 			countNonFinite(m, mesh);
 			m.meshes.push_back(std::move(mesh));

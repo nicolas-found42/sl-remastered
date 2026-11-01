@@ -1,4 +1,5 @@
 #include "font.hpp"
+#include "car_runtime.hpp"
 #include "video.hpp"
 #include "natives/game_type.hpp"
 #include "natives/registry.hpp"
@@ -49,7 +50,96 @@ int main() {
 			float otherWidth = 0; CHECK(fontTextWidth(otherCache.mesh, "AB", otherWidth, error) && otherWidth > 0);
 			CHECK(otherCache.texture.width > 0 && otherCache.texture.height > 0);
 		}
-		int32_t raw; std::memcpy(&raw, &id, sizeof raw);
+    // Native HUD r_text instances select glyph rendering independently of
+    // material flags (FUN_0048c670); cars.rpk fonts carry flags 4.
+    uint32_t hudFontId = 0;
+    CHECK(packs.resolveLiteral("cars.rpk", 0x58, hudFontId, error));
+    auto hudFont = sceneLoadMaterial(resources, hudFontId);
+    CHECK(hudFont.material && hudFont.flags == 4);
+    SceneMaterialCache hudCache;
+    CHECK(sceneRefreshMaterial(resources, *hudFont.material, packs.root(),
+                               hudCache, error, false, true));
+    std::vector<RenderVertex> glyphVertices;
+    std::vector<uint32_t> glyphIndices;
+    CHECK(fontGlyphGeometry(hudCache.mesh, "abcdef", 0, 0, 2, 1,
+                            glyphVertices, glyphIndices, error));
+    CHECK(glyphVertices.size() == 24 && glyphIndices.size() == 36);
+    const auto hudFontNode = resources.lookup(hudFontId, 14);
+    CHECK(resources.bindSceneMaterial(hudFontNode.node,
+                                      std::shared_ptr<SceneMaterialResources>(std::move(hudFont.material))));
+    auto* hudNode = world.addTypedChild(*world.defaultParent(), 3, "r_text", 0x200);
+    CHECK(hudNode);
+    world.markLoaded(*hudNode);
+    auto hudInstance = std::make_shared<SceneRenderInstance>(hudFontNode.node.owner);
+    hudInstance->setBoneTranslation(-0.8f, 0, 0);
+    hudInstance->setTextState({"abcdef", 2, 0xff4fe015, 1});
+    CHECK(resources.bindSceneRenderInstance(resources.resolve(hudNode), hudInstance));
+    auto* hudSurface = SDL_CreateSurface(640, 480, SDL_PIXELFORMAT_RGBA32);
+    CHECK(hudSurface);
+    {
+      auto hudOutput = Render2D::forSurface(hudSurface, error);
+      CHECK(hudOutput);
+      auto hudDraw = SceneMaterialRenderer::create(resources, *hudOutput, *hudNode, error);
+      CHECK(hudDraw);
+      const std::array<float, 16> unit{{1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1}};
+      const ViewportInstance hudViewport{0, 0, 0, 1, 1, ViewportList::Active, {}};
+      CHECK(hudOutput->clear(0, 0, 0, 255, error));
+      CHECK(hudDraw->draw(unit, unit, hudViewport, error));
+      CHECK(hudOutput->present(error));
+      Uint8 red, green, blue, alpha;
+      CHECK(SDL_ReadSurfacePixel(hudSurface, 65, 246, &red, &green, &blue, &alpha));
+      CHECK(red == 79 && green == 224 && blue == 21 && alpha == 255);
+      hudInstance->setInstanceColor(0xff808080);
+      CHECK(hudOutput->clear(0, 0, 0, 255, error));
+      CHECK(hudDraw->draw(unit, unit, hudViewport, error));
+      CHECK(hudOutput->present(error));
+      CHECK(SDL_ReadSurfacePixel(hudSurface, 65, 246, &red, &green, &blue, &alpha));
+      CHECK(red == 40 && green == 112 && blue == 11 && alpha == 255);
+      // Production SCX/atlas geometry, including non-quad cluster and needle,
+      // must take the same planar material path as their seat OSD camera.
+      CarSeat seat;
+      auto* hudParent = world.addTypedChild(*world.defaultParent(), 1, "hud parent", 0);
+      CHECK(hudParent);
+      world.markLoaded(*hudParent);
+      setLinkOwner(seat.osd, hudParent);
+      constexpr size_t slots[]{26, 28, 34, 35, 36, 37};
+      auto projection = unit;
+      projection[0] = projection[5] = projection[10] = 0.02f;
+      projection[14] = 1.0f; // source HUD plane at z=-35.9 maps into D3D [0,1].
+      for (size_t model = 0; model < 6; ++model) {
+        const uint32_t material = (hudFontId & 0xffff0000u) |
+            (model == 0 ? 0x55u : model == 1 ? 0x56u : 0x5fu + uint32_t(model));
+        const std::array<float, 3> position = model == 1 ?
+            std::array<float, 3>{1.43f, -4.36f, -3.58f} :
+            std::array<float, 3>{3.24f, -2.4f, -3.59f};
+        const bool created = carHudModel(resources, world, seat, model, material, position,
+                                          model == 1 ? 0.48f : 0, true, error);
+        if (!created) std::fprintf(stderr, "HUD model %zu: %s\n", model, error.c_str());
+        CHECK(created);
+        auto* node = world.nodeFor(seat.links[slots[model]].owner);
+        CHECK(node);
+        seat.hudModels[model]->setCameraPlane(false);
+        CHECK(!SceneMaterialRenderer::create(resources, *hudOutput, *node, error));
+        error.clear();
+        seat.hudModels[model]->setCameraPlane(true);
+        auto draw = SceneMaterialRenderer::create(resources, *hudOutput, *node, error);
+        CHECK(draw);
+        CHECK(draw->transparentDepth(unit, error));
+        CHECK(hudOutput->clear(0, 0, 0, 255, error));
+        CHECK(draw->draw(unit, projection, hudViewport, error));
+        CHECK(hudOutput->present(error));
+        bool colored = false;
+        for (int y = 0; y < hudSurface->h && !colored; ++y)
+          for (int x = 0; x < hudSurface->w && !colored; ++x) {
+            CHECK(SDL_ReadSurfacePixel(hudSurface, x, y, &red, &green, &blue, &alpha));
+            colored = red || green || blue;
+          }
+        CHECK(colored);
+      }
+    }
+    SDL_DestroySurface(hudSurface);
+    int32_t raw;
+    std::memcpy(&raw, &id, sizeof raw);
 		CHECK(std::holds_alternative<std::monostate>(invokeNative("java.util.resource.ResourceRef", "set", "(I)V", {raw}, font, &arena, &classes)));
 		TufaClass stringClass; stringClass.name = "java.lang.String"; stringClass.hasClassHeader = true;
 		classes.push_back(&stringClass);

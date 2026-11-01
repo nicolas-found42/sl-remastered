@@ -1,0 +1,33 @@
+# Start a career and inspect the new-car dealer inventory.
+8 move 320 240
+9.5 move 250 96
+10.5 down
+11 up
+14 sdl_type Tester
+16 move 256 378
+16.5 down
+17 up
+19 move 318 376
+19.5 down
+20 up
+24.5 move 318 378
+25 down
+25.5 up
+28 move 179 38
+28.5 down
+29 up
+42 shot @run/new-dealer-1.bmp
+44 move 510 42
+44.5 down
+45 up
+49 shot @run/new-dealer-2.bmp
+51 down
+51.5 up
+55 shot @run/new-dealer-3.bmp
+57 down
+57.5 up
+61 shot @run/new-dealer-4.bmp
+63 down
+63.5 up
+67 shot @run/new-dealer-5.bmp
+69 quit

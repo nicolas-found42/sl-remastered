@@ -6,6 +6,9 @@
 #include "car_engine.hpp"
 #include "game_creation.hpp"
 #include "resource_world.hpp"
+#include "scene_2d.hpp"
+#include "world_model.hpp"
+#include "vm.hpp"
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -274,6 +277,42 @@ bool CarRuntimeInstance::advanceControls(const CarControlSnapshot &input,
   clutchState = nextClutch;
   shiftState = shift;
   currentGear = gear;
+  // FUN_0044df70 / FUN_0044e120: intervention flags describe actual pedal
+  // attenuation, never merely an enabled assistance setting.
+  absActive = asrActive = false;
+  const auto assist = [&](float threshold, bool braking, float& previous) {
+    float& pedal = braking ? brakeState : throttleState;
+    if (!(threshold > 0 && pedal >= 0.01f))
+      return false;
+    float slip = 0;
+    unsigned count = 0;
+    if (carPhysics)
+      for (size_t i = 0; i < carPhysics->wheels.size() && i < wheelExtras.size(); ++i) {
+        const auto& wheel = carPhysics->wheels[i];
+        const float weight = braking ? wheelExtras[i].brake : wheelExtras[i].drive;
+        if (wheel && wheel->suspensionBody && weight != 0 && wheel->suspension.force > 0) {
+          slip += std::fabs(wheel->longitudinalSlip);
+          ++count;
+        }
+      }
+    if (!count) {
+      previous = 0;
+      return false;
+    }
+    const float residual = slip / float(count) - threshold * 0.2f;
+    const float predictive = residual + (residual - previous) * (braking ? 4.0f : 2.0f);
+    previous = residual;
+    if (!(predictive > 0))
+      return false;
+    const float factor = std::max(0.0f, 1.0f - predictive /
+        (threshold * (braking ? 0.40000003576278687f : 0.30000001192092896f)));
+    pedal *= factor;
+    if (!braking)
+      clutchState = 1.0f - (1.0f - clutchState) * factor;
+    return factor < 0.9f;
+  };
+  absActive = assist(abs, true, previousAbsSlip);
+  asrActive = assist(asr, false, previousAsrSlip);
   error.clear();
   return true;
 }
@@ -982,6 +1021,126 @@ bool loadCarPrototype(ResourceWorld &world, ScriptNode &source,
     result->clickGeometry = std::move(click);
   }
   result->stage = CarPrototypeStage::PhysicsGeometryReady;
+  error.clear();
+  return true;
+}
+
+CarHudOptionalValues carHudOptionalValues(GameWorld &world,
+                                         const CarRuntimeInstance &car) {
+  const auto objectField = [](const VmObject *object, std::string_view name) -> const VmObject * {
+    if (object)
+      for (const auto &field : object->fields)
+        if (field.name == name)
+          if (const auto *value = std::get_if<const VmObject *>(&field.value))
+            return *value;
+    return nullptr;
+  };
+  const auto floatField = [](const VmObject *object, std::string_view name) {
+    if (object)
+      for (const auto &field : object->fields)
+        if (field.name == name)
+          if (const auto *value = std::get_if<float>(&field.value))
+            return *value;
+    return 0.0f;
+  };
+  CarHudOptionalValues values;
+  // FUN_00448430 copies tank_nitro from the chassis after updatevariables.
+  // Read the same live loaded script field without inventing a tank capacity.
+  values.nitro = carHudNitro(car.nitrous, floatField(car.chassisObject, "tank_nitro"));
+  auto *chassis = car.chassisObject ? world.findByReceiver(car.chassisObject) : nullptr;
+  const auto *runtime = chassis && chassis->carInstance ? chassis->carInstance.get() : &car;
+  // FUN_00447b30 obtains dynodata from the engine installed in chassis slot 0x191.
+  const VmObject *dyno = nullptr;
+  for (const auto &slot : runtime->slots)
+    if (slot && slot->id == 0x191) {
+      if (auto *engine = world.nodeFor(slot->attachedNode.owner))
+        dyno = objectField(engine->scriptReceiver, "dynodata");
+      break;
+    }
+  if (dyno) {
+    CarHudTurbo turbo;
+    // FUN_0046aa20: native +dc/+e0/+e4/+e8/+ec/+f0.
+    turbo.rpmMultiplier = floatField(dyno, "rpm_turbo_mul");
+    turbo.optimumRpm = floatField(dyno, "rpm_turbo_opt");
+    turbo.range = floatField(dyno, "rpm_turbo_range");
+    turbo.maximumPressure = floatField(dyno, "P_turbo_max");
+    turbo.wastePressure = turbo.maximumPressure;
+    for (const auto &field : dyno->fields)
+      if (field.name == "P_turbo_waste")
+        if (const auto *value = std::get_if<float>(&field.value))
+          turbo.wastePressure = *value;
+    values.turbo = carHudTurboValue(turbo, std::fabs(car.displayedEngineSpeed * 9.549296379089355f));
+  }
+  return values;
+}
+
+
+bool carHudModel(ResourceWorld& resources, GameWorld& world, CarSeat& seat,
+                 size_t index, uint32_t materialId, const std::array<float, 3>& position,
+                 float roll, bool visible, std::string& error) {
+  constexpr std::array<size_t, 6> slots{26, 28, 34, 35, 36, 37};
+  if (index >= slots.size()) {
+    error = "HUD model index unavailable";
+    return false;
+  }
+  auto& link = seat.links[slots[index]];
+  auto& instance = seat.hudModels[index];
+  if (!visible) {
+    if (auto* node = world.nodeFor(link.owner))
+      world.destroy(*node);
+    instance.reset();
+    error.clear();
+    return true;
+  }
+  if (!instance || !link.owner) {
+    auto* parent = world.nodeFor(seat.osd.owner);
+    if (!parent) {
+      error = "HUD model parent unavailable";
+      return false;
+    }
+    const auto found = resources.lookup(materialId, 14);
+    if (found.status != LookupStatus::Found) {
+      error = "HUD model material unavailable";
+      return false;
+    }
+    auto material = resources.sceneMaterial(found.node);
+    if (!material) {
+      auto loaded = sceneLoadMaterial(resources, materialId);
+      if (!loaded.material) {
+        error = "HUD model material: " + loaded.error;
+        return false;
+      }
+      material = std::move(loaded.material);
+      if (!resources.bindSceneMaterial(found.node, material)) {
+        error = "HUD model material binding failed";
+        return false;
+      }
+    }
+    SceneMaterialCache cache;
+    if (!sceneRefreshMaterial(resources, *material, resources.packs().root(), cache, error))
+      return false;
+    auto* node = world.addTypedChild(*parent, 3, "gauge", 0x200);
+    if (!node) {
+      error = "HUD model allocation failed";
+      return false;
+    }
+    node->bounds = ResourceBounds{};
+    node->field6c = parent->field6c;
+    node->field70 = parent->field70;
+    world.markLoaded(*node);
+    node->loadPriority = 1.0f;
+    instance = std::make_shared<SceneRenderInstance>(found.node.owner);
+    instance->setCameraPlane(true);
+    if (!resources.bindSceneRenderInstance(resources.resolve(node), instance)) {
+      world.destroy(*node);
+      instance.reset();
+      error = "HUD model binding failed";
+      return false;
+    }
+    setLinkOwner(link, node);
+  }
+  const float rotation[3]{0, 0, roll};
+  instance->setBoneMatrix(position.data(), rotation);
   error.clear();
   return true;
 }
