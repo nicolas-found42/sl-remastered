@@ -367,6 +367,15 @@ static int probeMain(int argc, char** argv, const std::string& runDir) {
       std::fprintf(stderr, "startup probe: music output: %s\n", error.c_str());
       return 1;
     }
+    {
+      std::string deviceName;
+      if (musicOutput->deviceName(deviceName, error))
+        std::printf("music output: driver '%s' device '%s'\n",
+                    SDL_GetCurrentAudioDriver(), deviceName.c_str());
+      else
+        std::fprintf(stderr, "startup probe: music device name: %s\n",
+                     error.c_str());
+    }
     musicBackend = createAudioToolboxMusicBackend(*musicOutput);
     videoOutput = AudioOutput::create(error);
     if (!videoOutput) {
@@ -1278,6 +1287,7 @@ static int probeMain(int argc, char** argv, const std::string& runDir) {
           };
           float previousFrameSeconds = 0.0f;
           bool noCameraFrameLogged = false;
+          Uint64 lastMusicStatusLogMs = 0;
           std::optional<std::array<float, 3>> cursorInput =
               std::array<float, 3>{};
           world.setCursorInput([&]() { return cursorInput; });
@@ -2066,6 +2076,40 @@ static int probeMain(int argc, char** argv, const std::string& runDir) {
               std::fprintf(stderr, "startup probe: music update: %s\n",
                            error.c_str());
               return 1;
+            }
+            {
+              const Uint64 nowMs = SDL_GetTicks();
+              if (nowMs - lastMusicStatusLogMs >= 1000) {
+                lastMusicStatusLogMs = nowMs;
+                size_t queuedSamples = 0;
+                std::string queuedError;
+                const bool queuedOk =
+                    musicOutput->queuedSamples(queuedSamples, queuedError);
+                runlog::event(
+                    runlog::EventKind::Note,
+                    "music: set=%d mode=%d track=%d/%zu playing=%d "
+                    "queued=%zu volume=%.3f%s%s",
+                    musicPlayer->selectedSet(), musicPlayer->getMode(),
+                    musicPlayer->trackIndex(musicPlayer->selectedSet()),
+                    musicPlayer->selectedSet() >= 0
+                        ? musicPlayer->trackCount(musicPlayer->selectedSet())
+                        : 0,
+                    musicPlayer->isPlaying() ? 1 : 0,
+                    queuedOk ? queuedSamples : 0, sound.volumes[1],
+                    queuedOk ? "" : " queued-error=",
+                    queuedOk ? "" : queuedError.c_str());
+                double pcmRms = 0.0;
+                float pcmPeak = 0.0f;
+                size_t pcmFrames = 0;
+                std::string pcmError;
+                const bool pcmOk = musicOutput->meter(
+                    pcmRms, pcmPeak, pcmFrames, pcmError);
+                runlog::event(runlog::EventKind::Note,
+                              "music pcm: rms=%.6f peak=%.6f frames=%zu%s%s",
+                              pcmRms, pcmPeak, pcmFrames,
+                              pcmOk ? "" : " meter-error=",
+                              pcmOk ? "" : pcmError.c_str());
+              }
             }
             if (!soundEffects->tick(error)) {
               std::fprintf(stderr, "startup probe: sound update: %s\n",
