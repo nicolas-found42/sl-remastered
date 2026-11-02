@@ -28,7 +28,7 @@ def fingerprint(st):
 
 
 def collect(root, max_files=MAX_FILES, max_dirs=MAX_DIRS,
-            max_file=MAX_FILE_BYTES, max_total=MAX_TOTAL_BYTES):
+            max_file=MAX_FILE_BYTES, max_total=MAX_TOTAL_BYTES, exclude_runtime=True):
     root = Path(root).resolve(strict=True)
     if not root.is_dir():
         raise ValueError('game root must be a directory')
@@ -50,14 +50,14 @@ def collect(root, max_files=MAX_FILES, max_dirs=MAX_DIRS,
         dirs.sort(); names.sort()
         for name in list(dirs):
             path = directory / name; rel = path.relative_to(root).as_posix()
-            reason = EXCLUDED_ROOT.get(name.lower()) if directory == root else None
+            reason = EXCLUDED_ROOT.get(name.lower()) if exclude_runtime and directory == root else None
             if reason:
                 exclusions.append({'path': rel + '/', 'reason': reason}); dirs.remove(name)
             elif path.is_symlink():
                 errors.append({'path': rel, 'reason': 'directory symlink unsupported'}); dirs.remove(name)
         for name in names:
             path = directory / name; rel = path.relative_to(root).as_posix()
-            reason = EXCLUDED_ROOT.get(name.lower()) if directory == root else None
+            reason = EXCLUDED_ROOT.get(name.lower()) if exclude_runtime and directory == root else None
             if reason:
                 exclusions.append({'path': rel, 'reason': reason}); continue
             seen += 1
@@ -94,7 +94,7 @@ def collect(root, max_files=MAX_FILES, max_dirs=MAX_DIRS,
                 errors.append({'path': directory.relative_to(root).as_posix(), 'reason': 'directory changed during capture'})
         except OSError as error:
             errors.append({'path': directory.relative_to(root).as_posix(), 'reason': str(error)})
-    return {'format': 1, 'scope': 'prelaunch game-data tree; not a file-access trace or atomic snapshot',
+    return {'format': 1, 'scope': ('prelaunch game-data tree' if exclude_runtime else 'complete file tree') + '; not a file-access trace or atomic snapshot',
             'game_root': str(root), 'complete': not errors, 'hashed_bytes': used,
             'limits': {'files': max_files, 'directories': max_dirs, 'file_bytes': max_file, 'total_bytes': max_total},
             'files': dict(sorted(items.items())), 'exclusions': exclusions, 'errors': errors}

@@ -1,4 +1,6 @@
 import json
+import os
+import uuid
 from pathlib import Path
 import subprocess
 import tempfile
@@ -16,10 +18,23 @@ class NativeRecordTest(unittest.TestCase):
             (save / 'game/options').write_bytes(b'initial')
             probe = root / 'probe'
             probe.write_text('#!/usr/bin/env python3\nimport os, sys\nfrom pathlib import Path\nassert os.environ["SLRR_TRACE_RANDOM_SEED"] == "1"\nassert os.environ["SLRR_TRACE_CAR_CREATION"] == "1"\nPath(sys.argv[sys.argv.index("--data-root") + 1], "save/game/options").write_bytes(b"changed")\nprint("startup probe: milestone menu process=1.250 loop=1.000 frame=12")\nprint("startup probe: milestone driving process=3.500 loop=3.250 frame=25")\n')
+            # This subprocess is an adapter-protocol fixture, not game evidence.
+            # Supply its actual output bytes so capture validation cannot accept
+            # mere printed claims in place of an inspectable PCM artifact.
+            with probe.open('a') as stream:
+                stream.write('import struct,json\nr=Path(os.environ["SLRR_RUN_DIR"])/"unit-fixture"\nr.mkdir()\n'
+                             '(r/"audio-mix.raw").write_bytes(struct.pack("<2f",.25,-.25))\n'
+                             '(r/"audio-mix.raw.spec.jsonl").write_text(json.dumps(dict(schema=1,driver="disk",encoding="f32le",channels=2,rate=48000,sample_frames=960))+"\\n")\n')
             probe.chmod(0o755)
-            out = root / 'record'
+            prepaid_root = os.environ.get('SLRR_NATIVE_PREPAID_ROOT')
+            prepaid_max = os.environ.get('SLRR_NATIVE_PREPAID_MAX_MIB')
+            if bool(prepaid_root) != bool(prepaid_max):
+                raise ValueError('prepaid root/max environment required together')
+            out = Path(prepaid_root)/('adapter-'+uuid.uuid4().hex) if prepaid_root else root / 'record'
             tool = Path(__file__).with_name('run_native.py')
             command = ['python3', '-I', str(tool), str(out), '--probe', str(probe), '--game', str(game), '--save', str(save)]
+            if prepaid_root:
+                command += ['--artifact-budget-root', prepaid_root, '--artifact-parent-max-mib', prepaid_max]
             result = subprocess.run(command, capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertEqual((out / 'initial-save/save/game/options').read_bytes(), b'initial')
@@ -28,6 +43,14 @@ class NativeRecordTest(unittest.TestCase):
             self.assertEqual(json.loads((out / 'result.json').read_text())['exit_code'], 0)
             status = json.loads((out / 'result.json').read_text())
             self.assertTrue(status['source_save_unchanged'])
+            self.assertTrue(status['source_game_unchanged'])
+            source_before = json.loads((out / 'source-game-before.json').read_text())
+            source_after = json.loads((out / 'source-game-after.json').read_text())
+            self.assertTrue(source_before['complete'] and source_after['complete'])
+            self.assertEqual(source_before['files'], source_after['files'])
+            self.assertEqual(status['focus']['status'], 'no_owned_activation_observed')
+            self.assertEqual(status['audio']['frames'], 1)
+            self.assertEqual(status['audio']['nonzero_samples'], 2)
             self.assertEqual(status['timing']['menu_seconds'], 1.25)
             self.assertEqual(status['timing']['driving_seconds'], 3.5)
             self.assertGreater(status['timing']['preparation_seconds'], 0)
@@ -37,7 +60,23 @@ class NativeRecordTest(unittest.TestCase):
             manifest = json.loads((out / 'game-data-manifest.json').read_text())
             self.assertTrue(manifest['complete'])
             self.assertEqual(manifest['files']['system.rpk']['size'], 9)
-            self.assertEqual(subprocess.run(command, capture_output=True).returncode, 2)
+            self.assertEqual(subprocess.run(command, capture_output=True).returncode, 1 if prepaid_root else 2)
+            # A valid process/focus/PCM capture must still fail if it writes the
+            # source tree, including paths excluded from diagnostic identity.
+            for index, filename in enumerate(('system.rpk', 'diag.log')):
+                with probe.open('a') as stream:
+                    stream.write(f'Path(sys.argv[-1], {filename!r}).write_bytes(b"source changed")\n')
+                changed_out = Path(prepaid_root)/('adapter-changed-'+uuid.uuid4().hex) if prepaid_root else root / f'changed-{index}'
+                changed_command = command.copy()
+                changed_command[3] = str(changed_out)
+                changed = subprocess.run(changed_command, capture_output=True, text=True)
+                self.assertEqual(changed.returncode, 1, changed.stderr)
+                evidence = json.loads((changed_out / 'result.json').read_text())
+                self.assertEqual(evidence['exit_code'], 0)
+                self.assertEqual(evidence['observer_exit_code'], 0)
+                self.assertEqual(evidence['audio']['frames'], 1)
+                self.assertTrue(evidence['source_save_unchanged'])
+                self.assertFalse(evidence['source_game_unchanged'])
 
     def test_rejects_invalid_arguments_before_creating_output(self):
         with tempfile.TemporaryDirectory() as temp:
