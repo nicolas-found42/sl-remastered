@@ -31,7 +31,7 @@ add_executable(ptx_view tools/ptx_view.cpp)
 target_link_libraries(ptx_view PRIVATE sl_data)
 
 add_executable(startup_probe tools/startup_probe.cpp)
-target_link_libraries(startup_probe PRIVATE sl_music sl_video)
+target_link_libraries(startup_probe PRIVATE sl_game_application)
 
 add_executable(rpk_test tests/rpk_test.cpp src/rpk.cpp)
 target_include_directories(rpk_test PRIVATE src)
@@ -529,7 +529,21 @@ add_library(sl_run_log STATIC src/run_log.cpp)
 target_include_directories(sl_run_log PUBLIC src)
 target_link_libraries(sl_run_log PUBLIC SDL3::SDL3)
 target_compile_definitions(sl_run_log PRIVATE SLRR_BUILD_TYPE="${CMAKE_BUILD_TYPE}")
-target_link_libraries(startup_probe PRIVATE sl_run_log)
+add_library(sl_game_application STATIC src/game_application.cpp src/game_application_paths.cpp)
+target_include_directories(sl_game_application PUBLIC src PRIVATE tools)
+target_link_libraries(sl_game_application PUBLIC sl_music sl_video sl_run_log)
+
+add_executable(sl_game MACOSX_BUNDLE src/game_main.cpp)
+target_link_libraries(sl_game PRIVATE sl_game_application "-framework CoreFoundation")
+set_target_properties(sl_game PROPERTIES
+    OUTPUT_NAME "Street Legal Racing"
+    MACOSX_BUNDLE_INFO_PLIST "${CMAKE_SOURCE_DIR}/tools/release/Info.plist.in")
+
+add_executable(game_application_paths_test tests/game_application_paths_test.cpp src/game_application_paths.cpp)
+target_include_directories(game_application_paths_test PRIVATE src)
+target_compile_options(game_application_paths_test PRIVATE -fsanitize=address,undefined -fno-sanitize-recover=undefined -UNDEBUG)
+target_link_options(game_application_paths_test PRIVATE -fsanitize=address,undefined)
+add_test(NAME game_application_paths_unit COMMAND game_application_paths_test)
 set_tests_properties(startup_probe_unit PROPERTIES ENVIRONMENT "SLRR_RUN_DIR=${CMAKE_BINARY_DIR}/test-runs")
 
 add_executable(run_log_test tests/run_log_test.cpp)
