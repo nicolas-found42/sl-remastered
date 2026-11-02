@@ -39,7 +39,7 @@ enum class EventKind : uint8_t {
 // rank orders kinds by how likely they explain a failure: diagnose.py shows the
 // newest events above kRoutineRank first.
 struct KindInfo {
-  const char *name;
+  const char* name;
   bool persist;
   uint8_t rank;
 };
@@ -48,16 +48,24 @@ constexpr uint8_t kRoutineRank =
     3; // Thread and everything below it is routine noise
 
 inline constexpr KindInfo kKindTable[] = {
-    {"input", true, 8},     {"sound", true, 7},   {"drop", true, 9},
-    {"resource", true, 6},  {"note", true, 5},    {"error", true, 10},
-    {"heartbeat", true, 4}, {"frame", true, 4},   {"nativecall", false, 1},
-    {"cursor", false, 2},   {"thread", false, 3}, {"scriptenter", false, 2},
+    {"input", true, 8},
+    {"sound", true, 7},
+    {"drop", true, 9},
+    {"resource", true, 6},
+    {"note", true, 5},
+    {"error", true, 10},
+    {"heartbeat", true, 4},
+    {"frame", true, 4},
+    {"nativecall", false, 1},
+    {"cursor", false, 2},
+    {"thread", false, 3},
+    {"scriptenter", false, 2},
 };
 static_assert(sizeof(kKindTable) / sizeof(kKindTable[0]) ==
                   static_cast<size_t>(EventKind::Count),
               "every EventKind needs a table row");
 
-inline const KindInfo &kindInfo(EventKind kind) {
+inline const KindInfo& kindInfo(EventKind kind) {
   return kKindTable[static_cast<size_t>(kind)];
 }
 
@@ -71,7 +79,7 @@ enum class Counter : uint8_t {
   InputRecorded,
   Count
 };
-inline constexpr const char *kCounterNames[] = {
+inline constexpr const char* kCounterNames[] = {
     "sound_started", "sound_updated", "sound_dropped", "input_recorded"};
 static_assert(sizeof(kCounterNames) / sizeof(kCounterNames[0]) ==
                   static_cast<size_t>(Counter::Count),
@@ -96,11 +104,12 @@ struct Event {
 // Writers claim a slot with an atomic increment and never allocate. A reader
 // (including a signal handler) can see a slot that another thread is half way
 // through writing. That costs at most one garbled line.
-template <size_t Capacity> class EventRingT {
+template <size_t Capacity>
+class EventRingT {
 public:
   static constexpr size_t kCapacity = Capacity;
-  void push(double t, uint32_t frame, EventKind kind, const char *text) {
-    Event &slot =
+  void push(double t, uint32_t frame, EventKind kind, const char* text) {
+    Event& slot =
         slots_[next_.fetch_add(1, std::memory_order_relaxed) & (Capacity - 1)];
     slot.t = t;
     slot.frame = frame;
@@ -119,7 +128,7 @@ public:
     return n < Capacity ? static_cast<size_t>(n) : Capacity;
   }
   // Index 0 is the oldest retained event.
-  const Event &at(size_t i) const {
+  const Event& at(size_t i) const {
     const uint64_t n = written();
     const uint64_t first = n < Capacity ? 0 : n - Capacity;
     return slots_[(first + i) & (Capacity - 1)];
@@ -168,11 +177,11 @@ struct GapTable {
 };
 inline GapTable g_gaps;
 
-inline bool isGapText(const char *text) {
-  static constexpr const char *kWords[] = {
-      "unsupported", "not implemented", "unavailable", "unknown",    "failed",
-      "rejected",    "cannot",          "missing",     "unresolved", "invalid",
-      "not found",   "exceeded",        "lost"};
+inline bool isGapText(const char* text) {
+  static constexpr const char* kWords[] = {
+      "unsupported", "not implemented", "unavailable", "unknown", "failed",
+      "rejected", "cannot", "missing", "unresolved", "invalid",
+      "not found", "exceeded", "lost"};
   if (!text)
     return false;
   // "world state" lists car=unavailable before a car exists, and the stall
@@ -181,14 +190,14 @@ inline bool isGapText(const char *text) {
     return false;
   if (std::strncmp(text, "stall:", 6) == 0)
     return true;
-  for (const char *word : kWords)
+  for (const char* word : kWords)
     if (std::strstr(text, word))
       return true;
   return false;
 }
 // Digits and hex runs vary per object; the key ignores them so one gap that
 // names a different id each time stays one row.
-inline uint64_t gapKey(const char *text) {
+inline uint64_t gapKey(const char* text) {
   uint64_t hash = 1469598103934665603ull;
   bool inNumber = false;
   for (; *text; ++text) {
@@ -206,7 +215,7 @@ inline uint64_t gapKey(const char *text) {
   }
   return hash;
 }
-inline void recordGap(EventKind kind, const char *text, uint32_t frame,
+inline void recordGap(EventKind kind, const char* text, uint32_t frame,
                       double t) {
   const uint64_t key = gapKey(text);
   for (size_t i = 0; i < g_gaps.used; ++i)
@@ -219,7 +228,7 @@ inline void recordGap(EventKind kind, const char *text, uint32_t frame,
     ++g_gaps.overflow;
     return;
   }
-  GapEntry &e = g_gaps.entries[g_gaps.used++];
+  GapEntry& e = g_gaps.entries[g_gaps.used++];
   e.key = key;
   e.count = 1;
   e.firstFrame = e.lastFrame = frame;
@@ -239,15 +248,15 @@ struct SnapshotSlot {
   uint32_t frame = 0;
 };
 inline SnapshotSlot g_snapshots[kSnapshotSlots];
-inline void setSnapshot(const char *name, const std::string &text) {
-  SnapshotSlot *slot = nullptr;
-  for (auto &s : g_snapshots)
+inline void setSnapshot(const char* name, const std::string& text) {
+  SnapshotSlot* slot = nullptr;
+  for (auto& s : g_snapshots)
     if (std::strcmp(s.name, name) == 0) {
       slot = &s;
       break;
     }
   if (!slot)
-    for (auto &s : g_snapshots)
+    for (auto& s : g_snapshots)
       if (!s.name[0]) {
         std::snprintf(s.name, sizeof s.name, "%s", name);
         slot = &s;
@@ -277,12 +286,12 @@ struct TraceChannel {
   char lines[kTraceCapacity][kTraceLineSize];
   std::atomic<uint64_t> next{0};
   std::atomic<bool> stream{
-      false}; // also append every line to <name>-full.jsonl
+      false};                                      // also append every line to <name>-full.jsonl
   std::atomic<uint64_t> committed[kTraceCapacity]; // index + 1 once readable
   uint64_t written() const { return next.load(std::memory_order_relaxed); }
   // The line with this absolute index, or null if it was overwritten, never
   // claimed, or claimed but not committed (a writer was interrupted).
-  const char *line(uint64_t index) const {
+  const char* line(uint64_t index) const {
     const uint64_t n = written();
     if (index >= n || n - index > kTraceCapacity)
       return nullptr;
@@ -296,16 +305,16 @@ inline TraceChannel g_traces[kTraceChannels];
 // Hooks installed by RunRecorder (run_log.cpp). The header-only users below
 // stay linkable in unit tests that do not link the recorder; the hooks are
 // null there and every call is a no-op.
-inline void (*g_traceStreamHook)(const char *channel,
-                                 const char *line) = nullptr;
-inline void (*g_traceSaveHook)(const char *channel, const char *file) = nullptr;
+inline void (*g_traceStreamHook)(const char* channel,
+                                 const char* line) = nullptr;
+inline void (*g_traceSaveHook)(const char* channel, const char* file) = nullptr;
 inline void (*g_traceFlushHook)() = nullptr;
 
-inline TraceChannel *traceChannel(const char *name) {
-  for (auto &c : g_traces)
+inline TraceChannel* traceChannel(const char* name) {
+  for (auto& c : g_traces)
     if (std::strcmp(c.name, name) == 0)
       return &c;
-  for (auto &c : g_traces)
+  for (auto& c : g_traces)
     if (!c.name[0]) {
       std::snprintf(c.name, sizeof c.name, "%s", name);
       return &c;
@@ -317,24 +326,24 @@ inline TraceChannel *traceChannel(const char *name) {
 // commit leaves the slot uncommitted, so a dump skips it instead of printing a
 // half-written line. (Readers assume the writer is the interrupted thread or
 // is quiescent; the dump does not lock.)
-inline uint64_t traceClaim(TraceChannel *channel) {
+inline uint64_t traceClaim(TraceChannel* channel) {
   const uint64_t index = channel->next.fetch_add(1, std::memory_order_relaxed);
   channel->committed[index & (kTraceCapacity - 1)].store(
       0, std::memory_order_release);
   return index;
 }
-inline void traceFill(TraceChannel *channel, uint64_t index, const char *line) {
-  char *slot = channel->lines[index & (kTraceCapacity - 1)];
+inline void traceFill(TraceChannel* channel, uint64_t index, const char* line) {
+  char* slot = channel->lines[index & (kTraceCapacity - 1)];
   size_t i = 0;
   for (; line[i] && i + 1 < kTraceLineSize; ++i)
     slot[i] = line[i];
   slot[i] = 0;
 }
-inline void traceCommit(TraceChannel *channel, uint64_t index) {
+inline void traceCommit(TraceChannel* channel, uint64_t index) {
   channel->committed[index & (kTraceCapacity - 1)].store(
       index + 1, std::memory_order_release);
 }
-inline void tracePush(TraceChannel *channel, const char *line) {
+inline void tracePush(TraceChannel* channel, const char* line) {
   if (!channel || !line)
     return;
   const uint64_t index = traceClaim(channel);
@@ -347,7 +356,7 @@ inline void tracePush(TraceChannel *channel, const char *line) {
 // printf prints a non-finite float as nan, -nan, inf or -inf, which is not
 // JSON. Rewrites each such bare value (after ':', ',' or '[' and before ',',
 // ']' or '}') as null. Not for signal handlers.
-inline void traceSanitizeJson(char *text, size_t capacity) {
+inline void traceSanitizeJson(char* text, size_t capacity) {
   if (!text || capacity < 2)
     return;
   char out[kTraceLineSize];
@@ -378,7 +387,7 @@ inline void traceSanitizeJson(char *text, size_t capacity) {
   std::memcpy(text, out, n + 1);
 }
 // Copies the channel's current ring into <file> in the run directory.
-inline void traceSave(const char *channel, const char *file) {
+inline void traceSave(const char* channel, const char* file) {
   if (g_traceSaveHook)
     g_traceSaveHook(channel, file);
 }
@@ -395,25 +404,25 @@ inline double monotonicSeconds() {
          static_cast<double>(ts.tv_nsec) * 1e-9;
 }
 
-using PersistFn = void (*)(void *context, const Event &event);
+using PersistFn = void (*)(void* context, const Event& event);
 
 struct Hub {
   EventRing ring;
   ImportantRing important;
   double start = 0;
   PersistFn persist = nullptr;
-  void *context = nullptr;
-  void (*checkpoint)(void *context) = nullptr;
+  void* context = nullptr;
+  void (*checkpoint)(void* context) = nullptr;
   std::mutex ringMutex;
-  std::vector<Event> snapshot(size_t count, uint64_t &written) {
+  std::vector<Event> snapshot(size_t count, uint64_t& written) {
     std::lock_guard<std::mutex> lock(ringMutex);
     written = ring.written();
     return ring.last(count);
   }
-  void emit(EventKind kind, const char *text);
+  void emit(EventKind kind, const char* text);
 };
 
-inline std::atomic<Hub *> g_hub{nullptr};
+inline std::atomic<Hub*> g_hub{nullptr};
 
 inline bool active() {
   return g_hub.load(std::memory_order_acquire) != nullptr;
@@ -422,7 +431,7 @@ inline void setFrame(uint32_t frame) {
   g_frame.store(frame, std::memory_order_relaxed);
 }
 
-inline void Hub::emit(EventKind kind, const char *text) {
+inline void Hub::emit(EventKind kind, const char* text) {
   const double t = monotonicSeconds() - start;
   const uint32_t frame = g_frame.load(std::memory_order_relaxed);
   {
@@ -464,16 +473,16 @@ inline void Hub::emit(EventKind kind, const char *text) {
 }
 
 // Text is already formatted; use when the caller built the line itself.
-inline void eventText(EventKind kind, const char *text) {
-  if (Hub *hub = g_hub.load(std::memory_order_acquire))
+inline void eventText(EventKind kind, const char* text) {
+  if (Hub* hub = g_hub.load(std::memory_order_acquire))
     hub->emit(kind, text);
 }
 
 #if defined(__GNUC__)
 __attribute__((format(printf, 2, 3)))
 #endif
-inline void event(EventKind kind, const char *fmt, ...) {
-  Hub *hub = g_hub.load(std::memory_order_acquire);
+inline void event(EventKind kind, const char* fmt, ...) {
+  Hub* hub = g_hub.load(std::memory_order_acquire);
   if (!hub)
     return;
   char text[kEventTextSize];
@@ -485,27 +494,27 @@ inline void event(EventKind kind, const char *fmt, ...) {
 }
 
 // "[+SS.mmm fFRAME] tag text"
-std::string formatLine(double t, uint32_t frame, const char *tag,
-                       const char *text);
+std::string formatLine(double t, uint32_t frame, const char* tag,
+                       const char* text);
 
 // counters.txt body (key=value lines), formatted without snprintf or allocation
 // so a signal handler can use it. Returns the length written (cut off at cap -
 // 1) and always NUL-terminates.
-size_t formatCounters(char *buf, size_t cap);
+size_t formatCounters(char* buf, size_t cap);
 
 // Real input recording to input.txt in the run directory, in the --script
 // format. `t` is seconds since the frame loop started. They do nothing when no
 // run directory is open. Every record is written with its own write(2) so a
 // crash keeps everything up to the last event.
-std::string formatInputLine(double t, const char *verb, const char *a = nullptr,
-                            const char *b = nullptr);
+std::string formatInputLine(double t, const char* verb, const char* a = nullptr,
+                            const char* b = nullptr);
 void inputMotion(double t, float x,
-                 float y); // window points; coalesced to one record per 10 ms
+                 float y);             // window points; coalesced to one record per 10 ms
 void inputButton(double t, bool down); // left button
-void inputKey(double t, const char *scancodeName, bool down);
+void inputKey(double t, const char* scancodeName, bool down);
 void inputUnsupportedButton(
     double t, int sdlButton); // noted once per button, not replayable
-void inputFlush(double t); // writes a held-back motion once 10 ms have passed
+void inputFlush(double t);    // writes a held-back motion once 10 ms have passed
 
 struct RunOptions {
   std::string baseDir; // empty: $SLRR_RUN_DIR, else local/runs
@@ -513,6 +522,8 @@ struct RunOptions {
   std::string gameRoot, dataRoot, scriptPath;
   std::string referenceRoot = "ref";
   std::string sourceRoot; // empty: source root embedded by the compiler
+  // Player logs must not inspect a developer checkout or invoke git.
+  bool captureDeveloperSource = true;
   bool captureStreams = true;
   bool installHandlers = true;
 };
@@ -521,13 +532,13 @@ class RunRecorder {
 public:
   // Creates the run directory and everything in it. Returns null and sets
   // `error` if the directory cannot be made.
-  static std::unique_ptr<RunRecorder> start(const RunOptions &options,
-                                            std::string &error);
+  static std::unique_ptr<RunRecorder> start(const RunOptions& options,
+                                            std::string& error);
   ~RunRecorder();
-  RunRecorder(const RunRecorder &) = delete;
-  RunRecorder &operator=(const RunRecorder &) = delete;
+  RunRecorder(const RunRecorder&) = delete;
+  RunRecorder& operator=(const RunRecorder&) = delete;
 
-  const std::string &dir() const;
+  const std::string& dir() const;
   // Writes result.txt and restores the original stdout and stderr. Safe to call
   // twice. Returns exitCode.
   int finish(int exitCode);

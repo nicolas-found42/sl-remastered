@@ -29,12 +29,12 @@ namespace runlog {
 
 namespace {
 
-Hub &theHub() {
+Hub& theHub() {
   static Hub hub;
   return hub;
 }
 
-bool writeAll(int fd, const char *data, size_t size) {
+bool writeAll(int fd, const char* data, size_t size) {
   while (size) {
     const ssize_t n = ::write(fd, data, size);
     if (n < 0) {
@@ -66,7 +66,7 @@ CrashState g_crash;
 constexpr int kFatalSignals[] = {SIGSEGV, SIGBUS, SIGILL, SIGFPE, SIGABRT};
 constexpr int kStopSignals[] = {SIGTERM, SIGINT};
 
-const char *signalName(int sig) {
+const char* signalName(int sig) {
   switch (sig) {
   case SIGSEGV:
     return "SIGSEGV";
@@ -93,11 +93,11 @@ struct Out {
   int fd;
   char buf[1024];
   size_t n = 0;
-  char *sink = nullptr; // fd < 0: copy into memory instead of writing, used by
+  char* sink = nullptr; // fd < 0: copy into memory instead of writing, used by
                         // formatCounters
   size_t sinkCap = 0, sinkLen = 0;
   explicit Out(int f) : fd(f) {}
-  Out(char *mem, size_t cap) : fd(-1), sink(mem), sinkCap(cap) {}
+  Out(char* mem, size_t cap) : fd(-1), sink(mem), sinkCap(cap) {}
   void flush() {
     if (n && fd >= 0)
       writeAll(fd, buf, n);
@@ -111,11 +111,11 @@ struct Out {
       flush();
     buf[n++] = c;
   }
-  void str(const char *s) {
+  void str(const char* s) {
     for (; s && *s; ++s)
       ch(*s);
   }
-  void strn(const char *s, size_t max) {
+  void strn(const char* s, size_t max) {
     for (size_t i = 0; i < max && s[i]; ++i)
       ch(s[i]);
   }
@@ -160,7 +160,7 @@ struct Out {
     ch('.');
     padded(ms % 1000, 3);
   }
-  void eventLine(const Event &e) {
+  void eventLine(const Event& e) {
     str("[+");
     seconds3(e.t);
     str(" f");
@@ -175,14 +175,14 @@ struct Out {
   }
 };
 
-void dumpRecentEvents(Out &out, size_t count) {
-  const EventRing &ring = theHub().ring;
+void dumpRecentEvents(Out& out, size_t count) {
+  const EventRing& ring = theHub().ring;
   const size_t have = ring.size(), take = count < have ? count : have;
   for (size_t i = have - take; i < have; ++i)
     out.eventLine(ring.at(i));
 }
 
-void writeCountersFile(const char *path) {
+void writeCountersFile(const char* path) {
   if (!path[0])
     return;
   const int fd = ::open(path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
@@ -194,7 +194,7 @@ void writeCountersFile(const char *path) {
   ::close(fd);
 }
 
-void writeResultAsync(int sig, const char *status, const char *reason) {
+void writeResultAsync(int sig, const char* status, const char* reason) {
   const int fd = ::open(g_crash.resultPath, O_WRONLY | O_CREAT | O_TRUNC, 0644);
   if (fd < 0)
     return;
@@ -216,17 +216,17 @@ void writeResultAsync(int sig, const char *status, const char *reason) {
   ::close(fd);
 }
 
-void dumpImportantEvents(Out &out) {
-  const ImportantRing &ring = theHub().important;
+void dumpImportantEvents(Out& out) {
+  const ImportantRing& ring = theHub().important;
   const size_t have = ring.size();
   for (size_t i = 0; i < have; ++i)
     out.eventLine(ring.at(i));
 }
 
-void dumpGaps(Out &out) {
+void dumpGaps(Out& out) {
   const size_t used = g_gaps.used < kGapCapacity ? g_gaps.used : kGapCapacity;
   for (size_t i = 0; i < used; ++i) {
-    const GapEntry &g = g_gaps.entries[i];
+    const GapEntry& g = g_gaps.entries[i];
     out.str("x");
     out.u64(g.count);
     out.str(" first f");
@@ -251,12 +251,12 @@ void dumpGaps(Out &out) {
 // One JSON object per line, oldest first, committed lines only (a writer that a
 // signal interrupted mid-line leaves its slot uncommitted and it is skipped).
 // Signal-safe: no allocation.
-void dumpTrace(Out &out, const TraceChannel &channel, size_t maxLines) {
+void dumpTrace(Out& out, const TraceChannel& channel, size_t maxLines) {
   const uint64_t written = channel.written();
   const uint64_t have = written < kTraceCapacity ? written : kTraceCapacity;
   const uint64_t take = maxLines < have ? maxLines : have;
   for (uint64_t index = written - take; index < written; ++index) {
-    const char *line = channel.line(index);
+    const char* line = channel.line(index);
     if (!line)
       continue;
     out.strn(line, kTraceLineSize - 1);
@@ -267,7 +267,7 @@ void dumpTrace(Out &out, const TraceChannel &channel, size_t maxLines) {
 int g_traceFds[kTraceChannels] = {-1, -1, -1};
 
 // Non-signal paths installed as the runlog trace hooks.
-void traceStreamImpl(const char *channel, const char *line) {
+void traceStreamImpl(const char* channel, const char* line) {
   if (!g_crash.diagDir[0])
     return;
   for (size_t i = 0; i < kTraceChannels; ++i) {
@@ -289,10 +289,10 @@ void traceStreamImpl(const char *channel, const char *line) {
   }
 }
 
-void traceSaveImpl(const char *channel, const char *file) {
+void traceSaveImpl(const char* channel, const char* file) {
   if (!g_crash.diagDir[0])
     return;
-  for (const TraceChannel &c : g_traces) {
+  for (const TraceChannel& c : g_traces) {
     if (std::strcmp(c.name, channel) != 0)
       continue;
     const std::string path = std::string(g_crash.diagDir) + "/" + file;
@@ -310,13 +310,13 @@ void traceSaveImpl(const char *channel, const char *file) {
 // Everything a stopped or crashed run needs to be explained from crash.txt
 // alone: the milestones and gaps that the routine-call flood pushed out of the
 // ring, and the frame loop's latest thread/world dumps.
-void dumpDiagnostics(Out &out) {
+void dumpDiagnostics(Out& out) {
   out.str("--- gaps (unsupported/failed/lost, deduplicated) ---\n");
   dumpGaps(out);
   out.str("--- important events (errors, gaps, scheduler and world milestones) "
           "---\n");
   dumpImportantEvents(out);
-  for (const SnapshotSlot &s : g_snapshots) {
+  for (const SnapshotSlot& s : g_snapshots) {
     if (!s.name[0])
       continue;
     out.str("--- snapshot ");
@@ -327,7 +327,7 @@ void dumpDiagnostics(Out &out) {
     out.strn(s.text, kSnapshotText - 1);
     out.ch('\n');
   }
-  for (const TraceChannel &c : g_traces) {
+  for (const TraceChannel& c : g_traces) {
     if (!c.name[0] || !c.written())
       continue;
     out.str("--- trace ");
@@ -346,7 +346,7 @@ void writeDiagnosticFiles() {
   if (!g_crash.diagDir[0])
     return;
   const std::string dir = g_crash.diagDir;
-  auto write = [&](const char *name, auto &&fill) {
+  auto write = [&](const char* name, auto&& fill) {
     const std::string path = dir + "/" + name;
     const int fd = ::open(path.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
     if (fd < 0)
@@ -356,11 +356,11 @@ void writeDiagnosticFiles() {
     out.flush();
     ::close(fd);
   };
-  write("gaps.txt", [](Out &out) { dumpGaps(out); });
-  for (const SnapshotSlot &s : g_snapshots) {
+  write("gaps.txt", [](Out& out) { dumpGaps(out); });
+  for (const SnapshotSlot& s : g_snapshots) {
     if (!s.name[0])
       continue;
-    write((std::string(s.name) + ".txt").c_str(), [&](Out &out) {
+    write((std::string(s.name) + ".txt").c_str(), [&](Out& out) {
       out.str("frame ");
       out.u64(s.frame);
       out.ch('\n');
@@ -368,11 +368,11 @@ void writeDiagnosticFiles() {
       out.ch('\n');
     });
   }
-  for (const TraceChannel &c : g_traces) {
+  for (const TraceChannel& c : g_traces) {
     if (!c.name[0] || !c.written())
       continue;
     write((std::string(c.name) + ".jsonl").c_str(),
-          [&](Out &out) { dumpTrace(out, c, kTraceCapacity); });
+          [&](Out& out) { dumpTrace(out, c, kTraceCapacity); });
   }
 }
 
@@ -381,7 +381,7 @@ void writeDiagnosticFiles() {
 // backtrace_symbols_fd is documented as safe but is the one piece that can
 // still fail on a corrupted stack; the dump is best effort and the events above
 // it are already written by then.
-void dumpAndRecord(int sig, void *faultAddress, bool terminating) {
+void dumpAndRecord(int sig, void* faultAddress, bool terminating) {
   if (g_crash.dumped.exchange(true))
     return;
   // The reader thread copies pipe data to run.log asynchronously. Give it a
@@ -390,7 +390,7 @@ void dumpAndRecord(int sig, void *faultAddress, bool terminating) {
   nanosleep(&pause, nullptr);
   char reason[160];
   size_t r = 0;
-  auto append = [&](const char *s) {
+  auto append = [&](const char* s) {
     for (; s && *s && r + 1 < sizeof reason; ++s)
       reason[r++] = *s;
   };
@@ -426,7 +426,7 @@ void dumpAndRecord(int sig, void *faultAddress, bool terminating) {
     dumpDiagnostics(out);
     out.str("--- backtrace (best effort) ---\n");
     out.flush();
-    void *frames[48];
+    void* frames[48];
     const int count = backtrace(frames, 48);
     backtrace_symbols_fd(frames, count, fd);
     ::close(fd);
@@ -435,7 +435,7 @@ void dumpAndRecord(int sig, void *faultAddress, bool terminating) {
   writeResultAsync(sig, terminating ? "terminated" : "crashed", reason);
 }
 
-void onSignal(int sig, siginfo_t *info, void *) {
+void onSignal(int sig, siginfo_t* info, void*) {
   const bool terminating = sig == SIGTERM || sig == SIGINT;
   if (!g_crash.handling.exchange(true))
     dumpAndRecord(sig, info ? info->si_addr : nullptr, terminating);
@@ -449,7 +449,7 @@ void onSignal(int sig, siginfo_t *info, void *) {
 }
 
 void onTerminate() {
-  const char *prefix = "uncaught exception: ";
+  const char* prefix = "uncaught exception: ";
   size_t n = std::strlen(prefix);
   std::memcpy(g_crash.note, prefix, n);
   std::string what = "unknown type";
@@ -457,7 +457,7 @@ void onTerminate() {
     if (auto e = std::current_exception())
       std::rethrow_exception(e);
     what = "terminate called with no active exception";
-  } catch (const std::exception &e) {
+  } catch (const std::exception& e) {
     what = e.what();
   } catch (...) {
   }
@@ -474,7 +474,7 @@ void installHandlers() {
   ss.ss_sp = altStack;
   ss.ss_size = sizeof altStack;
   sigaltstack(&ss, nullptr);
-  void *warm[4];
+  void* warm[4];
   backtrace(warm, 4); // the first call can allocate, so do it outside a handler
   struct sigaction sa{};
   sa.sa_sigaction = onSignal;
@@ -488,7 +488,7 @@ void installHandlers() {
   g_crash.installed = true;
 }
 
-std::string utcStamp(time_t when, const char *format) {
+std::string utcStamp(time_t when, const char* format) {
   tm parts{};
   gmtime_r(&when, &parts);
   char buf[64];
@@ -496,16 +496,16 @@ std::string utcStamp(time_t when, const char *format) {
   return buf;
 }
 
-std::string shellQuote(const std::string &s) {
+std::string shellQuote(const std::string& s) {
   std::string out = "'";
   for (char c : s)
     out += c == '\'' ? std::string("'\\''") : std::string(1, c);
   return out + "'";
 }
 
-std::string runCommand(const std::string &command) {
+std::string runCommand(const std::string& command) {
   std::string out;
-  if (FILE *pipe = popen(command.c_str(), "r")) {
+  if (FILE* pipe = popen(command.c_str(), "r")) {
     char buf[256];
     while (std::fgets(buf, sizeof buf, pipe) && out.size() < 4096)
       out += buf;
@@ -518,7 +518,7 @@ std::string runCommand(const std::string &command) {
   return out;
 }
 
-std::string sha256File(const std::string &path) {
+std::string sha256File(const std::string& path) {
   std::ifstream in(path, std::ios::binary);
   if (!in)
     return "unknown";
@@ -549,7 +549,7 @@ std::string executablePath() {
   return ec ? std::string(buf) : canonical.string();
 }
 
-std::string quoteArg(const std::string &arg) {
+std::string quoteArg(const std::string& arg) {
   if (!arg.empty() && arg.find_first_of(" \t\"'\\") == std::string::npos)
     return arg;
   return shellQuote(arg);
@@ -558,7 +558,7 @@ std::string quoteArg(const std::string &arg) {
 constexpr uintmax_t kSourceMaxBytes = 128 * 1024 * 1024;
 constexpr size_t kSourceMaxEntries = 20000;
 
-std::string sha256Text(const std::string &text) {
+std::string sha256Text(const std::string& text) {
   unsigned char digest[CC_SHA256_DIGEST_LENGTH];
   CC_SHA256(text.data(), static_cast<CC_LONG>(text.size()), digest);
   std::string hex;
@@ -569,13 +569,13 @@ std::string sha256Text(const std::string &text) {
   return hex;
 }
 
-bool collectSource(const fs::path &root, std::string &manifest,
-                   std::string &reason) {
+bool collectSource(const fs::path& root, std::string& manifest,
+                   std::string& reason) {
   std::error_code ec;
   std::vector<fs::path> paths{"CMakeLists.txt"};
   size_t entries = 0;
   uintmax_t bytes = 0;
-  for (const char *top : {"src", "tools", "tests"}) {
+  for (const char* top : {"src", "tools", "tests"}) {
     const fs::path tree = root / top;
     if (!fs::is_directory(fs::symlink_status(tree, ec)) || ec) {
       reason = "source directory unavailable";
@@ -615,7 +615,7 @@ bool collectSource(const fs::path &root, std::string &manifest,
   }
   std::sort(paths.begin(), paths.end());
   std::ostringstream out;
-  for (const auto &relative : paths) {
+  for (const auto& relative : paths) {
     const std::string name = relative.generic_string();
     if (name.find_first_of("\r\n\t") != std::string::npos) {
       reason = "unsafe source filename";
@@ -659,8 +659,8 @@ bool collectSource(const fs::path &root, std::string &manifest,
 struct SourceCapture {
   std::string hash = "unknown", root = "unavailable", status = "unavailable";
 };
-SourceCapture captureSource(const std::string &configuredRoot,
-                            const fs::path &runDir) {
+SourceCapture captureSource(const std::string& configuredRoot,
+                            const fs::path& runDir) {
   SourceCapture result;
   const fs::path compiledFile(__FILE__);
   if (configuredRoot.empty() && !compiledFile.is_absolute()) {
@@ -735,7 +735,7 @@ std::string processStartTime() {
   return value;
 }
 
-bool containsPath(const fs::path &parent, const fs::path &child) {
+bool containsPath(const fs::path& parent, const fs::path& child) {
   auto p = parent.begin(), c = child.begin();
   for (; p != parent.end(); ++p, ++c)
     if (c == child.end() || *p != *c)
@@ -743,7 +743,7 @@ bool containsPath(const fs::path &parent, const fs::path &child) {
   return true;
 }
 
-std::string snapshotSave(const std::string &dataRoot, const fs::path &runDir) {
+std::string snapshotSave(const std::string& dataRoot, const fs::path& runDir) {
   if (dataRoot.empty())
     return "unavailable: no data root";
   std::error_code ec;
@@ -783,14 +783,14 @@ std::string snapshotSave(const std::string &dataRoot, const fs::path &runDir) {
   fs::create_directory(dest, ec);
   if (ec)
     return "unavailable: cannot create snapshot";
-  for (const auto &relative : directories) {
+  for (const auto& relative : directories) {
     fs::create_directories(dest / relative, ec);
     if (ec)
       break;
   }
   std::ostringstream manifest;
   manifest << "format=1\nfiles=" << files.size() << "\nbytes=" << bytes << "\n";
-  for (const auto &relative : files) {
+  for (const auto& relative : files) {
     if (ec)
       break;
     // Newlines would make the manifest ambiguous.
@@ -844,7 +844,7 @@ std::string snapshotSave(const std::string &dataRoot, const fs::path &runDir) {
     std::sort(directories.begin(), directories.end());
     if (afterFiles != files || afterDirectories != directories)
       ec = std::make_error_code(std::errc::io_error);
-    for (const auto &relative : files) {
+    for (const auto& relative : files) {
       if (ec)
         break;
       const auto current = sha256File((source / relative).string());
@@ -870,14 +870,14 @@ std::string snapshotSave(const std::string &dataRoot, const fs::path &runDir) {
 
 } // namespace
 
-std::string formatLine(double t, uint32_t frame, const char *tag,
-                       const char *text) {
+std::string formatLine(double t, uint32_t frame, const char* tag,
+                       const char* text) {
   char head[48];
   std::snprintf(head, sizeof head, "[+%06.3f f%u] ", t < 0 ? 0.0 : t, frame);
   return std::string(head) + tag + " " + (text ? text : "");
 }
 
-size_t formatCounters(char *buf, size_t cap) {
+size_t formatCounters(char* buf, size_t cap) {
   if (!cap)
     return 0;
   Out out(buf, cap);
@@ -913,7 +913,7 @@ struct InputState {
   unsigned notedButtons = 0;
 } g_input;
 
-void writeInputLine(const std::string &line) {
+void writeInputLine(const std::string& line) {
   if (g_input.fd < 0)
     return;
   const std::string withNewline = line + "\n";
@@ -939,8 +939,8 @@ void writePendingMotion(double t) {
 
 } // namespace
 
-std::string formatInputLine(double t, const char *verb, const char *a,
-                            const char *b) {
+std::string formatInputLine(double t, const char* verb, const char* a,
+                            const char* b) {
   char head[32];
   std::snprintf(head, sizeof head, "%.3f ", t < 0 ? 0.0 : t);
   std::string line = std::string(head) + verb;
@@ -973,7 +973,7 @@ void inputButton(double t, bool down) {
   writeInputLine(formatInputLine(t, down ? "down" : "up"));
 }
 
-void inputKey(double t, const char *name, bool down) {
+void inputKey(double t, const char* name, bool down) {
   if (g_input.fd < 0)
     return;
   writePendingMotion(t);
@@ -1014,7 +1014,7 @@ struct RunRecorder::Impl {
   std::thread reader;
   mutable std::mutex reasonMutex;
 
-  void writeLogLine(const std::string &line) {
+  void writeLogLine(const std::string& line) {
     std::lock_guard<std::mutex> lock(logMutex);
     if (logFd < 0)
       return;
@@ -1034,8 +1034,8 @@ struct RunRecorder::Impl {
     text << "# checkpoint=" << sequence << " ring_written=" << written
          << " retained=" << events.size()
          << " slots=2 overwrites_older_checkpoints=1\n";
-    for (const auto &e : events) {
-      const char *kind = e.kind < static_cast<uint8_t>(EventKind::Count)
+    for (const auto& e : events) {
+      const char* kind = e.kind < static_cast<uint8_t>(EventKind::Count)
                              ? kKindTable[e.kind].name
                              : "?";
       text << formatLine(e.t, e.frame, kind, e.text) << '\n';
@@ -1059,12 +1059,12 @@ struct RunRecorder::Impl {
     checkpointSequence = sequence;
   }
 
-  void onCapturedLine(int index, const std::string &line) {
-    const char *tag = index == 0 ? "out" : "err";
+  void onCapturedLine(int index, const std::string& line) {
+    const char* tag = index == 0 ? "out" : "err";
     writeLogLine(formatLine(monotonicSeconds() - start,
                             g_frame.load(std::memory_order_relaxed), tag,
                             line.c_str()));
-    Stream &s = streams[index];
+    Stream& s = streams[index];
     std::lock_guard<std::mutex> lock(reasonMutex);
     if (line.rfind("startup probe:", 0) == 0) {
       s.reason = line;
@@ -1077,8 +1077,8 @@ struct RunRecorder::Impl {
     }
   }
 
-  void feed(int index, const char *data, size_t size) {
-    Stream &s = streams[index];
+  void feed(int index, const char* data, size_t size) {
+    Stream& s = streams[index];
     s.pending.append(data, size);
     size_t from = 0;
     for (size_t nl; (nl = s.pending.find('\n', from)) != std::string::npos;
@@ -1178,7 +1178,7 @@ struct RunRecorder::Impl {
     std::lock_guard<std::mutex> lock(reasonMutex);
     // stderr is where the probe reports failures; fall back to stdout.
     for (int i : {1, 0}) {
-      const Stream &s = streams[i];
+      const Stream& s = streams[i];
       if (s.reason.empty())
         continue;
       std::vector<std::string> out{s.reason};
@@ -1203,17 +1203,17 @@ RunRecorder::~RunRecorder() {
     ::close(impl_->logFd);
 }
 
-const std::string &RunRecorder::dir() const { return impl_->dir; }
+const std::string& RunRecorder::dir() const { return impl_->dir; }
 
 std::vector<std::string> RunRecorder::reasonLines() const {
   return impl_->reasonLines();
 }
 
-std::unique_ptr<RunRecorder> RunRecorder::start(const RunOptions &options,
-                                                std::string &error) {
+std::unique_ptr<RunRecorder> RunRecorder::start(const RunOptions& options,
+                                                std::string& error) {
   std::string base = options.baseDir;
   if (base.empty()) {
-    const char *env = std::getenv("SLRR_RUN_DIR");
+    const char* env = std::getenv("SLRR_RUN_DIR");
     base = env && *env ? env : "local/runs";
   }
   const time_t now = std::time(nullptr);
@@ -1260,7 +1260,7 @@ std::unique_ptr<RunRecorder> RunRecorder::start(const RunOptions &options,
   }
 
   std::unique_ptr<RunRecorder> recorder(new RunRecorder);
-  Impl &impl = *recorder->impl_;
+  Impl& impl = *recorder->impl_;
   impl.dir = absolute.string();
   impl.logPath = (absolute / "run.log").string();
   impl.logFd =
@@ -1275,7 +1275,7 @@ std::unique_ptr<RunRecorder> RunRecorder::start(const RunOptions &options,
   // pipes.
   std::ostringstream meta;
   std::string argvLine;
-  for (const auto &a : options.argv)
+  for (const auto& a : options.argv)
     argvLine += (argvLine.empty() ? "" : " ") + quoteArg(a);
   struct stat st{};
   const std::string exe = executablePath();
@@ -1293,27 +1293,43 @@ std::unique_ptr<RunRecorder> RunRecorder::start(const RunOptions &options,
                : "unknown")
        << "\n";
   meta << "exe_sha256: " << sha256File(exe) << "\n";
-  const char *srcHash = std::getenv("SLRR_SRC_HASH");
-  const auto source = captureSource(options.sourceRoot, absolute);
+  SourceCapture source;
+  if (options.captureDeveloperSource)
+    source = captureSource(options.sourceRoot, absolute);
+  else {
+    source.status = "not collected: installed application";
+    source.root = "not applicable";
+  }
   meta << "src_tree_sha256: " << source.hash << "\n";
   meta << "source_identity: " << source.status << "\n";
   meta << "source_root: " << source.root << "\n";
-  meta << "source_limits: 20000 entries, 134217728 bytes; symlinks and "
-          "binaries excluded\n";
-  meta << "launcher_src_tree_sha256: "
-       << (srcHash && *srcHash ? srcHash : "unavailable") << "\n";
-  const std::string head =
-      runCommand("git rev-parse --verify -q HEAD 2>/dev/null");
-  meta << "git_head: " << (head.empty() ? "unavailable" : head) << "\n";
-  const std::string dirty =
-      runCommand("git status --short 2>/dev/null && printf '__STATUS_OK__\\n'");
-  const auto marker = dirty.rfind("__STATUS_OK__");
-  if (marker == std::string::npos)
-    meta << "git_changed_files: unknown\n";
-  else {
-    const std::string entries = dirty.substr(0, marker);
-    meta << "git_changed_files: "
-         << std::count(entries.begin(), entries.end(), '\n') << "\n";
+  if (options.captureDeveloperSource) {
+    meta << "source_limits: 20000 entries, 134217728 bytes; symlinks and "
+            "binaries excluded\n";
+    const char* srcHash = std::getenv("SLRR_SRC_HASH");
+    meta << "launcher_src_tree_sha256: "
+         << (srcHash && *srcHash ? srcHash : "unavailable") << "\n";
+    const std::string head =
+        runCommand("git rev-parse --verify -q HEAD 2>/dev/null");
+    meta << "git_head: " << (head.empty() ? "unavailable" : head) << "\n";
+    const std::string dirty =
+        runCommand("git status --short 2>/dev/null && printf '__STATUS_OK__\\n'");
+    const auto marker = dirty.rfind("__STATUS_OK__");
+    if (marker == std::string::npos)
+      meta << "git_changed_files: unknown\n";
+    else {
+      const std::string entries = dirty.substr(0, marker);
+      meta << "git_changed_files: "
+           << std::count(entries.begin(), entries.end(), '\n') << "\n";
+    }
+  } else {
+    // A system git shim may prompt for developer tools on a clean Mac. Player
+    // logs use the running executable identity above, never the build checkout.
+    meta << "source_limits: not applicable\n"
+         << "launcher_src_tree_sha256: unavailable\n"
+         << "git_head: unavailable: installed application\n"
+         << "git_changed_files: unavailable: installed application\n"
+         << "bundled_build_identity: unavailable\n";
   }
   meta << "game_root: " << options.gameRoot << "\n";
   meta << "reference_root: " << reference.string() << "\n";
@@ -1322,10 +1338,10 @@ std::unique_ptr<RunRecorder> RunRecorder::start(const RunOptions &options,
   std::string gameDataStatus = "unavailable";
   std::string gameDataPath = "unavailable";
   std::string gameDataHash = "unavailable";
-  const char *manifest = std::getenv("SLRR_GAME_DATA_MANIFEST");
-  const char *manifestRoot = std::getenv("SLRR_GAME_DATA_ROOT");
-  const char *manifestHash = std::getenv("SLRR_GAME_DATA_SHA256");
-  const char *manifestStatus = std::getenv("SLRR_GAME_DATA_STATUS");
+  const char* manifest = std::getenv("SLRR_GAME_DATA_MANIFEST");
+  const char* manifestRoot = std::getenv("SLRR_GAME_DATA_ROOT");
+  const char* manifestHash = std::getenv("SLRR_GAME_DATA_SHA256");
+  const char* manifestStatus = std::getenv("SLRR_GAME_DATA_STATUS");
   if (manifest && manifestRoot && manifestHash && manifestStatus &&
       (std::string(manifestStatus) == "complete" ||
        std::string(manifestStatus) == "incomplete")) {
@@ -1404,24 +1420,24 @@ std::unique_ptr<RunRecorder> RunRecorder::start(const RunOptions &options,
   fs::remove(latest, ec);
   fs::create_directory_symlink(absolute, latest, ec);
 
-  Hub &hub = theHub();
+  Hub& hub = theHub();
   hub.ring.clear();
   hub.start = impl.start;
   hub.context = &impl;
-  hub.checkpoint = [](void *context) {
-    static_cast<Impl *>(context)->checkpoint();
+  hub.checkpoint = [](void* context) {
+    static_cast<Impl*>(context)->checkpoint();
   };
-  hub.persist = [](void *context, const Event &e) {
-    auto *self = static_cast<Impl *>(context);
-    const char *name = e.kind < static_cast<uint8_t>(EventKind::Count)
+  hub.persist = [](void* context, const Event& e) {
+    auto* self = static_cast<Impl*>(context);
+    const char* name = e.kind < static_cast<uint8_t>(EventKind::Count)
                            ? kKindTable[e.kind].name
                            : "?";
     self->writeLogLine(formatLine(e.t, e.frame, name, e.text));
   };
   setFrame(0);
-  for (auto &c : g_kindCounts)
+  for (auto& c : g_kindCounts)
     c.store(0, std::memory_order_relaxed);
-  for (auto &c : g_counters)
+  for (auto& c : g_counters)
     c.store(0, std::memory_order_relaxed);
   g_input = InputState{};
   g_input.fd = ::open((absolute / "input.txt").c_str(),
@@ -1431,12 +1447,12 @@ std::unique_ptr<RunRecorder> RunRecorder::start(const RunOptions &options,
   std::snprintf(g_crash.diagDir, sizeof g_crash.diagDir, "%s",
                 absolute.c_str());
   g_gaps = GapTable{};
-  for (auto &s : g_snapshots)
+  for (auto& s : g_snapshots)
     s = SnapshotSlot{};
   hub.important.clear();
   for (size_t i = 0; i < kTraceChannels; ++i) {
     g_traces[i].next.store(0, std::memory_order_relaxed);
-    for (auto &word : g_traces[i].committed)
+    for (auto& word : g_traces[i].committed)
       word.store(0, std::memory_order_relaxed);
     g_traces[i].stream.store(false, std::memory_order_relaxed);
     if (g_traceFds[i] >= 0)
@@ -1466,7 +1482,7 @@ std::unique_ptr<RunRecorder> RunRecorder::start(const RunOptions &options,
 }
 
 int RunRecorder::finish(int exitCode) {
-  Impl &impl = *impl_;
+  Impl& impl = *impl_;
   if (impl.finished)
     return exitCode;
   impl.finished = true;
@@ -1483,8 +1499,8 @@ int RunRecorder::finish(int exitCode) {
   const bool ok = exitCode == 0;
   if (!ok) {
     impl.writeLogLine("--- last events ---");
-    for (const Event &e : theHub().ring.last(kDumpEvents)) {
-      const char *name = e.kind < static_cast<uint8_t>(EventKind::Count)
+    for (const Event& e : theHub().ring.last(kDumpEvents)) {
+      const char* name = e.kind < static_cast<uint8_t>(EventKind::Count)
                              ? kKindTable[e.kind].name
                              : "?";
       impl.writeLogLine(formatLine(e.t, e.frame, name, e.text));
@@ -1507,7 +1523,7 @@ int RunRecorder::finish(int exitCode) {
 
 void frameTick(uint32_t frame) {
   setFrame(frame);
-  Hub *hub = g_hub.load(std::memory_order_acquire);
+  Hub* hub = g_hub.load(std::memory_order_acquire);
   if (!hub)
     return;
   static double lastBeat = -1, lastSecond = -1, lastStart = -1;
@@ -1533,7 +1549,7 @@ void frameTick(uint32_t frame) {
     uint64_t written = 0;
     const auto recent = hub->snapshot(kDumpEvents, written);
     for (size_t i = recent.size(); i-- > 0;) {
-      const Event &e = recent[i];
+      const Event& e = recent[i];
       const auto kind = static_cast<EventKind>(e.kind);
       if (kind == EventKind::Heartbeat || kind == EventKind::FrameSummary ||
           e.kind >= static_cast<uint8_t>(EventKind::Count))

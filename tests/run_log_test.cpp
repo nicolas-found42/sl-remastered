@@ -19,15 +19,15 @@ using namespace runlog;
 namespace fs = std::filesystem;
 
 static int g_failures = 0;
-#define CHECK(cond)                                                            \
-  do {                                                                         \
-    if (!(cond)) {                                                             \
-      std::fprintf(stderr, "FAIL %s:%d %s\n", __FILE__, __LINE__, #cond);      \
-      ++g_failures;                                                            \
-    }                                                                          \
+#define CHECK(cond)                                                       \
+  do {                                                                    \
+    if (!(cond)) {                                                        \
+      std::fprintf(stderr, "FAIL %s:%d %s\n", __FILE__, __LINE__, #cond); \
+      ++g_failures;                                                       \
+    }                                                                     \
   } while (0)
 
-static std::string slurp(const fs::path &p) {
+static std::string slurp(const fs::path& p) {
   std::ifstream in(p);
   std::stringstream ss;
   ss << in.rdbuf();
@@ -61,7 +61,7 @@ static void ringThreadsDoNotLoseSlots() {
       for (int i = 0; i < 500; ++i)
         ring->push(0, 0, EventKind::Thread, "x");
     });
-  for (auto &t : threads)
+  for (auto& t : threads)
     t.join();
   CHECK(ring->written() == 2000);
 }
@@ -112,7 +112,7 @@ static void formatLineShape() {
   CHECK(formatLine(0.5, 0, "err", "x") == "[+00.500 f0] err x");
 }
 
-static void recorderWritesFilesAndResult(const fs::path &base) {
+static void recorderWritesFilesAndResult(const fs::path& base) {
   RunOptions options;
   options.baseDir = base.string();
   options.argv = {"startup_probe", "--init"};
@@ -145,7 +145,7 @@ static void recorderWritesFilesAndResult(const fs::path &base) {
   CHECK(log.find("f42] sound Dropped resource 0x1 id 7") != std::string::npos);
   CHECK(log.find("Foo.bar") == std::string::npos);
 
-  Hub *hub = g_hub.load();
+  Hub* hub = g_hub.load();
   CHECK(hub && hub->checkpoint);
   if (hub && hub->checkpoint) {
     hub->checkpoint(hub->context);
@@ -187,7 +187,7 @@ static void recorderWritesFilesAndResult(const fs::path &base) {
   }
 }
 
-static void retentionAndSave(const fs::path &base) {
+static void retentionAndSave(const fs::path& base) {
   fs::create_directories(base / "data/save/game");
   std::ofstream(base / "data/save/game/options") << "original";
   fs::create_directories(base / "data/save/empty");
@@ -260,9 +260,9 @@ static void retentionAndSave(const fs::path &base) {
   CHECK(error.find("outside ref") != std::string::npos);
 }
 
-static void sourceProvenance(const fs::path &base) {
+static void sourceProvenance(const fs::path& base) {
   const auto root = base / "source";
-  for (const auto *name : {"src", "tools", "tests"})
+  for (const auto* name : {"src", "tools", "tests"})
     fs::create_directories(root / name);
   std::ofstream(root / "CMakeLists.txt") << "project(sl_port LANGUAGES CXX)\n";
   std::ofstream(root / "src/a.cpp") << "first\n";
@@ -327,7 +327,67 @@ static void sourceProvenance(const fs::path &base) {
   }
 }
 
-static void gameDataProvenance(const fs::path &base) {
+static void installedLoggingDoesNotInspectDeveloperCheckout(const fs::path& base) {
+  const auto source = base / "source";
+  for (const auto* name : {"src", "tools", "tests"})
+    fs::create_directories(source / name);
+  std::ofstream(source / "CMakeLists.txt") << "project(sl_port LANGUAGES CXX)\n";
+  std::ofstream(source / "src/player-must-not-inspect.cpp") << "developer checkout\n";
+  const auto tools = base / "fake-bin";
+  fs::create_directories(tools);
+  const auto sentinel = base / "git-was-launched";
+  {
+    std::ofstream git(tools / "git");
+    git << "#!/bin/sh\nprintf invoked >> \"$SLRR_TEST_GIT_SENTINEL\"\n";
+  }
+  fs::permissions(tools / "git", fs::perms::owner_all);
+  const char* path = std::getenv("PATH");
+  const bool hadPath = path != nullptr;
+  const std::string oldPath = path ? path : "";
+  const auto gitPath = tools.string() + ":" + oldPath;
+  setenv("PATH", gitPath.c_str(), 1);
+  setenv("SLRR_TEST_GIT_SENTINEL", sentinel.c_str(), 1);
+  RunOptions options;
+  options.baseDir = (base / "installed-runs").string();
+  options.sourceRoot = source.string();
+  options.captureDeveloperSource = false;
+  options.captureStreams = false;
+  options.installHandlers = false;
+  std::string error;
+  auto installed = RunRecorder::start(options, error);
+  CHECK(installed != nullptr);
+  if (installed) {
+    const auto directory = fs::path(installed->dir());
+    CHECK(!fs::exists(sentinel));
+    CHECK(!fs::exists(directory / "source-manifest.txt"));
+    const auto meta = slurp(directory / "meta.txt");
+    CHECK(meta.find(source.string()) == std::string::npos);
+    CHECK(meta.find("src_tree_sha256: unknown") != std::string::npos);
+    CHECK(meta.find("exe_sha256: unknown") == std::string::npos);
+    installed->finish(0);
+  }
+  installed.reset();
+
+  // The same fixture reaches checkout capture and fake git in diagnostic mode.
+  options.captureDeveloperSource = true;
+  options.baseDir = (base / "diagnostic-runs").string();
+  auto diagnostic = RunRecorder::start(options, error);
+  CHECK(diagnostic != nullptr);
+  if (diagnostic) {
+    CHECK(fs::exists(sentinel));
+    CHECK(slurp(fs::path(diagnostic->dir()) / "source-manifest.txt")
+              .find("src/player-must-not-inspect.cpp") != std::string::npos);
+    diagnostic->finish(0);
+  }
+  diagnostic.reset();
+  if (hadPath)
+    setenv("PATH", oldPath.c_str(), 1);
+  else
+    unsetenv("PATH");
+  unsetenv("SLRR_TEST_GIT_SENTINEL");
+}
+
+static void gameDataProvenance(const fs::path& base) {
   fs::create_directories(base / "game");
   const auto manifest = base / "manifest.json";
   std::ofstream(manifest) << "abc";
@@ -388,7 +448,7 @@ static void gameDataProvenance(const fs::path &base) {
 // A writer interrupted between claim and commit (a signal in the middle of
 // formatting a step) must not surface as a half-written or stale line.
 static void traceInterruptedWriteIsSkipped() {
-  TraceChannel *c = traceChannel("trace-test-interrupt");
+  TraceChannel* c = traceChannel("trace-test-interrupt");
   CHECK(c != nullptr);
   tracePush(c, "{\"n\":0}");
   tracePush(c, "{\"n\":1}");
@@ -447,6 +507,7 @@ int main() {
   retentionAndSave(tmp / "retention");
   sourceProvenance(tmp / "source-provenance");
   gameDataProvenance(tmp / "game-data");
+  installedLoggingDoesNotInspectDeveloperCheckout(tmp / "installed-logging");
   fs::remove_all(tmp);
   if (g_failures) {
     std::fprintf(stderr, "%d failure(s)\n", g_failures);
