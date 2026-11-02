@@ -1,0 +1,55 @@
+name: Repository checks
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      private_gate:
+        description: Run full gate on a provisioned private macOS ARM64 runner
+        type: boolean
+        default: false
+permissions:
+  contents: read
+jobs:
+  portable:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Install build and lint tools
+        run: brew install llvm ninja sdl3 jpeg libpng
+      - name: Configure compilation database
+        run: python3 -I tools/parity/resource_pool.py --cpu 1 --host-memory 2 --build-writer 1 -- cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+      - name: Check changed source
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          llvm_prefix="$(brew --prefix llvm)"
+          export PATH="$llvm_prefix/bin:$PATH"
+          base="$BASE_SHA"
+          if [ -z "$base" ] || ! git cat-file -e "$base^{commit}" 2>/dev/null; then
+            base="$(git hash-object -t tree /dev/null)"
+          fi
+          python3 -I tools/guardrails.py --base "$base"
+      - name: Portable tooling controls
+        run: |
+          llvm_prefix="$(brew --prefix llvm)"
+          export PATH="$llvm_prefix/bin:$PATH"
+          python3 -I tests/guardrails_test.py
+          python3 -I tools/parity/test_experiment_result.py
+          python3 -I tools/parity/test_capacity.py
+          python3 -I tools/parity/test_jev_packet.py
+          python3 -I tools/parity/test_evidence_index.py
+          python3 -I tools/parity/test_trace_inspect.py
+          python3 -I tools/parity/test_dev.py
+  private-gate:
+    if: github.event_name == 'workflow_dispatch' && inputs.private_gate
+    runs-on: [self-hosted, macOS, ARM64, sl-private-resources]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          clean: false
+      - name: Complete integration gate
+        run: tools/check.sh
