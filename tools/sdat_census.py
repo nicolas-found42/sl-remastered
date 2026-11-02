@@ -166,4 +166,5 @@ def main():
     sys.exit(1 if failures or not paths else 0)
 
 
-main()
+if __name__ == '__main__':
+    main()

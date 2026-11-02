@@ -1,0 +1,1215 @@
+{
+  "schema": 1,
+  "status": "candidates",
+  "scope": "Initial script-grounded candidates; not exhaustive game, branch or Native coverage. Authority anchors locate candidate seams, not fully decoded expected assertions. No Rung is promoted by this catalog.",
+  "sources": {
+    "menu": {
+      "path": "sl/Scripts/game/MainMenu.class",
+      "sha256": "2e8778df99228a92fa47ffa3909a886ff8ee20c4bfbf6131eabc8027e81f98ff"
+    },
+    "game": {
+      "path": "sl/Scripts/game/GameLogic.class",
+      "sha256": "880323555b756ff365e82ff4ca7f6cb98a9a2dad30d55774ffd31ec64d675163"
+    },
+    "osd": {
+      "path": "system/Scripts/render/Osd.class",
+      "sha256": "8a37af3322efeb2144aa51dc2d940116259cad73da2414e6822ae9a5fab30aa8"
+    },
+    "dialog": {
+      "path": "system/Scripts/render/osd/dialog/Dialog.class",
+      "sha256": "fee9727998e2fd368291da8ed5e0650315a5f80e65023f90712307956d376b01"
+    },
+    "string": {
+      "path": "system/Scripts/render/osd/dialog/StringRequesterDialog.class",
+      "sha256": "0cc9843f25e206e139701d3fee7294239b7c46d5c8820238c04759f87aa57bc0"
+    },
+    "config": {
+      "path": "system/Scripts/util/Config.class",
+      "sha256": "9cc8f37e399b4549f7be7527f20b92bfdbcf7bdb3f133e859a0535ccd7c60a18"
+    },
+    "dealer": {
+      "path": "sl/Scripts/game/CarMarket.class",
+      "sha256": "be8211cbef6cf744897a184c5c5e14cea970d0c1d46486ebc9faeeb38066b30c"
+    },
+    "lot": {
+      "path": "sl/Scripts/game/CarLot.class",
+      "sha256": "6de334719b7e1f16dab599a844459e68988a82f47975df88149f5e28088cc411"
+    },
+    "inventory": {
+      "path": "sl/Scripts/game/Inventory.class",
+      "sha256": "1e240b1effd4f44bf15660aba86f07024306927294eacbf39e3364346e576c2f"
+    },
+    "vehicle": {
+      "path": "sl/Scripts/game/Vehicle.class",
+      "sha256": "d2351c66dc3159f2b3ab3fd0fc9fba7358e33cb292c491b06538901ec6d280d5"
+    },
+    "track": {
+      "path": "sl/Scripts/game/Track.class",
+      "sha256": "ccd7ae19e648d87156769ac44178138121e32c7e74ff926eae7324f4d8643a46"
+    },
+    "city": {
+      "path": "sl/Scripts/game/City.class",
+      "sha256": "a35ff6a6cd8234d5e0c1731e1041cfe5f9273a8fa1135b45fa5056b3e5cf6632"
+    }
+  },
+  "rungs": [
+    {
+      "id": "H-identity",
+      "question": "Are executable, content, fixture and intervention identities complete and isolated?",
+      "kind": "harness",
+      "assertion_status": "candidate",
+      "variant_inventory_complete": false,
+      "depends_on": [],
+      "authority": [],
+      "variants": [
+        "valid",
+        "wrong-identity",
+        "overlapping-state"
+      ],
+      "observations": [
+        "identities",
+        "source-preservation",
+        "writable-roots"
+      ]
+    },
+    {
+      "id": "H-schedule-capture",
+      "question": "Are required time, input and random events retained with complete boundaries and zero gaps?",
+      "kind": "harness",
+      "assertion_status": "candidate",
+      "variant_inventory_complete": false,
+      "depends_on": [
+        "H-identity"
+      ],
+      "authority": [],
+      "variants": [
+        "complete",
+        "truncated",
+        "overflow",
+        "unobserved-call"
+      ],
+      "observations": [
+        "coverage",
+        "counters",
+        "call-order"
+      ]
+    },
+    {
+      "id": "H-schedule-replay",
+      "question": "Does replay consume the declared schedule exactly and stop on its first unexpected event?",
+      "kind": "harness",
+      "assertion_status": "candidate",
+      "variant_inventory_complete": false,
+      "depends_on": [
+        "H-schedule-capture"
+      ],
+      "authority": [],
+      "variants": [
+        "exact",
+        "unexpected-call",
+        "missing-call",
+        "unconsumed-tail"
+      ],
+      "observations": [
+        "consumption",
+        "first-divergence"
+      ]
+    },
+    {
+      "id": "H-repeatability",
+      "question": "Do independent Runs of each executable repeat before a paired comparison is attempted?",
+      "kind": "harness",
+      "assertion_status": "candidate",
+      "variant_inventory_complete": false,
+      "depends_on": [
+        "H-schedule-replay"
+      ],
+      "authority": [],
+      "variants": [
+        "stock-repeat",
+        "port-repeat",
+        "deliberate-divergence"
+      ],
+      "observations": [
+        "boundaries",
+        "semantic-state"
+      ]
+    },
+    {
+      "id": "H-observer-effects",
+      "question": "Does adding each observer change the measured branch, call order or outcome?",
+      "kind": "harness",
+      "assertion_status": "candidate",
+      "variant_inventory_complete": false,
+      "depends_on": [
+        "H-identity"
+      ],
+      "authority": [],
+      "variants": [
+        "observer-off",
+        "observer-on",
+        "intervention-on"
+      ],
+      "observations": [
+        "branch-order",
+        "timing",
+        "outcome"
+      ]
+    },
+    {
+      "id": "H-invalid-evidence",
+      "question": "Does the evaluator reject corruption without reporting a game mismatch or pass?",
+      "kind": "harness",
+      "assertion_status": "candidate",
+      "variant_inventory_complete": false,
+      "depends_on": [
+        "H-identity"
+      ],
+      "authority": [],
+      "variants": [
+        "changed-hash",
+        "duplicate-event",
+        "missing-terminal",
+        "wrong-fixture",
+        "false-capability"
+      ],
+      "observations": [
+        "verdict",
+        "reason",
+        "first-invalid-record"
+      ]
+    },
+    {
+      "id": "H-retention",
+      "question": "Are clean exit, refusal, deadline and interruption distinct and retained with owned-process cleanup?",
+      "kind": "harness",
+      "assertion_status": "candidate",
+      "variant_inventory_complete": false,
+      "depends_on": [
+        "H-identity"
+      ],
+      "authority": [],
+      "variants": [
+        "clean",
+        "refused",
+        "timed-out",
+        "interrupted",
+        "orphaned-child"
+      ],
+      "observations": [
+        "termination",
+        "partial-artifacts",
+        "ownership"
+      ]
+    },
+    {
+      "id": "B-boot-menu",
+      "question": "Does ordinary boot reach the same usable Main Menu under recorded controls?",
+      "kind": "gameplay",
+      "assertion_status": "candidate",
+      "variant_inventory_complete": false,
+      "depends_on": [
+        "H-repeatability"
+      ],
+      "authority": [
+        {
+          "source": "menu",
+          "class_index": 0,
+          "trees": [
+            0,
+            1
+          ]
+        }
+      ],
+      "variants": [
+        "normal",
+        "refused-startup"
+      ],
+      "observations": [
+        "script-state",
+        "menu-state",
+        "input-owner"
+      ]
+    },
+    {
+      "id": "B-key-edges",
+      "question": "Which commands and state result from press, hold, release and a second press?",
+      "kind": "gameplay",
+      "assertion_status": "candidate",
+      "variant_inventory_complete": false,
+      "depends_on": [
+        "B-boot-menu"
+      ],
+      "authority": [
+        {
+          "source": "osd",
+          "class_index": 0,
+          "trees": [
+            76
+          ]
+        }
+      ],
+      "variants": [
+        "press",
+        "hold",
+        "release",
+        "second-press",
+        "same-frame-pair"
+      ],
+      "observations": [
+        "key-state",
+        "selection",
+        "command-order"
+      ]
+    },
+    {
+      "id": "B-key-repeat",
+      "question": "At which observed polls does a held key repeat and when does release stop it?",
+      "kind": "gameplay",
+      "assertion_status": "candidate",
+      "variant_inventory_complete": false,
+      "depends_on": [
+        "B-key-edges"
+      ],
+      "authority": [
+        {
+          "source": "osd",
+          "class_index": 0,
+          "trees": [
+            76
+          ]
+        }
+      ],
+      "variants": [
+        "before-repeat",
+        "at-repeat",
+        "after-release"
+      ],
+      "observations": [
+        "repeat-count",
+        "command-order",
+        "poll-boundaries"
+      ]
+    },
+    {
+      "id": "B-pointer-hit",
+      "question": "Which target receives hover, press, drag and release across hit boundaries?",
+      "kind": "gameplay",
+      "assertion_status": "candidate",
+      "variant_inventory_complete": false,
+      "depends_on": [
+        "B-boot-menu"
+      ],
+      "authority": [
+        {
+          "source": "osd",
+          "class_index": 0,
+          "trees": [
+            76
+          ]
+        }
+      ],
+      "variants": [
+        "inside-release",
+        "drag-out",
+        "drag-in",
+        "off-target"
+      ],
+      "observations": [
+        "cursor",
+        "hit-target",
+        "selection",
+        "activation"
+      ]
+    },
+    {
+      "id": "B-dialog-focus",
+      "question": "Which input owner is active on dialog show and after hide, and what queued input survives?",
+      "kind": "gameplay",
+      "assertion_status": "candidate",
+      "variant_inventory_complete": false,
+      "depends_on": [
+        "B-key-edges",
+        "B-pointer-hit"
+      ],
+      "authority": [
+        {
+          "source": "osd",
+          "class_index": 0,
+          "trees": [
+            126,
+            127
+          ]
+        },
+        {
+          "source": "dialog",
+          "class_index": 0,
+          "trees": [
+            23,
+            24
+          ]
+        }
+      ],
+      "variants": [
+        "show",
+        "cancel",
+        "accept",
+        "reopen"
+      ],
+      "observations": [
+        "input-owner",
+        "queued-input",
+        "controller-state"
+      ]
+    },
+    {
+      "id": "B-dialog-wait",
+      "question": "Does Dialog.display suspend and resume its caller at the same boundary and return the same result?",
+      "kind": "gameplay",
+      "assertion_status": "candidate",
+      "variant_inventory_complete": false,
+      "depends_on": [
+        "B-dialog-focus"
+      ],
+      "authority": [
+        {
+          "source": "dialog",
+          "class_index": 0,
+          "trees": [
+            26
+          ]
+        }
+      ],
+      "variants": [
+        "wait",
+        "accept",
+        "cancel",
+        "interrupted"
+      ],
+      "observations": [
+        "caller-continuation",
+        "other-thread-progress",
+        "result"
+      ]
+    },
+    {
+      "id": "B-string-edit",
+      "question": "How do paced, burst and repeated keys alter the actual requester text?",
+      "kind": "gameplay",
+      "assertion_status": "candidate",
+      "variant_inventory_complete": false,
+      "depends_on": [
+        "B-dialog-focus",
+        "B-key-repeat"
+      ],
+      "authority": [
+        {
+          "source": "string",
+          "class_index": 0,
+          "trees": [
+            2
+          ]
+        },
+        {
+          "source": "osd",
+          "class_index": 0,
+          "trees": [
+            76
+          ]
+        }
+      ],
+      "variants": [
+        "paced",
+        "burst",
+        "repeat",
+        "backspace"
+      ],
+      "observations": [
+        "text",
+        "key-consumption",
+        "cursor"
+      ]
+    },
+    {
+      "id": "B-string-validation",
+      "question": "Which empty/nonempty acceptance and cancellation paths close the requester and change Career state?",
+      "kind": "gameplay",
+      "assertion_status": "candidate",
+      "variant_inventory_complete": false,
+      "depends_on": [
+        "B-string-edit",
+        "B-dialog-wait"
+      ],
+      "authority": [
+        {
+          "source": "string",
+          "class_index": 0,
+          "trees": [
+            2
+          ]
+        }
+      ],
+      "variants": [
+        "empty-accept",
+        "nonempty-accept",
+        "cancel"
+      ],
+      "observations": [
+        "text",
+        "result",
+        "dialog-state",
+        "career-state"
+      ]
+    },
+    {
+      "id": "B-dialog-resource-cycle",
+      "question": "Does show, hide and reopen reproduce presentation and resource ownership at matching observations?",
+      "kind": "gameplay",
+      "assertion_status": "candidate",
+      "variant_inventory_complete": false,
+      "depends_on": [
+        "B-dialog-focus"
+      ],
+      "authority": [
+        {
+          "source": "osd",
+          "class_index": 0,
+          "trees": [
+            79,
+            80,
+            100,
+            101
+          ]
+        },
+        {
+          "source": "dialog",
+          "class_index": 0,
+          "trees": [
+            23,
+            24
+          ]
+        }
+      ],
+      "variants": [
+        "show",
+        "hide",
+        "reopen"
+      ],
+      "observations": [
+        "viewport-order",
+        "resources",
+        "presentation"
+      ]
+    },
+    {
+      "id": "B-config-write",
+      "question": "Which settings are applied and serialized by ordinary configuration completion or cancellation?",
+      "kind": "gameplay",
+      "assertion_status": "candidate",
+      "variant_inventory_complete": false,
+      "depends_on": [
+        "B-boot-menu"
+      ],
+      "authority": [
+        {
+          "source": "config",
+          "class_index": 0,
+          "trees": [
+            118,
+            119
+          ]
+        }
+      ],
+      "variants": [
+        "apply",
+        "cancel",
+        "clean-exit",
+        "interrupted-exit"
+      ],
+      "observations": [
+        "live-settings",
+        "serialized-settings",
+        "files-changed"
+      ]
+    },
+    {
+      "id": "B-config-reload",
+      "question": "Does normal restart restore the same configuration and resulting presentation/audio settings?",
+      "kind": "gameplay",
+      "assertion_status": "candidate",
+      "variant_inventory_complete": false,
+      "depends_on": [
+        "B-config-write"
+      ],
+      "authority": [
+        {
+          "source": "config",
+          "class_index": 0,
+          "trees": [
+            120
+          ]
+        }
+      ],
+      "variants": [
+        "normal-restart",
+        "missing-config",
+        "partial-config"
+      ],
+      "observations": [
+        "loaded-settings",
+        "presentation",
+        "audio-state"
+      ]
+    },
+    {
+      "id": "P-career-save",
+      "question": "Which semantic Career fields and owned resources are written by ordinary saving?",
+      "kind": "gameplay",
+      "assertion_status": "candidate",
+      "variant_inventory_complete": false,
+      "depends_on": [
+        "B-boot-menu"
+      ],
+      "authority": [
+        {
+          "source": "game",
+          "class_index": 0,
+          "trees": [
+            94
+          ]
+        }
+      ],
+      "variants": [
+        "ordinary-save",
+        "repeated-save",
+        "interrupted-save"
+      ],
+      "observations": [
+        "money",
+        "prestige",
+        "race-counters",
+        "inventory",
+        "car-selection",
+        "files-changed"
+      ]
+    },
+    {
+      "id": "P-career-reload",
+      "question": "Does ordinary load restore the saved Career fields and resource ownership?",
+      "kind": "gameplay",
+      "assertion_status": "candidate",
+      "variant_inventory_complete": false,
+      "depends_on": [
+        "P-career-save"
+      ],
+      "authority": [
+        {
+          "source": "game",
+          "class_index": 0,
+          "trees": [
+            96
+          ]
+        }
+      ],
+      "variants": [
+        "normal-load",
+        "repeated-load",
+        "restart"
+      ],
+      "observations": [
+        "money",
+        "prestige",
+        "race-counters",
+        "inventory",
+        "car-selection",
+        "ownership"
+      ]
+    },
+    {
+      "id": "P-load-refusal",
+      "question": "Where do missing, wrong-ID, wrong-version and truncated saves stop and what state has changed?",
+      "kind": "gameplay",
+      "assertion_status": "candidate",
+      "variant_inventory_complete": false,
+      "depends_on": [
+        "B-boot-menu"
+      ],
+      "authority": [
+        {
+          "source": "game",
+          "class_index": 0,
+          "trees": [
+            96
+          ]
+        }
+      ],
+      "variants": [
+        "missing",
+        "wrong-id",
+        "wrong-version",
+        "truncated"
+      ],
+      "observations": [
+        "refusal-frontier",
+        "dialog",
+        "mutated-fields",
+        "files-changed"
+      ]
+    },
+    {
+      "id": "E-purchase-accept",
+      "question": "What price, money and ownership transfers occur when the selected used Car purchase is confirmed?",
+      "kind": "gameplay",
+      "assertion_status": "candidate",
+      "variant_inventory_complete": false,
+      "depends_on": [
+        "P-career-reload"
+      ],
+      "authority": [
+        {
+          "source": "dealer",
+          "class_index": 0,
+          "trees": [
+            30
+          ]
+        }
+      ],
+      "variants": [
+        "confirm",
+        "repeated-confirm"
+      ],
+      "observations": [
+        "price",
+        "money",
+        "car-descriptor",
+        "owned-slot"
+      ]
+    },
+    {
+      "id": "E-purchase-cancel",
+      "question": "What state remains after rejecting the actual purchase confirmation?",
+      "kind": "gameplay",
+      "assertion_status": "candidate",
+      "variant_inventory_complete": false,
+      "depends_on": [
+        "P-career-reload"
+      ],
+      "authority": [
+        {
+          "source": "dealer",
+          "class_index": 0,
+          "trees": [
+            30
+          ]
+        }
+      ],
+      "variants": [
+        "cancel",
+        "reopen"
+      ],
+      "observations": [
+        "money",
+        "car-descriptor",
+        "owned-slots",
+        "dialog"
+      ]
+    },
+    {
+      "id": "E-purchase-refusal",
+      "question": "What happens when purchase cash is insufficient or the Car Lot has no free slot?",
+      "kind": "gameplay",
+      "assertion_status": "candidate",
+      "variant_inventory_complete": false,
+      "depends_on": [
+        "P-career-reload"
+      ],
+      "authority": [
+        {
+          "source": "dealer",
+          "class_index": 0,
+          "trees": [
+            30
+          ]
+        }
+      ],
+      "variants": [
+        "insufficient-money",
+        "full-lot"
+      ],
+      "observations": [
+        "reason",
+        "dialog",
+        "money",
+        "owned-slots"
+      ]
+    },
+    {
+      "id": "E-purchase-persistence",
+      "question": "Does an accepted purchase survive ordinary save/restart without applying the transfer twice?",
+      "kind": "gameplay",
+      "assertion_status": "candidate",
+      "variant_inventory_complete": false,
+      "depends_on": [
+        "E-purchase-accept",
+        "P-career-reload"
+      ],
+      "authority": [
+        {
+          "source": "dealer",
+          "class_index": 0,
+          "trees": [
+            30
+          ]
+        },
+        {
+          "source": "game",
+          "class_index": 0,
+          "trees": [
+            94,
+            96
+          ]
+        }
+      ],
+      "variants": [
+        "save-restart",
+        "repeated-load"
+      ],
+      "observations": [
+        "money",
+        "owned-cars",
+        "active-car"
+      ]
+    },
+    {
+      "id": "C-owned-selection",
+      "question": "Does Car Lot selection transfer the active Car, controller and camera association correctly?",
+      "kind": "gameplay",
+      "assertion_status": "candidate",
+      "variant_inventory_complete": false,
+      "depends_on": [
+        "P-career-reload"
+      ],
+      "authority": [
+        {
+          "source": "lot",
+          "class_index": 0,
+          "trees": [
+            14,
+            15,
+            19,
+            21,
+            22
+          ]
+        }
+      ],
+      "variants": [
+        "select-first",
+        "select-second",
+        "switch-back"
+      ],
+      "observations": [
+        "active-slot",
+        "car-identity",
+        "controller",
+        "camera"
+      ]
+    },
+    {
+      "id": "C-owned-release",
+      "question": "Which live and persisted ownership links remain after Car release, flush and reload?",
+      "kind": "gameplay",
+      "assertion_status": "candidate",
+      "variant_inventory_complete": false,
+      "depends_on": [
+        "C-owned-selection"
+      ],
+      "authority": [
+        {
+          "source": "lot",
+          "class_index": 0,
+          "trees": [
+            15,
+            16,
+            19,
+            23,
+            24
+          ]
+        }
+      ],
+      "variants": [
+        "release",
+        "flush",
+        "reload",
+        "repeated-cycle"
+      ],
+      "observations": [
+        "live-cars",
+        "owned-slots",
+        "parts",
+        "condition"
+      ]
+    },
+    {
+      "id": "I-part-install",
+      "question": "What graph, inventory and result changes follow compatible and incompatible Part installation?",
+      "kind": "gameplay",
+      "assertion_status": "candidate",
+      "variant_inventory_complete": false,
+      "depends_on": [
+        "C-owned-selection"
+      ],
+      "authority": [
+        {
+          "source": "inventory",
+          "class_index": 0,
+          "trees": [
+            8
+          ]
+        }
+      ],
+      "variants": [
+        "compatible",
+        "incompatible",
+        "repeated-attempt"
+      ],
+      "observations": [
+        "result",
+        "inventory",
+        "installed-part-graph"
+      ]
+    },
+    {
+      "id": "I-part-persistence",
+      "question": "Does accepted Part transfer survive the ordinary Career and Car save/load paths?",
+      "kind": "gameplay",
+      "assertion_status": "candidate",
+      "variant_inventory_complete": false,
+      "depends_on": [
+        "I-part-install",
+        "P-career-reload"
+      ],
+      "authority": [
+        {
+          "source": "inventory",
+          "class_index": 0,
+          "trees": [
+            19,
+            20
+          ]
+        },
+        {
+          "source": "game",
+          "class_index": 0,
+          "trees": [
+            94,
+            96
+          ]
+        }
+      ],
+      "variants": [
+        "save-reload",
+        "repeated-load"
+      ],
+      "observations": [
+        "inventory",
+        "installed-part-graph",
+        "condition"
+      ]
+    },
+    {
+      "id": "I-drive-refusal",
+      "question": "Which actual incomplete Car configurations refuse driving and with what reason and state effects?",
+      "kind": "gameplay",
+      "assertion_status": "candidate",
+      "variant_inventory_complete": false,
+      "depends_on": [
+        "C-owned-selection"
+      ],
+      "authority": [
+        {
+          "source": "vehicle",
+          "class_index": 0,
+          "trees": [
+            34
+          ]
+        }
+      ],
+      "variants": [
+        "eligible",
+        "incomplete",
+        "repeat-refusal"
+      ],
+      "observations": [
+        "reason",
+        "dialog",
+        "eligibility",
+        "scene-state"
+      ]
+    },
+    {
+      "id": "S-scene-enter",
+      "question": "What Car, control, camera, timer and world registrations appear on Track entry?",
+      "kind": "gameplay",
+      "assertion_status": "candidate",
+      "variant_inventory_complete": false,
+      "depends_on": [
+        "C-owned-selection",
+        "I-drive-refusal"
+      ],
+      "authority": [
+        {
+          "source": "track",
+          "class_index": 0,
+          "trees": [
+            32
+          ]
+        }
+      ],
+      "variants": [
+        "enter",
+        "reenter"
+      ],
+      "observations": [
+        "car-identity",
+        "control-owner",
+        "camera",
+        "timers",
+        "world-membership"
+      ]
+    },
+    {
+      "id": "S-scene-exit",
+      "question": "Which timers, world resources, Car links and time scale remain on ordinary or interrupted Track exit?",
+      "kind": "gameplay",
+      "assertion_status": "candidate",
+      "variant_inventory_complete": false,
+      "depends_on": [
+        "S-scene-enter"
+      ],
+      "authority": [
+        {
+          "source": "track",
+          "class_index": 0,
+          "trees": [
+            33
+          ]
+        }
+      ],
+      "variants": [
+        "ordinary-exit",
+        "active-activity-exit",
+        "repeated-cycle"
+      ],
+      "observations": [
+        "timers",
+        "resources",
+        "car-ownership",
+        "time-scale"
+      ]
+    },
+    {
+      "id": "R-finish-settlement",
+      "question": "Which money, counters and ranking changes occur on winning and losing a Night Drag Race?",
+      "kind": "gameplay",
+      "assertion_status": "candidate",
+      "variant_inventory_complete": false,
+      "depends_on": [
+        "S-scene-enter"
+      ],
+      "authority": [
+        {
+          "source": "city",
+          "class_index": 0,
+          "trees": [
+            77,
+            83
+          ]
+        }
+      ],
+      "variants": [
+        "win",
+        "lose",
+        "repeated-finish"
+      ],
+      "observations": [
+        "money",
+        "race-counters",
+        "ranking",
+        "settlement-count"
+      ]
+    },
+    {
+      "id": "R-abandon",
+      "question": "What settlement, controls and scene state result from actual race abandonment?",
+      "kind": "gameplay",
+      "assertion_status": "candidate",
+      "variant_inventory_complete": false,
+      "depends_on": [
+        "S-scene-enter"
+      ],
+      "authority": [
+        {
+          "source": "city",
+          "class_index": 0,
+          "trees": [
+            86
+          ]
+        }
+      ],
+      "variants": [
+        "abandon",
+        "repeated-abandon"
+      ],
+      "observations": [
+        "money",
+        "race-counters",
+        "control-owner",
+        "scene-state"
+      ]
+    },
+    {
+      "id": "R-cleanup",
+      "question": "Which opponent Cars and timers remain after finish, abandonment and scene exit?",
+      "kind": "gameplay",
+      "assertion_status": "candidate",
+      "variant_inventory_complete": false,
+      "depends_on": [
+        "R-finish-settlement",
+        "R-abandon",
+        "S-scene-exit"
+      ],
+      "authority": [
+        {
+          "source": "city",
+          "class_index": 0,
+          "trees": [
+            78
+          ]
+        }
+      ],
+      "variants": [
+        "finish",
+        "abandon",
+        "leave-scene",
+        "reenter"
+      ],
+      "observations": [
+        "opponent-cars",
+        "timers",
+        "world-membership"
+      ]
+    },
+    {
+      "id": "R-progression-reload",
+      "question": "Do race settlement and challenge eligibility survive ordinary save/restart?",
+      "kind": "gameplay",
+      "assertion_status": "candidate",
+      "variant_inventory_complete": false,
+      "depends_on": [
+        "R-finish-settlement",
+        "P-career-reload"
+      ],
+      "authority": [
+        {
+          "source": "game",
+          "class_index": 0,
+          "trees": [
+            88,
+            89,
+            94,
+            96
+          ]
+        }
+      ],
+      "variants": [
+        "win-reload",
+        "lose-reload",
+        "abandon-reload"
+      ],
+      "observations": [
+        "money",
+        "race-counters",
+        "ranking",
+        "challenge-eligibility"
+      ]
+    }
+  ],
+  "journeys": [
+    {
+      "id": "J-boot-dialog-cancel",
+      "rungs": [
+        "B-boot-menu",
+        "B-pointer-hit",
+        "B-dialog-focus",
+        "B-dialog-wait",
+        "B-string-validation",
+        "B-dialog-resource-cycle"
+      ]
+    },
+    {
+      "id": "J-career-roundtrip",
+      "rungs": [
+        "P-career-save",
+        "P-career-reload",
+        "P-load-refusal"
+      ]
+    },
+    {
+      "id": "J-used-car-purchase",
+      "rungs": [
+        "E-purchase-accept",
+        "E-purchase-cancel",
+        "E-purchase-refusal",
+        "E-purchase-persistence"
+      ]
+    },
+    {
+      "id": "J-part-transfer",
+      "rungs": [
+        "I-part-install",
+        "I-part-persistence",
+        "I-drive-refusal"
+      ]
+    },
+    {
+      "id": "J-city-roundtrip",
+      "rungs": [
+        "C-owned-selection",
+        "S-scene-enter",
+        "S-scene-exit"
+      ]
+    },
+    {
+      "id": "J-night-drag",
+      "rungs": [
+        "R-finish-settlement",
+        "R-abandon",
+        "R-cleanup",
+        "R-progression-reload"
+      ]
+    }
+  ],
+  "stock_frontiers": [
+    {
+      "id": "stock-menu-visible",
+      "rung": "B-boot-menu",
+      "variant": "normal",
+      "stage": "before",
+      "source": "menu"
+    },
+    {
+      "id": "stock-requester-visible",
+      "rung": "B-dialog-focus",
+      "variant": "show",
+      "stage": "name_dialog",
+      "source": "dialog"
+    },
+    {
+      "id": "stock-cancel-menu-return",
+      "rung": "B-dialog-focus",
+      "variant": "cancel",
+      "stage": "after",
+      "source": "dialog"
+    }
+  ]
+}
