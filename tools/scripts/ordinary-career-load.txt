@@ -1,0 +1,19 @@
+# Ordinary LOAD CAREER from a process-generated fixture, then menu Exit/Yes.
+0 wait splash 60
+0 keydown Escape
+0 wait menu 60
+0 keyup Escape
+0.2 clickn 0.35 0.26
+1.2 shot @run/load-list.bmp
+1.4 clickn 0.5 0.335
+2.2 shot @run/load-selected.bmp
+2.4 clickn 0.4 0.7875
+6.2 shot @run/loaded-welcome.bmp
+6.4 clickn 0.5 0.7875
+8.2 shot @run/loaded-garage.bmp
+8.5 clickn 0.955 0.08
+8.7 wait menu 30
+9.2 shot @run/menu-before-exit.bmp
+9.4 clickn 0.6 0.56
+10.2 shot @run/exit-confirmation.bmp
+10.4 clickn 0.4 0.783333

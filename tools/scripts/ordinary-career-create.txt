@@ -1,0 +1,31 @@
+# Ordinary career creation and menu exit; no scripted quit fallback.
+0 wait splash 60
+0 keydown Escape
+0 wait menu 60
+0 keyup Escape
+0.2 shot @run/main-menu.bmp
+0.3 clickn 0.390625 0.2
+0.8 sdl_type S
+1.0 sdl_type a
+1.2 sdl_type v
+1.4 sdl_type e
+1.6 sdl_type P
+1.8 sdl_type r
+2.0 sdl_type o
+2.2 sdl_type o
+2.4 sdl_type f
+2.7 shot @run/name-typed.bmp
+2.9 clickn 0.4 0.7875
+3.4 shot @run/character-before.bmp
+3.6 clickn 0.68 0.62
+4.1 shot @run/character-after.bmp
+4.3 clickn 0.5 0.783333
+7.0 shot @run/garage-welcome.bmp
+7.2 clickn 0.5 0.7875
+9.0 shot @run/garage.bmp
+9.3 clickn 0.955 0.08
+9.5 wait menu 30
+10.0 shot @run/menu-before-exit.bmp
+10.2 clickn 0.6 0.56
+11.0 shot @run/exit-confirmation.bmp
+11.2 clickn 0.4 0.783333
