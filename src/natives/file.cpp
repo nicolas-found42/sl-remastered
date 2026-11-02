@@ -280,15 +280,19 @@ NativeResult fileWriteResource(const std::vector<VmValue>& args,
   if (!object)
     return std::string{"invalid File.write(ResourceRef) argument"};
   uint32_t id = 0;
+  uint32_t rawId = 0;
+  int32_t referenceHandle = 0;
   if (*object) {
     const VmField* ptr = field(*object, "ptr", "I");
     if (!ptr || !std::holds_alternative<int32_t>(ptr->value))
       return std::string{"File.write(ResourceRef): argument has no ptr"};
+    referenceHandle = std::get<int32_t>(ptr->value);
     if (std::get<int32_t>(ptr->value) != 0) {
       const auto* state = nativeResourceState(*object, arena);
       if (!state)
         return std::string{"File.write(ResourceRef): invalid native link"};
       id = state->words[2];
+      rawId = id;
       const int32_t handle =
           static_cast<int32_t>(state - arena->resourceStates.data()) + 1;
       if (arena->gameState) {
@@ -300,6 +304,7 @@ NativeResult fileWriteResource(const std::vector<VmValue>& args,
   }
   if (!arena->fileState->isWriter(receiver))
     return VmValue{int32_t{0}};
+  const uint32_t resolvedId = id;
   if (id != 0) {
     if ((id >> 16) == 0xffff)
       return std::string{"File.write(ResourceRef): unsaved dynamic resource "
@@ -318,6 +323,10 @@ NativeResult fileWriteResource(const std::vector<VmValue>& args,
   std::string error;
   if (!arena->fileState->writeBytes(receiver, &id, 4, error))
     return error;
+  runlog::event(runlog::EventKind::Note,
+                "file resource write: class=%s handle=%d raw=0x%08x resolved=0x%08x saved=0x%08x",
+                *object && (*object)->runtimeClass ? (*object)->runtimeClass->name.c_str() : "null",
+                referenceHandle, rawId, resolvedId, id);
   return VmValue{int32_t{4}};
 }
 
