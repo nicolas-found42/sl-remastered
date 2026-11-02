@@ -11,7 +11,7 @@ The native arm64 macOS build in this repository. It is a behavioral re-implement
 _Avoid_: remaster, remake, emulator
 
 **Stock Executable**:
-The original 2005 `StreetLegal_Redline` program. Its behavior is the authority for every parity question.
+An identity-bound executable from either official game version in the Reference Folder. Both official versions validate the single Port. Shared behavior is authoritative; differing behavior is inventoried and reconciled using newer official behavior by default while retaining older-only features. Incompatible choices require explicit resolution under the full Port specification.
 _Avoid_: original exe, retail build, base game
 
 **Mod Executable**:
@@ -19,15 +19,15 @@ The community-modified executable shipped beside the stock one. Kept only for co
 _Avoid_: patched exe
 
 **Stock Decompile**:
-The whole-program Ghidra decompilation of the stock executable, where unnamed functions are called `FUN_<address>`. The primary evidence for what the stock executable does.
+The whole-program Ghidra decompilation of the stock executable, where unnamed functions are called `FUN_<address>`. Static evidence for what the identified Stock Executable does; it must retain its build identity and does not itself demonstrate runtime behavior.
 _Avoid_: census (also names unrelated corpus counts)
 
 **Parity**:
-The state where the port gives the same observable result as the stock executable for the same input. Checked at three levels: data, logic, behavior.
+The state where the Port gives the same observable result as the Stock Executable under the same declared inputs and starting conditions, including consistent Stock quirks. Evidence is bounded to the behavior, reference identity and variants actually compared; approved deviations remain separate. For cross-version differences, acceptance follows the recorded reconciliation decision rather than claiming equality to contradictory Stock behaviors.
 _Avoid_: 1:1 match, compatibility
 
 **Wine Capture**:
-A recording of the stock executable running under Wine. Confirms a visual or flow result; it never overrides the stock decompile or stock scripts.
+A recording of the stock executable running under Wine. Observes behavior of an identified Stock Executable under declared conditions. Differences from static evidence require investigation of instrumentation, environment and version identity rather than assuming either proves the whole behavior.
 _Avoid_: reference run, oracle
 
 **Reference Folder**:
@@ -147,9 +147,17 @@ Per-physics-step telemetry of a car in a **Run**: position, velocity, controls, 
 _Avoid_: car log
 
 **Rung**:
-One of the six ordered milestones: Free Ride, new career, buying a **Used Car**, installing and removing a **Part**, entering the **City**, finishing a **Night Drag Race**. A rung is done only when its scripted **Run** passes every criterion.
-_Avoid_: phase (the plan's phases are a separate list), stage
+A small, measurable behavior contract needed to establish Parity, with declared variants and explicit dependencies on other Rungs. A Rung is verified only by retained evidence covering its assertions; Rungs form a dependency graph.
+_Avoid_: phase (the plan's phases are a separate list), stage, fixed milestone
+
+**Journey**:
+A reachable player activity spanning several Rungs, such as creating a Career or buying a Used Car. Journey coverage records which constituent behaviors and variants have been proved.
+_Avoid_: rung (a Journey contains several Rungs)
+
+**Parity Proof**:
+Retained evidence that a declared Rung or Journey comparison passed for identified Stock and Port Runs. Missing observations, unproved repeatability or uncovered variants cannot count as a successful Parity Proof.
+_Avoid_: passing screenshot, parity score
 
 **Forced Seed**:
-A fixed random seed set for a **Run** so runs and screenshots are comparable.
+A fixed random seed set for a Run. It controls only the affected random stream and does not by itself establish deterministic execution or comparable scheduling.
 _Avoid_: deterministic mode

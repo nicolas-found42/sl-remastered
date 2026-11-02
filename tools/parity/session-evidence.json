@@ -1,0 +1,2422 @@
+{
+  "schema": 1,
+  "deliverables": {
+    "1": "Strict paired evaluator",
+    "2": "Content and semantic proof graph",
+    "3": "Native private pipeline",
+    "4": "Isolated Stock pipeline",
+    "5": "Clock/input/RNG/schedule replay",
+    "6": "Shared resource scheduler and cleanup",
+    "7": "Developer entry point",
+    "8": "Validation and independent completion audit"
+  },
+  "attempts": [
+    {
+      "id": "audit-v4-deliverable-1",
+      "deliverable": "1",
+      "sequence": 0,
+      "scope": "Historical checkpoint: Wire now has a LOCAL actual owned main-bound producer/collector witness, not just synthetic serialization. No actual paired Stock/Port evaluator run. Remaining: Actual same-side repeat and paired boot/menu/dialog proof must exercise strict evaluator, provenance and meaningful corruption rejection.",
+      "review": "pending",
+      "outcome": "incomplete",
+      "evidence": {
+        "audit": {
+          "path": "local/verify/parity-goal-20261102-092437/audit/eight-deliverables-audit-v4-addendum.json",
+          "sha256": "f055c2ddcd08839df5216043879878b56dfcadf01ace7dddf2cdef28c071299e"
+        }
+      },
+      "assertions": [
+        {
+          "evidence": "audit",
+          "pointer": "/deliverables/0/status",
+          "equals": "partial"
+        },
+        {
+          "evidence": "audit",
+          "pointer": "/complete",
+          "equals": false
+        }
+      ]
+    },
+    {
+      "id": "audit-v4-deliverable-2",
+      "deliverable": "2",
+      "sequence": 0,
+      "scope": "Historical checkpoint: Inventory and prior structural branch accounting retained; scouts add pinned research resources, not Stock-backed semantic proof. Remaining: Bind authoritative content and pending branches to actual Stock results; retain unverified rows.",
+      "review": "pending",
+      "outcome": "incomplete",
+      "evidence": {
+        "audit": {
+          "path": "local/verify/parity-goal-20261102-092437/audit/eight-deliverables-audit-v4-addendum.json",
+          "sha256": "f055c2ddcd08839df5216043879878b56dfcadf01ace7dddf2cdef28c071299e"
+        }
+      },
+      "assertions": [
+        {
+          "evidence": "audit",
+          "pointer": "/deliverables/1/status",
+          "equals": "partial"
+        },
+        {
+          "evidence": "audit",
+          "pointer": "/complete",
+          "equals": false
+        }
+      ]
+    },
+    {
+      "id": "audit-v4-deliverable-3",
+      "deliverable": "3",
+      "sequence": 0,
+      "scope": "Historical checkpoint: Prior normal-intro/save/load evidence remains functional qualification. New prepaid native flag/environment captures are menu smoke with explicit intro bypass; both retain private nonzero PCM/no observed activation. Remaining: Preserve full-pipeline normal-intro/source/save/exit acceptance; new smoke alone does not broaden deterministic coverage.",
+      "review": "pending",
+      "outcome": "incomplete",
+      "evidence": {
+        "audit": {
+          "path": "local/verify/parity-goal-20261102-092437/audit/eight-deliverables-audit-v4-addendum.json",
+          "sha256": "f055c2ddcd08839df5216043879878b56dfcadf01ace7dddf2cdef28c071299e"
+        }
+      },
+      "assertions": [
+        {
+          "evidence": "audit",
+          "pointer": "/deliverables/2/status",
+          "equals": "functional_evidence_present_with_observer_limits"
+        },
+        {
+          "evidence": "audit",
+          "pointer": "/complete",
+          "equals": false
+        }
+      ]
+    },
+    {
+      "id": "audit-v4-deliverable-4",
+      "deliverable": "4",
+      "sequence": 0,
+      "scope": "Historical checkpoint: Prior isolated normal Stock functional captures remain recognized. New owned handoff is not Stock capture. Remaining: Retain explicit synthetic-CD exception and private actual intro/video/audio/save/exit evidence; do not conflate replay qualification.",
+      "review": "pending",
+      "outcome": "incomplete",
+      "evidence": {
+        "audit": {
+          "path": "local/verify/parity-goal-20261102-092437/audit/eight-deliverables-audit-v4-addendum.json",
+          "sha256": "f055c2ddcd08839df5216043879878b56dfcadf01ace7dddf2cdef28c071299e"
+        }
+      },
+      "assertions": [
+        {
+          "evidence": "audit",
+          "pointer": "/deliverables/3/status",
+          "equals": "functional_evidence_present"
+        },
+        {
+          "evidence": "audit",
+          "pointer": "/complete",
+          "equals": false
+        }
+      ]
+    },
+    {
+      "id": "audit-v4-deliverable-5",
+      "deliverable": "5",
+      "sequence": 0,
+      "scope": "Historical checkpoint: Corrected LOCAL handoff initialized-FXSAVE normal3 ENTRY/3 REPLY and abrupt1 ENTRY/0 REPLY; worker2 Gap91, no manufactured reply. Process qualification explicitly false. Historical intermittent recorder shutdown remains red. Remaining: Actual Stock early time/input/RNG/synchronization boundaries, stable worker/generation identity, arbitrary ABI and lifecycle qualification, corresponding Port consumption, same-side repeats, then cross-comparison. Diagnose ordinary recorder exit without replacing red evidence.",
+      "review": "pending",
+      "outcome": "incomplete",
+      "evidence": {
+        "audit": {
+          "path": "local/verify/parity-goal-20261102-092437/audit/eight-deliverables-audit-v4-addendum.json",
+          "sha256": "f055c2ddcd08839df5216043879878b56dfcadf01ace7dddf2cdef28c071299e"
+        }
+      },
+      "assertions": [
+        {
+          "evidence": "audit",
+          "pointer": "/deliverables/4/status",
+          "equals": "partial"
+        },
+        {
+          "evidence": "audit",
+          "pointer": "/complete",
+          "equals": false
+        }
+      ]
+    },
+    {
+      "id": "audit-v4-deliverable-6",
+      "deliverable": "6",
+      "sequence": 0,
+      "scope": "Historical checkpoint: Reviewed prepaid production opt-in reuses exact held ledger/root identity/max, independent child1GiB cap, whole-parent checks and cooperative locks. 27 scratch/fake-Lease controls and actual existing-root native smoke pass. Ledger unchanged. Sampled limits are not hard containment. Remaining: Qualify production process/daemon/descendant containment and cleanup/killpoints; old stopped writers and responsiveness/throughput representative workloads remain acceptance.",
+      "review": "pending",
+      "outcome": "incomplete",
+      "evidence": {
+        "audit": {
+          "path": "local/verify/parity-goal-20261102-092437/audit/eight-deliverables-audit-v4-addendum.json",
+          "sha256": "f055c2ddcd08839df5216043879878b56dfcadf01ace7dddf2cdef28c071299e"
+        }
+      },
+      "assertions": [
+        {
+          "evidence": "audit",
+          "pointer": "/deliverables/5/status",
+          "equals": "partial"
+        },
+        {
+          "evidence": "audit",
+          "pointer": "/complete",
+          "equals": false
+        }
+      ]
+    },
+    {
+      "id": "audit-v4-deliverable-7",
+      "deliverable": "7",
+      "sequence": 0,
+      "scope": "Historical checkpoint: Developer corpus now includes pooled Python suites with limits retained. Prepaid paired env flags allow native smoke reuse without nested charges; no full paired proof command demonstrated. Remaining: Complete paired, targeted failure reproduction/coverage and performance lanes backed by actual proof artifacts.",
+      "review": "pending",
+      "outcome": "incomplete",
+      "evidence": {
+        "audit": {
+          "path": "local/verify/parity-goal-20261102-092437/audit/eight-deliverables-audit-v4-addendum.json",
+          "sha256": "f055c2ddcd08839df5216043879878b56dfcadf01ace7dddf2cdef28c071299e"
+        }
+      },
+      "assertions": [
+        {
+          "evidence": "audit",
+          "pointer": "/deliverables/6/status",
+          "equals": "partial"
+        },
+        {
+          "evidence": "audit",
+          "pointer": "/complete",
+          "equals": false
+        }
+      ]
+    },
+    {
+      "id": "audit-v4-deliverable-8",
+      "deliverable": "8",
+      "sequence": 0,
+      "scope": "Historical checkpoint: Latest complete CTest126/127 red at unchanged object sleep assertion. Separately frozen post-CTest phase exits0/check:ok. Original prepaid Jev gate remains escalated (.5855/.10), preserved. No full green gate or workflow approval. Remaining: Causal physics repair preserving assertions, complete uninterrupted tools/check.sh green, actual Stock/Port proof, final independent all-eight/Jev review.",
+      "review": "pending",
+      "outcome": "incomplete",
+      "evidence": {
+        "audit": {
+          "path": "local/verify/parity-goal-20261102-092437/audit/eight-deliverables-audit-v4-addendum.json",
+          "sha256": "f055c2ddcd08839df5216043879878b56dfcadf01ace7dddf2cdef28c071299e"
+        }
+      },
+      "assertions": [
+        {
+          "evidence": "audit",
+          "pointer": "/deliverables/7/status",
+          "equals": "partial"
+        },
+        {
+          "evidence": "audit",
+          "pointer": "/complete",
+          "equals": false
+        }
+      ]
+    },
+    {
+      "id": "owned-clock-actual-audit-final",
+      "deliverable": "5",
+      "sequence": 1,
+      "scope": "Owned initialized-state clock response harness only; actual Stock scheduling and game replay remain unqualified.",
+      "review": "escalated",
+      "outcome": "passed",
+      "evidence": {
+        "audit": {
+          "path": "local/verify/parity-goal-20261102-092437/audit/owned-clock-stage/actual-audit-final.json",
+          "sha256": "72a65064db430465df6e1c88b11fa5bc6a6cb049f54a99d2da5aea8404039ccf"
+        }
+      },
+      "assertions": [
+        {
+          "evidence": "audit",
+          "pointer": "/process_qualification_complete",
+          "equals": false
+        }
+      ]
+    },
+    {
+      "id": "actual-input-stage3",
+      "deliverable": "5",
+      "sequence": 2,
+      "scope": "Local Wine input stage3 qualification only; initialized state and causal Release witnesses, not Stock game replay.",
+      "review": "escalated",
+      "outcome": "passed",
+      "evidence": {
+        "audit": {
+          "path": "local/verify/parity-goal-20261102-092437/input-durable-handoff/stage3/attempt32d9ae84-audit.json",
+          "sha256": "e58d18dae627b3659a503317a1e901a81e279a569990fedd980f268affc98429"
+        }
+      },
+      "assertions": [
+        {
+          "evidence": "audit",
+          "pointer": "/old_parent_regular_metadata_and_bytes_preserved",
+          "equals": true
+        }
+      ]
+    },
+    {
+      "id": "owned-clock-actual-audit-post-repair",
+      "deliverable": "5",
+      "sequence": 3,
+      "scope": "Owned initialized-state clock response harness only; actual Stock scheduling and game replay remain unqualified.",
+      "review": "escalated",
+      "outcome": "passed",
+      "evidence": {
+        "audit": {
+          "path": "local/verify/parity-goal-20261102-092437/audit/owned-clock-stage/actual-audit-post-repair.json",
+          "sha256": "72a65064db430465df6e1c88b11fa5bc6a6cb049f54a99d2da5aea8404039ccf"
+        }
+      },
+      "assertions": [
+        {
+          "evidence": "audit",
+          "pointer": "/process_qualification_complete",
+          "equals": false
+        }
+      ]
+    },
+    {
+      "id": "post-normalization-full-gate",
+      "deliverable": "8",
+      "sequence": 1,
+      "scope": "126/127 CTests; world-step speed assertion fails. Post-CTest checks were not reached.",
+      "review": "escalated",
+      "outcome": "failed",
+      "evidence": {
+        "audit": {
+          "path": "local/verify/parity-goal-20261102-092437/retained-query/norm-proposal/parent-full-v2-audit.json",
+          "sha256": "2d3d4b0bf8858e0230e51ebf3dc577664a8102986fc7281a381b61f040c4e3ed"
+        }
+      },
+      "assertions": [
+        {
+          "evidence": "audit",
+          "pointer": "/ctest/passed",
+          "equals": 126
+        },
+        {
+          "evidence": "audit",
+          "pointer": "/ctest/total",
+          "equals": 127
+        },
+        {
+          "evidence": "audit",
+          "pointer": "/focus/child_exit",
+          "equals": 8
+        }
+      ]
+    },
+    {
+      "id": "issue53-two-recorded-reference-inventories",
+      "deliverable": "2",
+      "sequence": 1,
+      "scope": "Recorded raw/later subtrees account for28308 exact paths. All provenance, semantics and decisions remain unknown/pending.39 catalog tests pass, including actual FIFO substitution red/green. Current distribution bytes, official classification, packed content, semantic variants and reconciliation remain unqualified. Independent Standards finding fixed; bounded Spec review found no blocker. Final Jev reader/tests gates remain escalated (safe_to_apply0.26/0.46), not completion approval.",
+      "review": "escalated",
+      "outcome": "passed",
+      "evidence": {
+        "audit": {
+          "path": "local/verify/issue53-reconciliation-20261102/inventory-audit.json",
+          "sha256": "ccce71f43223ab57c4c6c52baed2342ef10dfcea222facc1a824cae07ea9c98e"
+        },
+        "execution": {
+          "path": "local/verify/issue53-reconciliation-20261102/inventory-result.json",
+          "sha256": "49972a37f8746410466f03cfc1ea734953e8a24235ab030a669954cb2b508025"
+        },
+        "sources": {
+          "path": "local/verify/issue53-reconciliation-20261102/inventory-source-bindings.json",
+          "sha256": "24c1569794eb224c27a3b83fb3202823deb9b01949a667f3d1ed6cbda9af88f9"
+        },
+        "validation": {
+          "path": "local/verify/issue53-reconciliation-20261102/validation.json",
+          "sha256": "d86fd00085aaa2bb5dd67888c6ff674936032cc047c7b8007655bc46ab96b7f8"
+        },
+        "report": {
+          "path": "local/verify/issue53-reconciliation-20261102/inventory/reference-differences.json",
+          "sha256": "fa81986af8620797ff242a57e456a58cb1e57e54481d108d7ef042997e7b242a"
+        },
+        "jev_reader": {
+          "path": "local/verify/issue53-reconciliation-20261102/jev-reader-result.json",
+          "sha256": "780a287be2d1bc178cb286c50d702f4d3d3c84a1bdf1ff81fcf2ff8d33c1e71e"
+        },
+        "jev_tests": {
+          "path": "local/verify/issue53-reconciliation-20261102/jev-tests-result.json",
+          "sha256": "a89d164542a70bae5a9d3e235f797fb7acaa2ac71aabda291e920891f0c7fc36"
+        }
+      },
+      "assertions": [
+        {
+          "evidence": "audit",
+          "pointer": "/passed",
+          "equals": true
+        },
+        {
+          "evidence": "audit",
+          "pointer": "/d2_complete",
+          "equals": false
+        },
+        {
+          "evidence": "audit",
+          "pointer": "/paths",
+          "equals": 28308
+        },
+        {
+          "evidence": "execution",
+          "pointer": "/execution_passed",
+          "equals": true
+        },
+        {
+          "evidence": "sources",
+          "pointer": "/preserved",
+          "equals": true
+        },
+        {
+          "evidence": "validation",
+          "pointer": "/catalog_tests/passed",
+          "equals": 39
+        }
+      ]
+    },
+    {
+      "id": "issue53-full-gate-and-contact-frontier",
+      "deliverable": "8",
+      "sequence": 2,
+      "scope": "Full integration attempt still fails object_world_step_unit:126/127 CTests, post-CTest checks unexecuted. Separately, local contact multiplicity prototype matches conditional original repeats through step218 but still fails900-step sleep. Prototype not applied to production; full gameplay/paired/release acceptance remains unproved.",
+      "review": "pending",
+      "outcome": "failed",
+      "evidence": {
+        "gate": {
+          "path": "local/verify/issue53-reconciliation-20261102/full-gate-result.json",
+          "sha256": "bf0a4b4f9d8be419c67d30fbfe6fe5f0615b0cdf07fe7c8f96474d1f3166a05c"
+        },
+        "gate_log": {
+          "path": "local/verify/issue53-reconciliation-20261102/full-gate.log",
+          "sha256": "45f7d7464725d0a35e9f13d0ea664cd09045823dcf0f43f5ea590c71784af7fd"
+        },
+        "prototype": {
+          "path": "local/verify/issue53-contact-multiplicity-20261102/result.json",
+          "sha256": "4d35ea69fa3c5dceba814c8a375cda0ee9ccb5dd766147128aaa2f29a44452ab"
+        },
+        "comparison": {
+          "path": "local/verify/issue53-contact-multiplicity-20261102/comparison.json",
+          "sha256": "3af39227fdf80fef0db8da67ca56e6ea96522d73414a87da073cc98dbda5eaf2"
+        },
+        "prototype_summary": {
+          "path": "local/verify/issue53-contact-multiplicity-20261102/summary.json",
+          "sha256": "f2bd8dd70b8df83d98f78cc7eb62cd4a149857cea1042b030f172da3605b6ddc"
+        }
+      },
+      "assertions": [
+        {
+          "evidence": "gate",
+          "pointer": "/stages/full-gate/actual_exit",
+          "equals": 8
+        },
+        {
+          "evidence": "gate",
+          "pointer": "/execution_passed",
+          "equals": false
+        },
+        {
+          "evidence": "prototype",
+          "pointer": "/stages/run/actual_exit",
+          "equals": -6
+        },
+        {
+          "evidence": "comparison",
+          "pointer": "/results/0/matched_initial_steps",
+          "equals": 179
+        },
+        {
+          "evidence": "comparison",
+          "pointer": "/results/1/matched_initial_steps",
+          "equals": 179
+        }
+      ]
+    },
+    {
+      "id": "issue53-current-executable-version-resources",
+      "deliverable": "2",
+      "sequence": 2,
+      "scope": "Current hash-bound executable VERSIONINFO reports 2.2.1.0 and 2.3.1.0. Fixed/string fields independently checked; eight corruption controls reject. Build606/940 and official provenance unresolved. Jev version claims auto; bounded build-label absence confidence0.35 needs review, independent raw review found no mismatch. No full tree, semantics, runtime or D2 completion claim.",
+      "review": "escalated",
+      "outcome": "passed",
+      "evidence": {
+        "summary": {
+          "path": "local/verify/issue53-reconciliation-20261102/versioninfo-v1/summary.json",
+          "sha256": "e408de34d89600730703e8d693708d4b255d24214d2ba13751355bceefcc4cb6"
+        },
+        "decoded": {
+          "path": "local/verify/issue53-reconciliation-20261102/versioninfo-v1/decoded.json",
+          "sha256": "40dac2e79c992341f7f1c735c7a37d5709e4518de9565a0a671952b8d453d8d3"
+        },
+        "decoder": {
+          "path": "local/verify/issue53-reconciliation-20261102/versioninfo-v1/decode-v3.py",
+          "sha256": "da9cd9b154833fc5eafe52f080ecf36a6a1a85bcc8024be061f8902300265bff"
+        },
+        "raw_review": {
+          "path": "local/verify/issue53-reconciliation-20261102/versioninfo-v1/independent-review.json",
+          "sha256": "e3706d5aaf364c6ef239756655611152404d9633c1aee0685b796b4e1c492731"
+        },
+        "jev": {
+          "path": "local/verify/issue53-reconciliation-20261102/versioninfo-v1/jev-verify.json",
+          "sha256": "b72083c45e537811f4635aa7ee48e0daa429e1c8c68e5cce0e8c541016987369"
+        },
+        "report": {
+          "path": "local/verify/issue53-reconciliation-20261102/versioninfo-v1/report.md",
+          "sha256": "7abe28da17cac6369fa9d6b918f3c7800d5e961a1f6ddf67377537ed5a56f9b6"
+        }
+      },
+      "assertions": [
+        {
+          "evidence": "summary",
+          "pointer": "/references/0/observed_fixed_file_version",
+          "equals": [
+            2,
+            2,
+            1,
+            0
+          ]
+        },
+        {
+          "evidence": "summary",
+          "pointer": "/references/1/observed_fixed_file_version",
+          "equals": [
+            2,
+            3,
+            1,
+            0
+          ]
+        },
+        {
+          "evidence": "raw_review",
+          "pointer": "/provenance_qualified",
+          "equals": false
+        }
+      ]
+    },
+    {
+      "id": "issue53-conditional-original-through899",
+      "deliverable": "8",
+      "sequence": 3,
+      "scope": "Two conditional original4a5190 helper generations exit0, compare106 words for each of two dynamic bodies at860 initials40..899 to local prototype. Original also ends awake atspeed0.4684878; unchanged native test still fails. No actual Stock spatialgraph, startup, fullgame parity or production promotion. Independent exact-length/raw comparison passed; Jev match claim remains review atconfidence0.74. Integration acceptance remains failed.",
+      "review": "escalated",
+      "outcome": "failed",
+      "evidence": {
+        "execution": {
+          "path": "local/verify/parity-goal-20261102-092437/retained-query/eligibility-root/run-115cbd844c/allocator-reuse-batched-v3/capture-236049b965/result.json",
+          "sha256": "8e689afc8433f6cf7b00d1c9c4eff7819c004b200d4cecb30e5daa9b42c0fdba"
+        },
+        "comparison": {
+          "path": "local/verify/parity-goal-20261102-092437/retained-query/eligibility-root/run-115cbd844c/allocator-reuse-batched-v3/capture-236049b965/complete-comparison.json",
+          "sha256": "d9dceb860fd569bbdb7eeac534671b2dad384f78a5a6edfb8b3156e8c4e8bc08"
+        },
+        "independent": {
+          "path": "local/verify/issue53-reconciliation-20261102/contact900-independent-review.json",
+          "sha256": "317dd1ab14e4b00fb0cab20e40e50b56530690944d31900987cdc9dc922604c6"
+        },
+        "jev": {
+          "path": "local/verify/issue53-reconciliation-20261102/contact900-jev-result.json",
+          "sha256": "f1ad01fab586fb90d4b83a8570c4d6a1cfb43c6c3d305b3ae7c0a13d90926697"
+        },
+        "native": {
+          "path": "local/verify/issue53-contact-multiplicity-20261102/diagnostics-through899/result.json",
+          "sha256": "d90db940b117815be4725daca2f9a2849d583be15c511ee0a636e889dd5ca809"
+        }
+      },
+      "assertions": [
+        {
+          "evidence": "execution",
+          "pointer": "/execution_finished",
+          "equals": true
+        },
+        {
+          "evidence": "execution",
+          "pointer": "/passed",
+          "equals": false
+        },
+        {
+          "evidence": "comparison",
+          "pointer": "/results/0/matched_native_initial_steps",
+          "equals": 860
+        },
+        {
+          "evidence": "comparison",
+          "pointer": "/results/1/matched_native_initial_steps",
+          "equals": 860
+        },
+        {
+          "evidence": "comparison",
+          "pointer": "/results/0/original_root_asleep",
+          "equals": false
+        },
+        {
+          "evidence": "comparison",
+          "pointer": "/native_fixture_exit",
+          "equals": -6
+        }
+      ]
+    },
+    {
+      "id": "issue53-production-entry-and-unchanged-settling",
+      "deliverable": "8",
+      "sequence": 4,
+      "scope": "Shared production application entry and external-user-path console controls pass; player logging regression removes checkout scans and git subprocesses. No visible application, paired parity, reconciled content or release acceptance. Focused unchanged object_world_step_unit still fails speed<0.3 with speed0.467 and awake flags0x9. Complete integration gate remains unaccepted; this is not a complete gate invocation.",
+      "outcome": "failed",
+      "review": "pending",
+      "evidence": {
+        "physics": {
+          "path": "local/verify/issue53-bundle-20261102/physics-result.json",
+          "sha256": "1ac3493ee0642cdf3991a1b12a2532d00df9e5866f39df523c342c9a5c07e407"
+        },
+        "physics_log": {
+          "path": "local/verify/issue53-bundle-20261102/physics.log",
+          "sha256": "9c83dc4df0bb61413251cb159577a114a8985d01408879ed6183dbc079fdfbea"
+        },
+        "source_bindings": {
+          "path": "local/verify/issue53-bundle-20261102/source-bindings.log",
+          "sha256": "01ddb22f9ef18008651f1e438a216311577ffed6b9a31bbd5754779c673e6b43"
+        },
+        "entry": {
+          "path": "local/verify/issue53-production-entry-20261102-v2/result.json",
+          "sha256": "08ed08380f0a0d97ccffb7a12f4f7435461481eb2b10424d8c0e979718ea6301"
+        },
+        "logging": {
+          "path": "local/verify/issue53-player-logging-20261102/result.json",
+          "sha256": "fbf8164dc75b527457b0a8491ed3c9a2e8574387b7beccf5cf2a69bb5e06aff9"
+        },
+        "logging_sources": {
+          "path": "local/verify/issue53-player-logging-20261102/0.log",
+          "sha256": "06bfbe3508d30fc35389061c58afd257bf2c42c50b8ab7eab0f905df6e072397"
+        }
+      },
+      "assertions": [
+        {
+          "evidence": "physics",
+          "pointer": "/execution_passed",
+          "equals": false
+        },
+        {
+          "evidence": "physics",
+          "pointer": "/stages/unchanged-settling-regression/actual_exit",
+          "equals": 8
+        },
+        {
+          "evidence": "entry",
+          "pointer": "/execution_passed",
+          "equals": true
+        },
+        {
+          "evidence": "entry",
+          "pointer": "/parity_verified",
+          "equals": false
+        },
+        {
+          "evidence": "logging",
+          "pointer": "/execution_passed",
+          "equals": true
+        }
+      ]
+    },
+    {
+      "id": "issue53-provenance-certificate-boundary",
+      "deliverable": "2",
+      "sequence": 3,
+      "scope": "Seven explicitly selected local reference files still match recorded inventory. REA observes absent PE certificate table in both selected executables; official Steam feed confirms a Build940 label but supplies no chain linking these local bytes. Build606 and trusted distributor/carrier/depot provenance remain unresolved. No full-tree, semantic or D2 completion claim.",
+      "review": "accepted",
+      "outcome": "incomplete",
+      "evidence": {
+        "queries": {
+          "path": "local/verify/issue53-reconciliation-20261102/provenance-v1/queries.json",
+          "sha256": "8f88c0c9775632f73e72dd61304a3f73af1434c0e080ae614a44e93865fa885d"
+        },
+        "bindings": {
+          "path": "local/verify/issue53-reconciliation-20261102/provenance-v1/local-bindings.json",
+          "sha256": "32de945c626fa69a6a3a2ee0c3b5b92a80f4f2da964654aa90eb566ac2f0ba2a"
+        },
+        "crosscheck": {
+          "path": "local/verify/issue53-reconciliation-20261102/provenance-v1/inventory-crosscheck.json",
+          "sha256": "6c89b3c8a615f42ca5d983eee81fa0e6f2902f81e2b9f41b9f06948b3e909fbb"
+        },
+        "jev": {
+          "path": "local/verify/issue53-reconciliation-20261102/provenance-v1/final-verify.json",
+          "sha256": "18e90b7bb76acaf1ecb4506887d95b517c382fe3893ac3c56b6131de1cd2c657"
+        },
+        "retention": {
+          "path": "local/verify/issue53-reconciliation-20261102/provenance-v1/prepaid-audit.json",
+          "sha256": "e04b453050e0ae66a5287229c67866be24f396731f8029d675db49128f4074ee"
+        }
+      },
+      "assertions": [
+        {
+          "evidence": "crosscheck",
+          "pointer": "/explicit_file_comparisons/0/matches",
+          "equals": true
+        },
+        {
+          "evidence": "crosscheck",
+          "pointer": "/explicit_file_comparisons/1/matches",
+          "equals": true
+        },
+        {
+          "evidence": "crosscheck",
+          "pointer": "/explicit_file_comparisons/2/matches",
+          "equals": true
+        },
+        {
+          "evidence": "crosscheck",
+          "pointer": "/explicit_file_comparisons/3/matches",
+          "equals": true
+        },
+        {
+          "evidence": "crosscheck",
+          "pointer": "/explicit_file_comparisons/4/matches",
+          "equals": true
+        },
+        {
+          "evidence": "crosscheck",
+          "pointer": "/explicit_file_comparisons/5/matches",
+          "equals": true
+        },
+        {
+          "evidence": "crosscheck",
+          "pointer": "/explicit_file_comparisons/6/matches",
+          "equals": true
+        }
+      ]
+    },
+    {
+      "id": "issue53-shared-entry-career-functional",
+      "deliverable": "3",
+      "sequence": 1,
+      "scope": "Normal-intro ordinary Career creation and subsequent load execute through the extracted shared game loop with private nonempty PCM, no observed owned activation and unchanged source game/save. Each inspect_run raw-artifact audit passed. Builds differ and no separate snapshot fixture was used: strict same-build roundtrip audit is not satisfied. Empty Garage profile only; no owned Cars/Parts, paired parity, final app presentation or release acceptance.",
+      "review": "pending",
+      "outcome": "incomplete",
+      "evidence": {
+        "create": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-refusal-exact-env/issue53-career-shared-entry/result.json",
+          "sha256": "0f94705bf138f07dce49eed221813086cf742bc4969d8b9d964591a87876d1c3"
+        },
+        "create-metadata": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-refusal-exact-env/issue53-career-shared-entry/metadata.json",
+          "sha256": "5d547e66921ed9c95b1951bfd1d236334d1d98ef09d61d618c027aceb943065a"
+        },
+        "create-log": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-refusal-exact-env/issue53-career-shared-entry/run/20261102T201703Z-85150/run.log",
+          "sha256": "6c280b4aa364176a013a3332fb64a1793dca71bfab9960e066e432863a015d18"
+        },
+        "create-source": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-refusal-exact-env/issue53-career-shared-entry/run/20261102T201703Z-85150/source-manifest.txt",
+          "sha256": "5079ea708e8458510914f39506bd3fedc6f26267ee33c0698f8429ec8fd2809b"
+        },
+        "load": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-refusal-exact-env/issue53-career-reload/result.json",
+          "sha256": "c0895e8310732e3d0875c8ba7fa7c0133d913339c827bff54f93e98189d2cd59"
+        },
+        "load-metadata": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-refusal-exact-env/issue53-career-reload/metadata.json",
+          "sha256": "3e91375e7afb1fb73e9c3d15b1eb486b7d11df9c848c9cea564cffb372a8aba6"
+        },
+        "load-log": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-refusal-exact-env/issue53-career-reload/run/20261102T202648Z-98709/run.log",
+          "sha256": "c0f547c05b16bebbaf49bc4f27d65be6f13d16d4ca6d4e94ca10e201eb1a7a3f"
+        },
+        "load-source": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-refusal-exact-env/issue53-career-reload/run/20261102T202648Z-98709/source-manifest.txt",
+          "sha256": "e2ac53cdf0a42d9cf78f0282f2bec8dbd7b8b6c486c95be53d1105e57f22fd4c"
+        }
+      },
+      "assertions": [
+        {
+          "evidence": "create",
+          "pointer": "/exit_code",
+          "equals": 0
+        },
+        {
+          "evidence": "create",
+          "pointer": "/timed_out",
+          "equals": false
+        },
+        {
+          "evidence": "create",
+          "pointer": "/source_game_unchanged",
+          "equals": true
+        },
+        {
+          "evidence": "create",
+          "pointer": "/source_save_unchanged",
+          "equals": true
+        },
+        {
+          "evidence": "create",
+          "pointer": "/artifact_finalization",
+          "equals": "verified"
+        },
+        {
+          "evidence": "load",
+          "pointer": "/exit_code",
+          "equals": 0
+        },
+        {
+          "evidence": "load",
+          "pointer": "/timed_out",
+          "equals": false
+        },
+        {
+          "evidence": "load",
+          "pointer": "/source_game_unchanged",
+          "equals": true
+        },
+        {
+          "evidence": "load",
+          "pointer": "/source_save_unchanged",
+          "equals": true
+        },
+        {
+          "evidence": "load",
+          "pointer": "/artifact_finalization",
+          "equals": "verified"
+        }
+      ]
+    },
+    {
+      "id": "issue53-developer-bundle-with-selected-content",
+      "deliverable": "8",
+      "sequence": 5,
+      "scope": "Developer candidate stages7859 selected older installed files and19non-system ARM64 dependencies. Six real Mach-O relocation fixtures and ten staging tests pass; source bytes preserved and ad-hoc sealed. This is not reconciled official content, no launch or clean installation was observed, and release_accepted remains false. Full integration gate remains red at physics.",
+      "review": "pending",
+      "outcome": "incomplete",
+      "evidence": {
+        "result": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-refusal-exact-env/issue53-staged-app-v1/result.json",
+          "sha256": "2b71ed37b551e438d0f765526c8e80b7e352237210e2977875e6132959f4cc8f"
+        },
+        "staging": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-refusal-exact-env/issue53-staged-app-v1/stage-selected-content.log",
+          "sha256": "abd99b82c40483bd11570cc2c564eeb43020f441ff068d9d6194dd65e66065b8"
+        },
+        "source": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-refusal-exact-env/issue53-staged-app-v1/source-bindings.log",
+          "sha256": "15ca40a769ee3de1f8f953f0a753ef94c10dcdb6e04a8e96422de43ebea4d908"
+        }
+      },
+      "assertions": [
+        {
+          "evidence": "result",
+          "pointer": "/execution_passed",
+          "equals": true
+        },
+        {
+          "evidence": "result",
+          "pointer": "/parity_verified",
+          "equals": false
+        },
+        {
+          "evidence": "staging",
+          "pointer": "/release_accepted",
+          "equals": false
+        },
+        {
+          "evidence": "staging",
+          "pointer": "/source_bytes_preserved",
+          "equals": true
+        }
+      ]
+    },
+    {
+      "id": "issue53-original-constructor-airborne-boundary",
+      "deliverable": "8",
+      "sequence": 6,
+      "scope": "Original constructor/finalizer and unmodified empty resource-queue stepping0..39 removes copied Port step40 premise. Independent raw array audit matches17172statewords in162records and original repeats;81child prototype Created-bit differences remain scoped to directconstructor vs Port loader. This is mapped helper execution with disclosed allocator/profiler/gamecallback interventions, no ground/discovery/settling qualification; production assertion unchanged.",
+      "outcome": "incomplete",
+      "review": "pending",
+      "evidence": {
+        "comparison": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-refusal-exact-env/issue53-initialization-comparison-v2/comparison.json",
+          "sha256": "48fa34d00f4f1ba277ec14646e9ab82674ea50d8028808ae2de0a424a2dc0538"
+        },
+        "capture": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-refusal-exact-env/issue53-original-initialization-v1/capture-73c8c2c09a/result.json",
+          "sha256": "add30ba8ba62629c8e1ec552ae4c8971d266c9843b701db6c6f3dec145714686"
+        },
+        "first": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-refusal-exact-env/issue53-original-initialization-v1/capture-73c8c2c09a/work/first-0.jsonl",
+          "sha256": "a7b2c989110f7602aad9a69562ba0fa399ca9cac121da3715ded80079d23cbc5"
+        },
+        "repeat": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-refusal-exact-env/issue53-original-initialization-v1/capture-73c8c2c09a/work/repeat-0.jsonl",
+          "sha256": "a7b2c989110f7602aad9a69562ba0fa399ca9cac121da3715ded80079d23cbc5"
+        },
+        "native": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-refusal-exact-env/issue53-initialization-comparison-v2/run.log",
+          "sha256": "f48c1ecb48ed29f93a84bf90f73a01aa784aec974dd45f09c87c68f0a97dc642"
+        }
+      },
+      "assertions": [
+        {
+          "evidence": "comparison",
+          "pointer": "/original_repeat_equal",
+          "equals": true
+        },
+        {
+          "evidence": "comparison",
+          "pointer": "/records",
+          "equals": 162
+        },
+        {
+          "evidence": "comparison",
+          "pointer": "/differing_records",
+          "equals": 81
+        },
+        {
+          "evidence": "capture",
+          "pointer": "/execution_finished",
+          "equals": true
+        }
+      ]
+    },
+    {
+      "id": "issue53-stock-ephemeral-first-disc-refusal",
+      "deliverable": "4",
+      "sequence": 1,
+      "scope": "First supported experimental prepaid/tmpfs Stock attempt reaches disc-insertion dialog before Main Menu. Owned cleanup requested via controller.done. No successful Career, normalintro or game parity. Retained console seed lacks MCI registry setup; redundant final Wine kill also returns1 and archive remains incomplete. Prior evidence/source/seed preserved; containerremoved. No budget increase or evidence deletion. Subsequent correction must requalify fullgame.",
+      "outcome": "incomplete",
+      "review": "pending",
+      "evidence": {
+        "result": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-third/issue53-stock-ephemeral-career-v1/result.json",
+          "sha256": "4b89c53b7934b27b262c82248e3ce9d73441b764e2fcdac0b5191e0956dab66c"
+        },
+        "config": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-third/issue53-stock-ephemeral-career-v1/config.json",
+          "sha256": "d7cb344b48ebca394309818a1572da31fb5096ba92991474f5dbf71f88fd4b9a"
+        },
+        "screen": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-third/issue53-stock-ephemeral-career-v1/state-009-await-menu.png",
+          "sha256": "683c57fef2b19446e0e4e0b1e4e63f52f2dbfab3b4a8353abf5c8e6cd98cc6f5"
+        },
+        "observation": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-third/issue53-stock-ephemeral-career-v1/operator-observation.json",
+          "sha256": "d0cc30cc60c4b3b23a6593f51cfd539e9fe426e4cf25b8ca462996801e14fc18"
+        },
+        "prefix-stop": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-third/issue53-stock-ephemeral-career-v1/prefix-quiescence.txt",
+          "sha256": "f4a8ae8e74ddfb896a256de4e3099911dcaa6a9302591713898069b0bcd6e3d7"
+        }
+      },
+      "assertions": [
+        {
+          "evidence": "result",
+          "pointer": "/passed",
+          "equals": false
+        },
+        {
+          "evidence": "result",
+          "pointer": "/outer_container_removed",
+          "equals": true
+        },
+        {
+          "evidence": "result",
+          "pointer": "/artifact_finalization",
+          "equals": "verified"
+        }
+      ]
+    },
+    {
+      "id": "issue53-stock-console-seed-updated-intro-timeout",
+      "deliverable": "4",
+      "sequence": 2,
+      "scope": "Console ABI seed with private wineboot update clears disc prompt but stalls during normal intro before menu. Timeout, incomplete delta, final old-evidence hash deadline failure; failed evidence retained. No full pipeline or parity acceptance.",
+      "outcome": "incomplete",
+      "review": "pending",
+      "evidence": {
+        "result": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-third/issue53-stock-ephemeral-career-v2/result.json",
+          "sha256": "d174c544fd732ccf37b921600f56e188b11e82531da63b523c4a71340c37f239"
+        },
+        "config": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-third/issue53-stock-ephemeral-career-v2/config.json",
+          "sha256": "10ef2366a0a55f830df7017cc00fe7a3488babdd39aeee92d3f5e3f6495d0124"
+        },
+        "probe": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-third/issue53-stock-ephemeral-career-v2/probe32.log",
+          "sha256": "8a40c20c2b6d17a70b9fe6115916558207f50b4bca4e66451e9f68653f3c2f57"
+        },
+        "prefix-stop": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-third/issue53-stock-ephemeral-career-v2/prefix-quiescence.txt",
+          "sha256": "f4a8ae8e74ddfb896a256de4e3099911dcaa6a9302591713898069b0bcd6e3d7"
+        }
+      },
+      "assertions": [
+        {
+          "evidence": "result",
+          "pointer": "/passed",
+          "equals": false
+        },
+        {
+          "evidence": "result",
+          "pointer": "/artifact_finalization",
+          "equals": "failed"
+        }
+      ]
+    },
+    {
+      "id": "issue53-stock-functional-seed-intro-timeout",
+      "deliverable": "4",
+      "sequence": 3,
+      "scope": "Previously successful normal Career seed with image-default BOX64 still stalls before menu on experimental tmpfs route. Normal-prefix baseline probe has no executable mapping error; this attempt probe reports xtajit64 executable protection failure. Source/seed preserved and container removed, final retention audit verified; no complete delta or game parity.",
+      "outcome": "incomplete",
+      "review": "pending",
+      "evidence": {
+        "result": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-fourth/issue53-stock-functional-prefix-v1/result.json",
+          "sha256": "4a342f345f4245353a292c9402a34916b76cf680cd117f2bdd4d72495d2a280e"
+        },
+        "config": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-fourth/issue53-stock-functional-prefix-v1/config.json",
+          "sha256": "326145be9216f3ac576000e7a8733e28e7d61d7357e1448654e16fdc848928b0"
+        },
+        "probe": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-fourth/issue53-stock-functional-prefix-v1/probe32.log",
+          "sha256": "4f2bb39966fb374bae555487e385c4ec5131d94f1d1786e3e828f2160e9d8bd0"
+        },
+        "prefix-stop": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-fourth/issue53-stock-functional-prefix-v1/prefix-quiescence.txt",
+          "sha256": "f4a8ae8e74ddfb896a256de4e3099911dcaa6a9302591713898069b0bcd6e3d7"
+        }
+      },
+      "assertions": [
+        {
+          "evidence": "result",
+          "pointer": "/passed",
+          "equals": false
+        },
+        {
+          "evidence": "result",
+          "pointer": "/artifact_finalization",
+          "equals": "verified"
+        }
+      ]
+    },
+    {
+      "id": "issue53-stock-prefix-mount-execution-control",
+      "deliverable": "4",
+      "sequence": 4,
+      "scope": "Actual isolated same-image console control: original Docker tmpfs mount rejects copied native executable with exit126; explicit exec mount succeeds exit0. This establishes mount execution defect only, not cause of whole-game intro stall or successful adapter qualification. Both containers removed under unchanged resource limits.",
+      "outcome": "incomplete",
+      "review": "pending",
+      "evidence": {
+        "result": {
+          "path": "local/verify/issue53-prefix-exec-20261102/results.json",
+          "sha256": "a8009993d7b885c0946520b2feddb56309f4a27fd3cc4d5d95e0864b2c1b6dd3"
+        },
+        "probe": {
+          "path": "local/verify/issue53-prefix-exec-20261102/probe.py",
+          "sha256": "33cb1f3ed781d2953d6e505ee19c4e9a3edbf90e5de99605f1602dc16a3a6f35"
+        }
+      },
+      "assertions": [
+        {
+          "evidence": "result",
+          "pointer": "/0/exit",
+          "equals": 126
+        },
+        {
+          "evidence": "result",
+          "pointer": "/1/exit",
+          "equals": 0
+        },
+        {
+          "evidence": "result",
+          "pointer": "/0/cleanup/exit",
+          "equals": 0
+        },
+        {
+          "evidence": "result",
+          "pointer": "/1/cleanup/exit",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "id": "issue53-stock-executable-tmpfs-oom",
+      "deliverable": "4",
+      "sequence": 5,
+      "scope": "Explicit executable mount removes xtajit64 mapping error but full RAM-backed prefix plus game exceeds3GiB cgroup limit. Actual memory.events records oom3/oom_kill1/peak3GiB; exact killedPID not established. MainMenu not reached, failedcapture retained, containerremoved and finalretentionverified. User subsequently authorizes20+GB memory.",
+      "outcome": "incomplete",
+      "review": "pending",
+      "evidence": {
+        "result": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-fifth/issue53-stock-functional-exec-v1/result.json",
+          "sha256": "9684ab15d86012627a0bcab1ab351ba3b86f59f51138d8c6c20ce959e471a5f2"
+        },
+        "probe": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-fifth/issue53-stock-functional-exec-v1/probe32.log",
+          "sha256": "90b69998ce2043f638fc460f42f4892cf62b60484d4803a52a47a86210672eaa"
+        },
+        "memory": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-fifth/issue53-stock-functional-exec-v1/memory-events-observation.txt",
+          "sha256": "a475eddafb3265bc19b379ab591d3ffb8da5a93b8fb00e309034e95f4bcfe40c"
+        },
+        "observation": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-fifth/issue53-stock-functional-exec-v1/operator-observation.json",
+          "sha256": "09bc75ea10946633d5c953170a3405a88903c9a9ee4f861e1097405d05281b00"
+        }
+      },
+      "assertions": [
+        {
+          "evidence": "result",
+          "pointer": "/passed",
+          "equals": false
+        }
+      ]
+    },
+    {
+      "id": "issue53-stock-memory-migration-historical-audit-refusal",
+      "deliverable": "4",
+      "sequence": 6,
+      "scope": "First20GiB attempt refuses before game launch because historical3GiB seed reinspection mistakenly used new20GiB expectation. No game success claim. Explicit historical/current expected memory split implemented with controls; failedattempt retained.",
+      "outcome": "incomplete",
+      "review": "pending",
+      "evidence": {
+        "result": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-raw-first/issue53-stock-functional-20g-v1/result.json",
+          "sha256": "8b03fc37c940555c12e43d1d8ef0ec1a30a1e196e5ac5cd0b05cc0db5c98966b"
+        },
+        "config": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-raw-first/issue53-stock-functional-20g-v1/config.json",
+          "sha256": "9089c9d142fd5ed19b16b76695054ffe600468ab128fa2bd09005c04e963fe7d"
+        }
+      },
+      "assertions": [
+        {
+          "evidence": "result",
+          "pointer": "/passed",
+          "equals": false
+        }
+      ]
+    },
+    {
+      "id": "issue53-stock-20g-career-observed-bytecache-refusal",
+      "deliverable": "4",
+      "sequence": 7,
+      "scope": "Normalintro, menu, Careercreate, Garage/menu return and ordinarygame exit0 observed at20GiB. Cgroup peak7091003392bytes,noOOM. Fullprefixdelta completed2changes/3295710bytes with0/0Winequiescence. Overallcapture correctlyfails frozeninstrumentationmembership: hostimports added3pyc files, originalsourcebytes unchanged. This is boundedfunctional observation, not acceptedwholepipeline/pairedParity. Nextproducer disablesbytecachewrites.",
+      "outcome": "incomplete",
+      "review": "pending",
+      "evidence": {
+        "result": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-raw-first/issue53-stock-functional-20g-v2/result.json",
+          "sha256": "fd04d32368f278dec641df0af524e9ca79242874e75f73ddf7498db26f58a4a3"
+        },
+        "flow": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-raw-first/issue53-stock-functional-20g-v2/flow.json",
+          "sha256": "eea9e973313ac535b72b662ec7698adacc3fee6a94bb8910c6abfac244b59bc8"
+        },
+        "memory": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-raw-first/issue53-stock-functional-20g-v2/memory-observation.json",
+          "sha256": "0f9545ab7779e312b00716de20814426947cd2be980417a5e0cc05e0dda612bc"
+        },
+        "exit": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-raw-first/issue53-stock-functional-20g-v2/game-process-exit.json",
+          "sha256": "fc59b4fd39979a1135c10ba3895bdc59a2baa2bebfd59c11573e7099c234edee"
+        },
+        "prefix": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-raw-first/issue53-stock-functional-20g-v2/prefix-finished.tsv",
+          "sha256": "c425430d0e7dd7ac57b7ea198ee5e0cbc46a14b14fd9bc5c9a18d30451ad78c3"
+        }
+      },
+      "assertions": [
+        {
+          "evidence": "result",
+          "pointer": "/passed",
+          "equals": false
+        },
+        {
+          "evidence": "result",
+          "pointer": "/container_exit",
+          "equals": 0
+        },
+        {
+          "evidence": "flow",
+          "pointer": "/passed",
+          "equals": true
+        },
+        {
+          "evidence": "exit",
+          "pointer": "/exit_code",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "id": "issue53-user-authorized-memory-migration",
+      "deliverable": "6",
+      "sequence": 1,
+      "scope": "User explicitly authorizes20+GB. DockerVM configured24GiB and observed25157324800bytes; Stockhardmemory20GiB. Poolhost32GiB/VM20GiB migrated underadmissionmutex withallresource/waiterlocks idle. Existingtmpfs3GiB size,64GiBretentionallowance and10GiBdiskreserve unchanged; notqualifiedthroughput/wholegamecapacity.",
+      "outcome": "incomplete",
+      "review": "pending",
+      "evidence": {
+        "migration": {
+          "path": "local/verify/issue53-prefix-exec-20261102/pool-memory-migration.json",
+          "sha256": "5376215f6a1a1a159fa8929b3108dc88f3a3cbc0afea18c14192bca0be108ac5"
+        },
+        "observed": {
+          "path": "local/verify/issue53-prefix-exec-20261102/docker-memory-observed.json",
+          "sha256": "7498ae50d80606c8bd8b6f662a83b1d273e5074e02f3ac32b61da91142f4218a"
+        },
+        "before": {
+          "path": "local/verify/issue53-prefix-exec-20261102/pool-capacity-before.json",
+          "sha256": "154477b1c574405a8827b64cacd2ad153a86c03a022102f92e50d394b156f8ec"
+        }
+      },
+      "assertions": [
+        {
+          "evidence": "migration",
+          "pointer": "/all_existing_resource_and_waiter_locks_idle",
+          "equals": true
+        },
+        {
+          "evidence": "observed",
+          "pointer": "/stock_container_gib",
+          "equals": 20
+        },
+        {
+          "evidence": "observed",
+          "pointer": "/actual_bytes",
+          "equals": 25157324800
+        }
+      ]
+    },
+    {
+      "id": "issue53-current-career-static-camera-target-failure",
+      "deliverable": "3",
+      "sequence": 2,
+      "scope": "CombinedcurrentproductionCareercreate exits1 atframe390 withmulti-root unsupported camera callback afterGarage/Mechanic initialization. Staticground move/look target identified; no same-build reload possible. Source/savepreserved, privatePCM/noobservedownedactivation andfailedartifacts retained. Cameraagent nowfixingactual static-target validation withoutbypassinggenericPartworldstep.",
+      "outcome": "incomplete",
+      "review": "pending",
+      "evidence": {
+        "result": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-refusal-exact-env/issue53-career-current-create-v1/result.json",
+          "sha256": "46fed67f85e5092a7314cc778b643b97bdb3a468926bedca823c177c3ef51b84"
+        },
+        "stderr": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-refusal-exact-env/issue53-career-current-create-v1/stderr.log",
+          "sha256": "9a08c54997ccae50acf19574d643ec1e2181180aaaabf9416b7c1356d7c27cf5"
+        },
+        "metadata": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-refusal-exact-env/issue53-career-current-create-v1/metadata.json",
+          "sha256": "48310c33cb12d1c7f5ba903dbd73e37842484a57863b9a3608b3116bf66420b2"
+        },
+        "log": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-refusal-exact-env/issue53-career-current-create-v1/run/20261102T212208Z-69670/run.log",
+          "sha256": "a54842851fa120f1c7f61357eeb26d7a593c775dffc42dcc399b3b0837fa30f9"
+        }
+      },
+      "assertions": [
+        {
+          "evidence": "result",
+          "pointer": "/exit_code",
+          "equals": 1
+        },
+        {
+          "evidence": "result",
+          "pointer": "/probe_unchanged",
+          "equals": true
+        }
+      ]
+    },
+    {
+      "id": "issue53-stock-portrait-frontier-observation-failure",
+      "deliverable": "4",
+      "sequence": 8,
+      "scope": "Normal intro/menu/character selection reached. Controller rejected one post-portrait frame whose Choose character title is blank although actual portrait/dialog/name/OK remain visible. No repeated-input retry; ordinaryexit notrequested, container66; fullstoppedprefixdelta valid via readonlyhostaudit. Completecapture remainsfailed. Nextcontroller waits for same required titlefrontier withinexistingdeadline without repeatingclick, testing whetherlabelreappears.",
+      "outcome": "incomplete",
+      "review": "pending",
+      "evidence": {
+        "result": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-raw-fix-fourth/issue53-stock-functional-20g-v3/result.json",
+          "sha256": "0bd406c9096cfd32e7d974a8252babd68f3e70f3db262964f9bafb38b4615ac7"
+        },
+        "flow": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-raw-fix-fourth/issue53-stock-functional-20g-v3/flow.json",
+          "sha256": "7dec5977a7d8a1a92ee7607578a7c092addb14e5e3327e27455483c503944ece"
+        },
+        "before": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-raw-fix-fourth/issue53-stock-functional-20g-v3/state-040-career-character.png",
+          "sha256": "12a740489ddb51387f507dd86239402c2be079d1d94ed50ec861fca984157919"
+        },
+        "after": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-raw-fix-fourth/issue53-stock-functional-20g-v3/state-041-career-portrait-selected.png",
+          "sha256": "0c6588b7e5220dc2ed57a91c2abbd96643a036bbc806ec74957e3154ad8b2271"
+        },
+        "stop": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-raw-fix-fourth/issue53-stock-functional-20g-v3/prefix-quiescence.txt",
+          "sha256": "0ccdb5a77ba5bf7687f2565a8ed97dfb9c1af45503c496fb646312239fab5101"
+        },
+        "delta": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-raw-fix-fourth/issue53-stock-functional-20g-v3/prefix-finished.tsv",
+          "sha256": "c425430d0e7dd7ac57b7ea198ee5e0cbc46a14b14fd9bc5c9a18d30451ad78c3"
+        }
+      },
+      "assertions": [
+        {
+          "evidence": "result",
+          "pointer": "/passed",
+          "equals": false
+        },
+        {
+          "evidence": "result",
+          "pointer": "/container_exit",
+          "equals": 66
+        }
+      ]
+    },
+    {
+      "id": "issue53-current-career-mouse-reset-failure",
+      "deliverable": "3",
+      "sequence": 3,
+      "scope": "Actual currentCareer passes earlierstaticgroundcamera callback boundary but exits1 duringGarage tree47pc442line224 at Input.getAxis negative sensitivitycommand. Backend contract absent despitepositiveaxis regressions. Source/savepreserved/privatePCM/noobservedownedactivation, no timeout; no save/load qualification. Inputagentcompleting actualsensitivity/reset semantics.",
+      "outcome": "incomplete",
+      "review": "pending",
+      "evidence": {
+        "result": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-refusal-exact-env/issue53-career-current-create-v2/result.json",
+          "sha256": "28cfe590212d952c55c127f90960717e1fd5c4cef49fac3067550b09758a19a9"
+        },
+        "metadata": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-refusal-exact-env/issue53-career-current-create-v2/metadata.json",
+          "sha256": "beb48ba2f08c02c4a5bb560bbc3625c0fe0917fd90f3a80c674d54a590d06756"
+        },
+        "stderr": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-refusal-exact-env/issue53-career-current-create-v2/stderr.log",
+          "sha256": "e5806564ffc533d5b5c5155adb64048cb66f612eae9fbe4ebe532b05da3932a4"
+        },
+        "log": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-refusal-exact-env/issue53-career-current-create-v2/run/20261102T212937Z-79893/run.log",
+          "sha256": "280d590ac7a040388a1cbd6145eaa96f600b935b54e398b10e68e95349ec582d"
+        }
+      },
+      "assertions": [
+        {
+          "evidence": "result",
+          "pointer": "/exit_code",
+          "equals": 1
+        },
+        {
+          "evidence": "result",
+          "pointer": "/timed_out",
+          "equals": false
+        },
+        {
+          "evidence": "result",
+          "pointer": "/probe_unchanged",
+          "equals": true
+        }
+      ]
+    },
+    {
+      "id": "issue53-stock-normal-create-20g-qualified",
+      "deliverable": "4",
+      "sequence": 9,
+      "scope": "Actual older Stock normal-intro/menu/Career create/Garage/menu return/ordinary-exit capture passes at user-authorized20GiB. Private nonempty PCM, no observed owned activation, game/source/seed preservation, full stopped prefix delta and retention finalization. Functional scenario only: no consumed-state replay, independent repeats, newer-reference execution or paired Parity. Whole D4 remains unverified.",
+      "outcome": "incomplete",
+      "review": "pending",
+      "evidence": {
+        "result": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-raw-fix-fifth/issue53-stock-functional-20g-v4/result.json",
+          "sha256": "c898315c51b4fa44695559065ebd53ee913ec1980f7900521ce45e3e15f01c70"
+        },
+        "config": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-raw-fix-fifth/issue53-stock-functional-20g-v4/config.json",
+          "sha256": "7c52339a19f8aaa9feeb4b72e714824d4598179d51ad7a4cb048d4f00be791b2"
+        },
+        "flow": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-raw-fix-fifth/issue53-stock-functional-20g-v4/flow.json",
+          "sha256": "3ab2ab233b11c487f37f82e72ff83cea856eb9c5a7a971386c8fe71cbfbce81f"
+        },
+        "prefix-stop": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-raw-fix-fifth/issue53-stock-functional-20g-v4/prefix-quiescence.txt",
+          "sha256": "0ccdb5a77ba5bf7687f2565a8ed97dfb9c1af45503c496fb646312239fab5101"
+        },
+        "prefix-finished": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-raw-fix-fifth/issue53-stock-functional-20g-v4/prefix-finished.json",
+          "sha256": "015095715c20519336d4e29ce7435f5ce94063ad4e42b6c71d22fb5d0b613d58"
+        }
+      },
+      "assertions": [
+        {
+          "evidence": "result",
+          "pointer": "/passed",
+          "equals": true
+        },
+        {
+          "evidence": "result",
+          "pointer": "/container_exit",
+          "equals": 0
+        },
+        {
+          "evidence": "result",
+          "pointer": "/artifact_finalization",
+          "equals": "verified"
+        },
+        {
+          "evidence": "result",
+          "pointer": "/prefix_archive/finished/complete",
+          "equals": true
+        },
+        {
+          "evidence": "result",
+          "pointer": "/prefix_seed/preserved",
+          "equals": true
+        },
+        {
+          "evidence": "flow",
+          "pointer": "/passed",
+          "equals": true
+        }
+      ]
+    },
+    {
+      "id": "issue53-stock-normal-load-20g-qualified",
+      "deliverable": "4",
+      "sequence": 10,
+      "scope": "Actual older Stock normal-intro/menu/Career load/Garage/menu return/ordinary-exit capture passes at user-authorized20GiB. Private nonempty PCM, no observed owned activation, game/source/seed preservation, full stopped prefix delta and retention finalization. Functional scenario only: no consumed-state replay, independent repeats, newer-reference execution or paired Parity. Whole D4 remains unverified.",
+      "outcome": "incomplete",
+      "review": "pending",
+      "evidence": {
+        "result": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-raw-fix-sixth/issue53-stock-load-20g-v1/result.json",
+          "sha256": "2bee2d878e38fe2d4d211c3d6714397aa902a791925027a3f8822935443b6c93"
+        },
+        "config": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-raw-fix-sixth/issue53-stock-load-20g-v1/config.json",
+          "sha256": "313890268eead9e0b482700cb70bce28755dd1e7d3c5384ec6cfa1e0454f56a5"
+        },
+        "flow": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-raw-fix-sixth/issue53-stock-load-20g-v1/flow.json",
+          "sha256": "30f2ce2a0f2ab364381344eba50a1fe01f7bd20d44e36185aa7a7d9f2f9f93bd"
+        },
+        "prefix-stop": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-raw-fix-sixth/issue53-stock-load-20g-v1/prefix-quiescence.txt",
+          "sha256": "0ccdb5a77ba5bf7687f2565a8ed97dfb9c1af45503c496fb646312239fab5101"
+        },
+        "prefix-finished": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-raw-fix-sixth/issue53-stock-load-20g-v1/prefix-finished.json",
+          "sha256": "015095715c20519336d4e29ce7435f5ce94063ad4e42b6c71d22fb5d0b613d58"
+        }
+      },
+      "assertions": [
+        {
+          "evidence": "result",
+          "pointer": "/passed",
+          "equals": true
+        },
+        {
+          "evidence": "result",
+          "pointer": "/container_exit",
+          "equals": 0
+        },
+        {
+          "evidence": "result",
+          "pointer": "/artifact_finalization",
+          "equals": "verified"
+        },
+        {
+          "evidence": "result",
+          "pointer": "/prefix_archive/finished/complete",
+          "equals": true
+        },
+        {
+          "evidence": "result",
+          "pointer": "/prefix_seed/preserved",
+          "equals": true
+        },
+        {
+          "evidence": "flow",
+          "pointer": "/passed",
+          "equals": true
+        }
+      ]
+    },
+    {
+      "id": "issue53-stock-20g-profile-roundtrip-independent-audit",
+      "deliverable": "4",
+      "sequence": 11,
+      "scope": "Independent retained-artifact audit binds actual create-v4/load20g-v1, snapshot lineage, private PCM/focus/source preservation and stopped prefix archives. Profile/pack meanings persist; serialized time43280->43320 changes byte10543, all other Career bytes and other save files exact. No tolerance, deterministic repeatability, Port equivalence or paired proof; full D4 acceptance/review remains open.",
+      "outcome": "incomplete",
+      "review": "pending",
+      "evidence": {
+        "audit": {
+          "path": "local/verify/issue53-prefix-exec-20261102/stock-roundtrip-20g.json",
+          "sha256": "21a44e4297e5b19a5c02bc564d1777dbe421c6f622d2e7748ac0b6caac0c63f6"
+        },
+        "create-audit": {
+          "path": "local/verify/issue53-prefix-exec-20261102/stock-create-v4-independent-audit.json",
+          "sha256": "bc7ed531253ce01eb145a62fb6e818614494d70e3d1f72e22c40205fa6c492bc"
+        },
+        "fixture": {
+          "path": "local/verify/issue53-prefix-exec-20261102/stock-v4-fixture/manifest.json",
+          "sha256": "292da6db68c0a1c3f24e9b16c6f897d138252d89a1def17a30b23a73417710bf"
+        }
+      },
+      "assertions": [
+        {
+          "evidence": "audit",
+          "pointer": "/status",
+          "equals": "ordinary_stock_career_profile_persistence_observed"
+        },
+        {
+          "evidence": "audit",
+          "pointer": "/comparison/exact_resave",
+          "equals": false
+        },
+        {
+          "evidence": "audit",
+          "pointer": "/comparison/first_divergence",
+          "equals": 10543
+        },
+        {
+          "evidence": "audit",
+          "pointer": "/comparison/all_other_file_bytes_exact",
+          "equals": true
+        },
+        {
+          "evidence": "audit",
+          "pointer": "/created/scenario/complete",
+          "equals": true
+        },
+        {
+          "evidence": "audit",
+          "pointer": "/loaded/scenario/complete",
+          "equals": true
+        }
+      ]
+    },
+    {
+      "id": "issue53-native-current-create-v3-functional",
+      "deliverable": "3",
+      "sequence": 4,
+      "scope": "Actual native normal-intro empty-start Career create reaches Garage and ordinary exit0 after camera/input integration fixes; private nonzero PCM/no observed owned activation/source preserved. Probe71de75c2...; later compatible load uses a different build. Empty Garage/profile only, no same-build roundtrip, owned Cars/Parts or paired acceptance.",
+      "outcome": "incomplete",
+      "review": "pending",
+      "evidence": {
+        "result": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-refusal-exact-env/issue53-career-current-create-v3/result.json",
+          "sha256": "70ccb860bee76bad136ebc80588e685eca8bc3a1e3157147a3ef817438face82"
+        },
+        "metadata": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-refusal-exact-env/issue53-career-current-create-v3/metadata.json",
+          "sha256": "a9a8f27b8e8009de335fb0379ec09696265cc57774ea342b0d001159fc47e9fb"
+        },
+        "stderr": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-refusal-exact-env/issue53-career-current-create-v3/stderr.log",
+          "sha256": "ead7df44645bf541684fc732090d19d36b8f70e2880f4810ff81402a8b4b1406"
+        },
+        "focus": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-refusal-exact-env/issue53-career-current-create-v3/focus-summary.json",
+          "sha256": "65758ac693819a5da2ebf8d057f93ca14a77952d407e6208b774fbaeb807c13f"
+        },
+        "audio": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-refusal-exact-env/issue53-career-current-create-v3/audio-summary.json",
+          "sha256": "dca5dd633411488e0ce0049000d8ea1fa87665b3f2e14a82b8bed53646691837"
+        },
+        "initial-save": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-refusal-exact-env/issue53-career-current-create-v3/initial-save/manifest.json",
+          "sha256": "041524a8ce3383cb2c8b095f83fb93acd76272a7c7030284c4090da93b12a53b"
+        }
+      },
+      "assertions": [
+        {
+          "evidence": "result",
+          "pointer": "/exit_code",
+          "equals": 0
+        },
+        {
+          "evidence": "result",
+          "pointer": "/timed_out",
+          "equals": false
+        },
+        {
+          "evidence": "result",
+          "pointer": "/probe_unchanged",
+          "equals": true
+        },
+        {
+          "evidence": "result",
+          "pointer": "/artifact_finalization",
+          "equals": "verified"
+        }
+      ]
+    },
+    {
+      "id": "issue53-native-current-load-v1-cursor-failure",
+      "deliverable": "3",
+      "sequence": 5,
+      "scope": "Same probe as create-v3 exits1 on animation callbacks: cursor box parent unavailable during Load Career. No timeout, sources preserved, failure retained. This is the failed strict same-build reload, not repaired by separate later builds.",
+      "outcome": "incomplete",
+      "review": "pending",
+      "evidence": {
+        "result": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-refusal-exact-env/issue53-career-current-load-v1/result.json",
+          "sha256": "8585bd18dce134918cb8bdb57b5b44b81f378fd78588073521160906b4549e21"
+        },
+        "metadata": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-refusal-exact-env/issue53-career-current-load-v1/metadata.json",
+          "sha256": "f2e59765eae3b0c9d68d367c201d489e224f0d25661dd1499564a864ae5ac912"
+        },
+        "stderr": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-refusal-exact-env/issue53-career-current-load-v1/stderr.log",
+          "sha256": "9dd327ad2fa8c4f2f92bfb535dba2b613265d014de5f358ff2e46d6b82c5437c"
+        },
+        "focus": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-refusal-exact-env/issue53-career-current-load-v1/focus-summary.json",
+          "sha256": "768b146f60ff6c0e33b1ff13f3ccb1a6bbd9199db6eef888bd8a5d6274096def"
+        },
+        "audio": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-refusal-exact-env/issue53-career-current-load-v1/audio-summary.json",
+          "sha256": "5631a2fb16c84dd1cce5ff12466eb3c1e2013522de6c9b013c108aa054170723"
+        }
+      },
+      "assertions": [
+        {
+          "evidence": "result",
+          "pointer": "/exit_code",
+          "equals": 1
+        },
+        {
+          "evidence": "result",
+          "pointer": "/timed_out",
+          "equals": false
+        },
+        {
+          "evidence": "result",
+          "pointer": "/probe_unchanged",
+          "equals": true
+        },
+        {
+          "evidence": "result",
+          "pointer": "/artifact_finalization",
+          "equals": "verified"
+        }
+      ]
+    },
+    {
+      "id": "issue53-native-owner-diagnostic-load-failure",
+      "deliverable": "3",
+      "sequence": 6,
+      "scope": "Diagnostic Load Career reproduces cursor-parent failure at frame202. Raw log identifies hit aknafedel/type2/box and mounted parent value0x0002; not an actual missing parent or ownership decision by filename. Different diagnostic probe; focused mounted-parent fix follows. No successful reload or parity in this attempt.",
+      "outcome": "incomplete",
+      "review": "pending",
+      "evidence": {
+        "result": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-entry-first/issue53-career-load-owner-diagnostic-v1/result.json",
+          "sha256": "69ac67247f123b9c78dcac4e1dedd6591ea8969ed67941547e56a7330eca56ae"
+        },
+        "metadata": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-entry-first/issue53-career-load-owner-diagnostic-v1/metadata.json",
+          "sha256": "b9c0d282167b54cf82e254d99439d695dda2f5b3397ffa85b7e8d04cf7bbd7e0"
+        },
+        "stderr": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-entry-first/issue53-career-load-owner-diagnostic-v1/stderr.log",
+          "sha256": "b0d657b3b5344b9dc7ae195d61e337733e73dec72fca0a1d4084dc136028fdff"
+        },
+        "focus": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-entry-first/issue53-career-load-owner-diagnostic-v1/focus-summary.json",
+          "sha256": "768b146f60ff6c0e33b1ff13f3ccb1a6bbd9199db6eef888bd8a5d6274096def"
+        },
+        "audio": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-entry-first/issue53-career-load-owner-diagnostic-v1/audio-summary.json",
+          "sha256": "a97b9e177ab4f7192c564f2964b09183e0dfe54be975efd38ceaeebfd60ed2f3"
+        },
+        "log": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-entry-first/issue53-career-load-owner-diagnostic-v1/run/20261102T214851Z-639/run.log",
+          "sha256": "196e241eec1a3ef8945194dd669bea146fc18b3832a4dd0ec1c6527349294ace"
+        }
+      },
+      "assertions": [
+        {
+          "evidence": "result",
+          "pointer": "/exit_code",
+          "equals": 1
+        },
+        {
+          "evidence": "result",
+          "pointer": "/timed_out",
+          "equals": false
+        },
+        {
+          "evidence": "result",
+          "pointer": "/probe_unchanged",
+          "equals": true
+        },
+        {
+          "evidence": "result",
+          "pointer": "/artifact_finalization",
+          "equals": "verified"
+        }
+      ]
+    },
+    {
+      "id": "issue53-native-load-v2-reported-admission-refusal",
+      "deliverable": "3",
+      "sequence": 7,
+      "scope": "Parent reported load-v2 admission refusal before game launch. Current bounded inspection finds no expected output directory or retained refusal receipt. This records an unqualified historical report and explicit evidence gap; it does not prove the refusal cause or imply a game run.",
+      "outcome": "incomplete",
+      "review": "pending",
+      "evidence": {
+        "inspection": {
+          "path": "local/verify/issue53-reference-provenance-v2-20261102/map-update-inspection.json",
+          "sha256": "27b2571c3b351d2f3dd490730f6d2086aefdfb0ed3af930e0ca71ab644526502"
+        }
+      },
+      "assertions": [
+        {
+          "evidence": "inspection",
+          "pointer": "/load_v2_path_exists",
+          "equals": false
+        }
+      ]
+    },
+    {
+      "id": "issue53-native-mounted-parent-compatible-load-functional",
+      "deliverable": "3",
+      "sequence": 8,
+      "scope": "Actual mounted-parent-fixed probe6cf58bd8... loads native create-v3 SaveProof fixture, reaches Garage/save and ordinary exit0, with normal movies/private nonzero PCM/no observed owned activation/source preservation. Creation used probe71de75c2..., so this is compatible functional loading, not strict same-build roundtrip. Full owned-state and paired Journey acceptance remain open.",
+      "outcome": "incomplete",
+      "review": "pending",
+      "evidence": {
+        "result": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-entry-first/issue53-career-load-external-parent-v1/result.json",
+          "sha256": "c0248305f84fa8e4f3191afef26f7e71dad05d92efe13c1d35ff7b30e7ee1962"
+        },
+        "metadata": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-entry-first/issue53-career-load-external-parent-v1/metadata.json",
+          "sha256": "95fc58787bb0c229cb9bf9db9d4117e756c04e36f14c80a9d99e2993768ed91d"
+        },
+        "stderr": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-entry-first/issue53-career-load-external-parent-v1/stderr.log",
+          "sha256": "66889c635c4505eabb33078c4d0f25a7df774c552c8b20970d0d740e928d52b6"
+        },
+        "focus": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-entry-first/issue53-career-load-external-parent-v1/focus-summary.json",
+          "sha256": "0fc9cfceab8778865ef4f656ec72a6db54d4a5a8bca7f7a9cd17f63a540e8126"
+        },
+        "audio": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-entry-first/issue53-career-load-external-parent-v1/audio-summary.json",
+          "sha256": "9a8a14f948f82c7671b2004364ec2ff86d28da9db731634b690fba06fe08244f"
+        }
+      },
+      "assertions": [
+        {
+          "evidence": "result",
+          "pointer": "/exit_code",
+          "equals": 0
+        },
+        {
+          "evidence": "result",
+          "pointer": "/timed_out",
+          "equals": false
+        },
+        {
+          "evidence": "result",
+          "pointer": "/probe_unchanged",
+          "equals": true
+        },
+        {
+          "evidence": "result",
+          "pointer": "/artifact_finalization",
+          "equals": "verified"
+        }
+      ]
+    },
+    {
+      "id": "issue53-native-create-v4-invalid-empty-start-fixture",
+      "deliverable": "3",
+      "sequence": 9,
+      "scope": "Actual create-v4 exits0 but invocation copied the initial-save parent rather than its empty save child. Retained initial-save manifest contains manifest.json; strict empty-start roundtrip is disqualified. Failed fixture precondition remains preserved; no requirement promotion from this attempt.",
+      "outcome": "incomplete",
+      "review": "pending",
+      "evidence": {
+        "result": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-entry-first/issue53-career-current-create-v4/result.json",
+          "sha256": "b27cdc1b8839f8660b89536631ef726c2602f2ec99ea8e7efc7f44dc97d4781e"
+        },
+        "metadata": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-entry-first/issue53-career-current-create-v4/metadata.json",
+          "sha256": "f69408487a7b4f517b3ba6daccd5bced11042eaf9c782e7e773d8a6975dce7e0"
+        },
+        "stderr": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-entry-first/issue53-career-current-create-v4/stderr.log",
+          "sha256": "98bb2c4a5bfe2c2ddf076b42569dec85fbddfdbc1821cd3ebe77ebda0fe03170"
+        },
+        "focus": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-entry-first/issue53-career-current-create-v4/focus-summary.json",
+          "sha256": "65758ac693819a5da2ebf8d057f93ca14a77952d407e6208b774fbaeb807c13f"
+        },
+        "audio": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-entry-first/issue53-career-current-create-v4/audio-summary.json",
+          "sha256": "756fc0f356d9ef7e3c1b4bc58986fe93d01f4868fcc1892464f569c76fe12319"
+        },
+        "initial-save": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-entry-first/issue53-career-current-create-v4/initial-save/manifest.json",
+          "sha256": "029a14896e91f7e996bb49353a0e2616c635ee289c37653af92f5059c9f005e4"
+        }
+      },
+      "assertions": [
+        {
+          "evidence": "result",
+          "pointer": "/exit_code",
+          "equals": 0
+        },
+        {
+          "evidence": "result",
+          "pointer": "/timed_out",
+          "equals": false
+        },
+        {
+          "evidence": "result",
+          "pointer": "/probe_unchanged",
+          "equals": true
+        },
+        {
+          "evidence": "result",
+          "pointer": "/artifact_finalization",
+          "equals": "verified"
+        }
+      ]
+    },
+    {
+      "id": "issue53-local-reference-build-labels-and-provenance-boundary",
+      "deliverable": "2",
+      "sequence": 4,
+      "scope": "Independent older actual Main Menu reads v2.2.1/build606; newer static format caller4ed680 passes0x3ac(940), compile dateDec14 2025 and v2.3.1. Official Steam announcement Dec18 corroborates family only. Bounded local Steam metadata supplies no matching app/depot chain. Trusted carrier/depot acquisition and full-tree official classification remain unresolved; no A01/US37/D2 promotion.",
+      "outcome": "incomplete",
+      "review": "pending",
+      "evidence": {
+        "findings": {
+          "path": "local/verify/issue53-reference-provenance-v2-20261102/findings.json",
+          "sha256": "917fb5aa9721c55fdd4239d595d7896f4bc68ee6f30f620af73aeec66c4e5fac"
+        },
+        "handoff": {
+          "path": "local/verify/issue53-reference-provenance-v2-20261102/handoff.json",
+          "sha256": "84cd73034752f792a46ab1ad48c843a7114e7fe27271239ab645c371ec900415"
+        },
+        "static": {
+          "path": "local/verify/issue53-reference-provenance-v2-20261102/build-format-callers-result.json",
+          "sha256": "60eae43476cc3fe0a249dd46277e2737369c968eef1ac580e203715b399235e0"
+        },
+        "metadata": {
+          "path": "local/verify/issue53-reference-provenance-v2-20261102/local-acquisition-audit.json",
+          "sha256": "f1e9f0b7f25d2eb4d076193a8a1a2a5f95ffebad0c26a84a1c19d31d7c9fd7bf"
+        },
+        "verify": {
+          "path": "local/verify/issue53-reference-provenance-v2-20261102/final-verify.json",
+          "sha256": "3d62988e27b999870c4adbffe35eb5bd7ea8a8e5a68f04af970ac925e736b447"
+        },
+        "cleanup": {
+          "path": "local/verify/issue53-reference-provenance-v2-20261102/cleanup-status-summary.json",
+          "sha256": "a20b29fe9e16aa6c79017b96a26b33ebeab5f8d96c06ac1e6d35b6c9c7868ae1"
+        }
+      },
+      "assertions": [
+        {
+          "evidence": "findings",
+          "pointer": "/newer/build_decimal",
+          "equals": 940
+        },
+        {
+          "evidence": "findings",
+          "pointer": "/older/observed_build",
+          "equals": 606
+        },
+        {
+          "evidence": "findings",
+          "pointer": "/official_acquisition_chain_established",
+          "equals": false
+        },
+        {
+          "evidence": "cleanup",
+          "pointer": "/json_pointers/~1result~1open",
+          "equals": false
+        },
+        {
+          "evidence": "cleanup",
+          "pointer": "/json_pointers/~1result~1cleanup_pending",
+          "equals": false
+        }
+      ]
+    },
+    {
+      "id": "issue53-final-mouse-command-state-regression",
+      "deliverable": "8",
+      "sequence": 7,
+      "scope": "Final production mouse-axis state regression mandates reset/sensitivity/accumulation assertions; zero-accumulation fault exits1, restored platform/native tests2/2 pass. Exact newer multiplication order and labels bound by source hashes. Log explicitly says SDL mouse event integration unavailable on this driver; hardware events/controllers and paired device behavior remain unverified. Jev gate escalated (.32 safe/.6155 composite), not acceptance.",
+      "outcome": "incomplete",
+      "review": "escalated",
+      "evidence": {
+        "result": {
+          "path": "local/verify/issue53-reconciliation-20261102/mouse-command-final-v2/result.json",
+          "sha256": "71e6a3362356447b5514f2ce74c77ea76d0758c0fb9e6aa19d48e189831ac79c"
+        },
+        "fault": {
+          "path": "local/verify/issue53-reconciliation-20261102/mouse-command-final-v2/fault-test.log",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "green": {
+          "path": "local/verify/issue53-reconciliation-20261102/mouse-command-final-v2/green-test.log",
+          "sha256": "054ebe09410122048a938ca2c648a0e79b19bacd9bf90926ef18e6a0146fc473"
+        },
+        "before": {
+          "path": "local/verify/issue53-reconciliation-20261102/mouse-command-final-v2/source-before.json",
+          "sha256": "69488e72bfd6ccfb53a3b7137244dbbef4fe9f266534e510d618f0994b991b00"
+        },
+        "after": {
+          "path": "local/verify/issue53-reconciliation-20261102/mouse-command-final-v2/source-after.json",
+          "sha256": "69488e72bfd6ccfb53a3b7137244dbbef4fe9f266534e510d618f0994b991b00"
+        },
+        "review": {
+          "path": "local/verify/issue53-reconciliation-20261102/mouse-state-final-review-v1/result.json",
+          "sha256": "09b006bf1050aeb08701f48d89826c776df7347649ac304fdda2d59b120e0592"
+        },
+        "inspection": {
+          "path": "local/verify/issue53-reference-provenance-v2-20261102/map-update-inspection.json",
+          "sha256": "27b2571c3b351d2f3dd490730f6d2086aefdfb0ed3af930e0ca71ab644526502"
+        }
+      },
+      "assertions": [
+        {
+          "evidence": "result",
+          "pointer": "/execution_passed",
+          "equals": true
+        },
+        {
+          "evidence": "result",
+          "pointer": "/parity_verified",
+          "equals": false
+        },
+        {
+          "evidence": "result",
+          "pointer": "/stages/fault-test/actual_exit",
+          "equals": 1
+        },
+        {
+          "evidence": "result",
+          "pointer": "/stages/green-test/actual_exit",
+          "equals": 0
+        },
+        {
+          "evidence": "inspection",
+          "pointer": "/review_states/mouse/action",
+          "equals": "escalate"
+        }
+      ]
+    },
+    {
+      "id": "issue53-release-identity-and-draft-publication-controls",
+      "deliverable": "8",
+      "sequence": 8,
+      "scope": "Bound release-tool correction reproduces original artifact-identity drift as expected-red1, then20 controls pass including exact repository-tag binding, frozen accepted upload inputs, draft download identity checks and saved-handle publication recovery. Real tiny-DMG layout fixture is not a game release. No actual signing/notary/clean installation/publication occurred; later notary source supersedes this historical tool hash.",
+      "outcome": "incomplete",
+      "review": "pending",
+      "evidence": {
+        "result": {
+          "path": "local/verify/issue53-release-review-fixes-20261102/result.json",
+          "sha256": "8b55469e4d23240e35fd35e823fcc8379933d6483f3e466ee3945fcc4cca75cf"
+        },
+        "bindings": {
+          "path": "local/verify/issue53-release-review-fixes-20261102/source-bindings.json",
+          "sha256": "55af17f152eb54cde9345a74b0d333227de3b8577c10d9d52911497f1e6048c2"
+        },
+        "red": {
+          "path": "local/verify/issue53-release-review-fixes-20261102/1.log",
+          "sha256": "30a49af7fbb940441d83c8465fd8a3738263f6014f2b72ed30060392029a9120"
+        },
+        "green": {
+          "path": "local/verify/issue53-release-review-fixes-20261102/2.log",
+          "sha256": "8c256c9e631ea7c804ef9c445206e2c2c03c3a793eb4f7c62bdc65dcdf4113f7"
+        }
+      },
+      "assertions": [
+        {
+          "evidence": "result",
+          "pointer": "/execution_passed",
+          "equals": true
+        },
+        {
+          "evidence": "result",
+          "pointer": "/parity_verified",
+          "equals": false
+        },
+        {
+          "evidence": "result",
+          "pointer": "/stages/original-identity-drift-expected-red/actual_exit",
+          "equals": 1
+        },
+        {
+          "evidence": "result",
+          "pointer": "/stages/distribution-regressions/actual_exit",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "id": "issue53-final-notary-handle-and-staple-lifecycle-controls",
+      "deliverable": "8",
+      "sequence": 9,
+      "scope": "Current release/notary tool source c9515de5... preserves submission intent/handles and immutable staple targets. Missing-intent/original-target-stapling injected faults each exit1; restored27 controls pass. Tests are fixture/seam executions, no real signing, notary service, clean-system acceptance or publication. Jev gate escalated (.25 safe/.64125 composite); independent full-product review remains required.",
+      "outcome": "incomplete",
+      "review": "escalated",
+      "evidence": {
+        "result": {
+          "path": "local/verify/issue53-reconciliation-20261102/notary-lifecycle-final-v1/result.json",
+          "sha256": "5b7c4ebdfa61b33a26ca36ff679f4d5408112834a3979f1cc305602c137202b1"
+        },
+        "intent-fault": {
+          "path": "local/verify/issue53-reconciliation-20261102/notary-lifecycle-final-v1/intent-fault.log",
+          "sha256": "ffb9a6f0bf3064f613bccf9c2febe3773b2ff827d6c64ce25be514cd3747ce0e"
+        },
+        "staple-fault": {
+          "path": "local/verify/issue53-reconciliation-20261102/notary-lifecycle-final-v1/staple-fault.log",
+          "sha256": "bf9234a766a2ba8ee1da90c8b66d5e7e5dfe870b9b4054c527b0d3b512d09fbe"
+        },
+        "green": {
+          "path": "local/verify/issue53-reconciliation-20261102/notary-lifecycle-final-v1/restored-suite.log",
+          "sha256": "6a808e5039d2f5603263d10f16ad0290a7d702adb6680dc31dc14be2c0ac52a1"
+        },
+        "before": {
+          "path": "local/verify/issue53-reconciliation-20261102/notary-lifecycle-final-v1/source-before.json",
+          "sha256": "f64bdbd36cdde5bd0f4a82b6849fd5faf6af9785f8276363a55ed5f335e6ccab"
+        },
+        "after": {
+          "path": "local/verify/issue53-reconciliation-20261102/notary-lifecycle-final-v1/source-after.json",
+          "sha256": "f64bdbd36cdde5bd0f4a82b6849fd5faf6af9785f8276363a55ed5f335e6ccab"
+        },
+        "review": {
+          "path": "local/verify/issue53-reconciliation-20261102/notary-lifecycle-review-v1/result.json",
+          "sha256": "349ce039b1e0665a50d48cb24cb00fbf2f5d8e83c175ba3c122c5c320ddbbba9"
+        },
+        "inspection": {
+          "path": "local/verify/issue53-reference-provenance-v2-20261102/map-update-inspection.json",
+          "sha256": "27b2571c3b351d2f3dd490730f6d2086aefdfb0ed3af930e0ca71ab644526502"
+        }
+      },
+      "assertions": [
+        {
+          "evidence": "result",
+          "pointer": "/execution_passed",
+          "equals": true
+        },
+        {
+          "evidence": "result",
+          "pointer": "/parity_verified",
+          "equals": false
+        },
+        {
+          "evidence": "result",
+          "pointer": "/stages/intent-fault/actual_exit",
+          "equals": 1
+        },
+        {
+          "evidence": "result",
+          "pointer": "/stages/staple-fault/actual_exit",
+          "equals": 1
+        },
+        {
+          "evidence": "result",
+          "pointer": "/stages/restored-suite/actual_exit",
+          "equals": 0
+        },
+        {
+          "evidence": "inspection",
+          "pointer": "/review_states/notary/action",
+          "equals": "escalate"
+        }
+      ]
+    },
+    {
+      "id": "issue53-part-registration-and-mounted-cursor-focused-regressions",
+      "deliverable": "8",
+      "sequence": 10,
+      "scope": "Source-bound Part registration/no-Car stepping/current-pose picking regressions5/5 pass; mounted external-parent cursor regression has qualified CTest8 red and1/1 green. attempt-qualification explicitly excludes void-return harness error, invalid sector fixture and build failure from missing-production proof. These are bounded production-path unit checks only; Part pose/assembly/repair and full Stock/Port Journeys remain incomplete.",
+      "outcome": "incomplete",
+      "review": "pending",
+      "evidence": {
+        "registered": {
+          "path": "local/verify/issue53-part-picking-20261102/registered-part-green.json",
+          "sha256": "5588e58ba2e294e0bc80bc6674d4dfb164dea9dff8dff1b3db7445fb2e0f6dd8"
+        },
+        "registered-log": {
+          "path": "local/verify/issue53-part-picking-20261102/registered-part-green-test.log",
+          "sha256": "691fe2a9e5123739e040a8ef9433fe19a0099456139ab1af77a32dc584814396"
+        },
+        "mounted-red": {
+          "path": "local/verify/issue53-part-picking-20261102/external-parent-cursor-red-v3.json",
+          "sha256": "99f5bb9fc7d076d4bd2671b9d91e418a825b6fc01b298545f4fc346c454b8cc9"
+        },
+        "mounted-red-log": {
+          "path": "local/verify/issue53-part-picking-20261102/external-parent-cursor-red-v3-test.log",
+          "sha256": "15e8584b1b9a2ef8b728ab3095a095bf4da510fdc6840e70398a2de36aa8809e"
+        },
+        "mounted-green": {
+          "path": "local/verify/issue53-part-picking-20261102/external-parent-cursor-green.json",
+          "sha256": "d8a956d63c78f0357aef6803af3fc6775d253a99716ebfef8627d7dcdc40ceec"
+        },
+        "mounted-green-log": {
+          "path": "local/verify/issue53-part-picking-20261102/external-parent-cursor-green-test.log",
+          "sha256": "1d9452541f813297a22b44c0f9e4fec841e86c389869e522103cad01ca0ada29"
+        },
+        "qualification": {
+          "path": "local/verify/issue53-part-picking-20261102/attempt-qualification.json",
+          "sha256": "de107aa1347a2998c53d2eed98717790b1f7f35f8d2a72fc6c0ff4f20e5850cb"
+        }
+      },
+      "assertions": [
+        {
+          "evidence": "registered",
+          "pointer": "/passed",
+          "equals": true
+        },
+        {
+          "evidence": "registered",
+          "pointer": "/source_preserved",
+          "equals": true
+        },
+        {
+          "evidence": "mounted-red",
+          "pointer": "/stages/1/exit",
+          "equals": 8
+        },
+        {
+          "evidence": "mounted-green",
+          "pointer": "/passed",
+          "equals": true
+        },
+        {
+          "evidence": "mounted-green",
+          "pointer": "/source_preserved",
+          "equals": true
+        }
+      ]
+    },
+    {
+      "id": "issue53-native-current-build-empty-start-roundtrip-v5-v3",
+      "deliverable": "3",
+      "sequence": 10,
+      "scope": "Actual native create-v5 starts with empty initial-save/save, and load-v3 consumes the generated immutable snapshot on identical probe6cf58bd8.... Independent ordinary-Career auditor rechecks normal movies/PCM/focus/source preservation, ordinary exits, full save-tree lineage and exact Career bytes. Direct four-file SHA recheck agrees. Bounded empty-Garage/profile functional roundtrip only: no Stock comparison/replay, complete saved semantics, owned Cars/Parts/progression or packaged-player qualification. Prior create-v4 invalid fixture and cursor reload failures remain retained.",
+      "outcome": "incomplete",
+      "review": "pending",
+      "evidence": {
+        "audit": {
+          "path": "local/verify/issue53-prefix-exec-20261102/native-roundtrip-v5-v3.json",
+          "sha256": "b8c5c35e079734a5edfab7d36bef09d00a36d2dbc1120efb4ef780229dc665f6"
+        },
+        "create": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-entry-first/issue53-career-current-create-v5/result.json",
+          "sha256": "51d3f0b388ccdcadce72f9a398305c2a3e6e88ec51785469b7b951bafe73d428"
+        },
+        "load": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-entry-first/issue53-career-current-load-v3/result.json",
+          "sha256": "5a99849c823c7a8b8669c89e4efc5cab2f259e5511b312242207960fa595ada7"
+        },
+        "create-metadata": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-entry-first/issue53-career-current-create-v5/metadata.json",
+          "sha256": "1256c6d520153ad784cc3e3f77ea57fd3f18d0b27c0c4bff920499aa06bbe4cb"
+        },
+        "load-metadata": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-entry-first/issue53-career-current-load-v3/metadata.json",
+          "sha256": "7f9fa6d5e46c13071a4b1b0bc9e52df4942cc36c109e12ce39ecd837315dbf99"
+        },
+        "create-initial": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-entry-first/issue53-career-current-create-v5/initial-save/manifest.json",
+          "sha256": "ac63ed09d372b6c8e5f10cb287084638f43304f0e1ea4d42d679c6aa01be8d73"
+        },
+        "fixture": {
+          "path": "local/verify/issue53-prefix-exec-20261102/native-v5-fixture/manifest.json",
+          "sha256": "ff9fb4309b9db148bab757965c788de6f42a0a60fd9fe6cc7256e2e348313736"
+        },
+        "inspection": {
+          "path": "local/verify/issue53-reference-provenance-v2-20261102/map-native-roundtrip-inspection.json",
+          "sha256": "c1751d149475452a839204284580b9906829df045c6bcb127e64732860588eca"
+        }
+      },
+      "assertions": [
+        {
+          "evidence": "audit",
+          "pointer": "/status",
+          "equals": "native_ordinary_career_roundtrip_observed"
+        },
+        {
+          "evidence": "create",
+          "pointer": "/exit_code",
+          "equals": 0
+        },
+        {
+          "evidence": "load",
+          "pointer": "/exit_code",
+          "equals": 0
+        },
+        {
+          "evidence": "create-initial",
+          "pointer": "/files",
+          "equals": {}
+        },
+        {
+          "evidence": "inspection",
+          "pointer": "/all_four_equal",
+          "equals": true
+        },
+        {
+          "evidence": "audit",
+          "pointer": "/created/probe_sha256",
+          "equals": "6cf58bd8a126393c5a43eddfa8ceff426ae9418b3b640b93e718a66b494b9c95"
+        },
+        {
+          "evidence": "audit",
+          "pointer": "/loaded/probe_sha256",
+          "equals": "6cf58bd8a126393c5a43eddfa8ceff426ae9418b3b640b93e718a66b494b9c95"
+        }
+      ]
+    },
+    {
+      "id": "issue53-native-purchase-owned-car-reload-loss",
+      "deliverable": "3",
+      "sequence": 11,
+      "scope": "US10/13/14/15 actual normal load, used-dealer purchase, ordinary exit and owned-Car reload. Purchase money20000\u221215581=4419 persists, but no Car is recreated;2239-byte PlayerCar0 becomes72bytes. Exit0 is not gameplay success. Raw PCM/focus recomputed; no Stock pairing or full-save semantic acceptance.",
+      "outcome": "incomplete",
+      "review": "pending",
+      "evidence": {
+        "inspection": {
+          "path": "local/verify/issue53-career-journeys-20261102/owned-persistence-inspection.json",
+          "sha256": "d0818e4b8f538f75ec72b2da01f1d9d96da473f3c4218d2076c687371f3675e2"
+        },
+        "purchase": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-entry-first/issue53-native-used-dealer-buy-v1/result.json",
+          "sha256": "a3d09ae6225bb99d02f44f3d99b818104978d2aa1f995a3500e2d410a1d76374"
+        },
+        "reload": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-entry-first/issue53-native-owned-car-load-v1/result.json",
+          "sha256": "07ed22819fa1a1e0a54ad4a683eeb7abb725e74178415a8513df9951d77c1b03"
+        },
+        "entry": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-entry-first/issue53-native-used-dealer-entry-v1/result.json",
+          "sha256": "355da443ce63d35f6b760c56090724ded952d369e4ec1707f1f3fe1fb6fb896f"
+        }
+      },
+      "assertions": [
+        {
+          "evidence": "inspection",
+          "pointer": "/status",
+          "equals": "contradicted_owned_car_reload"
+        },
+        {
+          "evidence": "inspection",
+          "pointer": "/all_save_files_equal",
+          "equals": false
+        },
+        {
+          "evidence": "inspection",
+          "pointer": "/captures/purchase/car/bytes",
+          "equals": 2239
+        },
+        {
+          "evidence": "inspection",
+          "pointer": "/captures/reload/car/bytes",
+          "equals": 72
+        }
+      ]
+    },
+    {
+      "id": "issue53-notary-atomic-receipt-independent-review",
+      "deliverable": "8",
+      "sequence": 11,
+      "scope": "US05/46 bounded independent review found actual process-death canonical-receipt corruption. Narrow atomic no-clobber receipt fix and retained-ID recovery pass30controls; oldsource expectedred. Publication AST unchanged. Root inspected actual finalsource and controls. No real signing/notary/release/clean-machine acceptance; whole-product reviews remain pending.",
+      "outcome": "incomplete",
+      "review": "pending",
+      "evidence": {
+        "result": {
+          "path": "local/verify/issue53-reference-provenance-v2-20261102/notary-receipt-review-v2/result.json",
+          "sha256": "e31584d9c40315eec3669697b0d68780cb8aa1b28fd473e587adc53facaae40a"
+        },
+        "source": {
+          "path": "local/verify/issue53-reference-provenance-v2-20261102/notary-receipt-review-v2/source-after.json",
+          "sha256": "b73fef664a426c1de904549685a2683bdf77b119c2987b38be6e3c5e17c27e1d"
+        },
+        "tests": {
+          "path": "local/verify/issue53-reference-provenance-v2-20261102/notary-receipt-review-v2/final-recovery-regressions.log",
+          "sha256": "628f9546464e34838ab765a768f59a86cbdc2347d9441ba1bf4deb9d9658328f"
+        },
+        "ast": {
+          "path": "local/verify/issue53-reference-provenance-v2-20261102/notary-receipt-review-v2/publication-ast-preservation.log",
+          "sha256": "dad2f9fcdde886d468483332daef6d9577b35049d1067671fd0047f755f1d738"
+        }
+      },
+      "assertions": [
+        {
+          "evidence": "result",
+          "pointer": "/execution_passed",
+          "equals": true
+        },
+        {
+          "evidence": "result",
+          "pointer": "/parity_verified",
+          "equals": false
+        },
+        {
+          "evidence": "ast",
+          "pointer": "/all_original_publication_acceptance_and_shared_command_bodies_unchanged",
+          "equals": true
+        }
+      ]
+    },
+    {
+      "id": "issue53-type-query-owned-reload-subassembly-failure",
+      "deliverable": "3",
+      "sequence": 12,
+      "scope": "US10/13: actual saved prototype identity corrected via public selector6; focused public Car/Part regression red then green. Same-build normal purchase writes nonzero ids; owned reload creates Car then exits1 at detached muffler08 installation onto Duhen stock exhaust pipe. Persistence remains contradicted. Initial root REA lease expired before close; raw static investigation is retained with admission limitation, not acceptance.",
+      "outcome": "incomplete",
+      "review": "pending",
+      "evidence": {
+        "inspection": {
+          "path": "local/verify/issue53-career-journeys-20261102/type-query-purchase-reload-inspection.json",
+          "sha256": "a4f735d22c469d382de175e546bc9665b6ec1e975feb537703b3f721b03135ee"
+        },
+        "red": {
+          "path": "local/verify/issue53-career-journeys-20261102/type-query-red-v1/result.json",
+          "sha256": "9349efcdd60d3df54f2181a24d4382d91f4b98fd76669a1d281b36538f49522c"
+        },
+        "green": {
+          "path": "local/verify/issue53-career-journeys-20261102/type-query-green-v1/result.json",
+          "sha256": "282f6661194c5a81de49cac87a29d09cba857742653f69012c1f9352d4ca3405"
+        }
+      },
+      "assertions": [
+        {
+          "evidence": "inspection",
+          "pointer": "/status",
+          "equals": "contradicted_detached_subassembly_reload"
+        },
+        {
+          "evidence": "inspection",
+          "pointer": "/captures/purchase/exit_code",
+          "equals": 0
+        },
+        {
+          "evidence": "inspection",
+          "pointer": "/captures/reload/exit_code",
+          "equals": 1
+        },
+        {
+          "evidence": "green",
+          "pointer": "/execution_passed",
+          "equals": true
+        }
+      ]
+    },
+    {
+      "id": "issue53-detached-cursor-regression",
+      "deliverable": "3",
+      "sequence": 13,
+      "scope": "US10/13 actual same-build purchase passes; reload gets past detached muffler installation then fails cursor triangle validation. Correct Hull bounds preservation has real-resource public picking red/green and5focusedchecks; full current-build reload pending. Initial cursor fixture failure and skipped static results retained explicitly.",
+      "outcome": "incomplete",
+      "review": "pending",
+      "evidence": {
+        "audit": {
+          "path": "local/verify/issue53-career-journeys-20261102/detached-cursor-inspection.json",
+          "sha256": "e1100ee9ce8f9a3a662344f0e54c112fe8d95cf85c14c9b9018d4dc686fc5c65"
+        },
+        "green": {
+          "path": "local/verify/issue53-career-journeys-20261102/detached-cursor-green-v2/result.json",
+          "sha256": "14687c20daa5234ee58aad1b8515fab3064dcc91f87fdbc75cd755ee0c91f264"
+        }
+      },
+      "assertions": [
+        {
+          "evidence": "audit",
+          "pointer": "/status",
+          "equals": "cursor_fix_focused_verified_whole_reload_pending"
+        },
+        {
+          "evidence": "green",
+          "pointer": "/execution_passed",
+          "equals": true
+        }
+      ]
+    },
+    {
+      "id": "issue53-authored-scene-mips-focused",
+      "deliverable": "2",
+      "sequence": 5,
+      "scope": "US29 authored DDS/PTX levels preserved through production scene texture cache/draw;3focusedchecks pass. Independent root source/log review resolves narrow Jev lowconfidence contradiction; no reroll. Unsupported material/mesh and paired whole-scene presentation remain gaps.",
+      "outcome": "incomplete",
+      "review": "pending",
+      "evidence": {
+        "audit": {
+          "path": "local/verify/issue53-reconciliation-20261102/scene-mips-audit-v1/source-and-review-audit.json",
+          "sha256": "9a2c5c0a847759b387e3745526b7766395508b502fdd061cdba22a7a88798550"
+        },
+        "result": {
+          "path": "local/verify/issue53-reconciliation-20261102/scene-mips-final-v2/result.json",
+          "sha256": "ae22f9d7696b88d8cfb9543c80283891847505a67896ae28c12abae89ff7eec9"
+        }
+      },
+      "assertions": [
+        {
+          "evidence": "audit",
+          "pointer": "/status",
+          "equals": "implemented_unverified"
+        },
+        {
+          "evidence": "audit",
+          "pointer": "/release_accepted",
+          "equals": false
+        }
+      ]
+    },
+    {
+      "id": "issue53-owned-car-cursor-fixed-roundtrip",
+      "deliverable": "3",
+      "sequence": 14,
+      "scope": "US10/13 actual same-build native purchase and ordinary reload exit0; all four saved files exactly identical, balance4419, one restoredCar and visible Garage. Raw reload audit checks video/script/log/focus/PCM/lineage. Prestige differs175 to139; actualStock expectation/derived state unresolved. No whole persistence/presentation/parity completion. New prepaid hash optimization finalizes both actual captures within unchanged limits.",
+      "outcome": "incomplete",
+      "review": "pending",
+      "evidence": {
+        "audit": {
+          "path": "local/verify/issue53-career-journeys-20261102/owned-car-cursor-fixed-roundtrip.json",
+          "sha256": "0a83ad7b577682c9f458b1561882c314b3ccaac9597dcb1b344006f6c7a9fc32"
+        },
+        "prepaid_controls": {
+          "path": "local/verify/issue53-prepaid-hash-control-v2-20261102/result.json",
+          "sha256": "2a3ccaa19bbd69bb58d40214eab1e60f19a41bb6496249b1e0ea418114d68146"
+        }
+      },
+      "assertions": [
+        {
+          "evidence": "audit",
+          "pointer": "/all_save_bytes_identical",
+          "equals": true
+        },
+        {
+          "evidence": "audit",
+          "pointer": "/captures/reload/exit_code",
+          "equals": 0
+        },
+        {
+          "evidence": "audit",
+          "pointer": "/captures/reload/artifact_finalization",
+          "equals": "verified"
+        },
+        {
+          "evidence": "prepaid_controls",
+          "pointer": "/execution_passed",
+          "equals": true
+        }
+      ]
+    }
+  ]
+}
