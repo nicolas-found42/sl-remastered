@@ -54,15 +54,24 @@ def prepare_state(state):
             raise ValueError('storage state file alias/type refused')
 
 
+_xattr_functions = None
+
+
 def xattrs(path):
-    libc = ctypes.CDLL(None, use_errno=True)
-    listing = libc.listxattr
-    listing.argtypes = [ctypes.c_char_p, ctypes.c_void_p, ctypes.c_size_t, ctypes.c_int]
-    listing.restype = ctypes.c_ssize_t
-    getter = libc.getxattr
-    getter.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_void_p,
-                       ctypes.c_size_t, ctypes.c_uint32, ctypes.c_int]
-    getter.restype = ctypes.c_ssize_t
+    global _xattr_functions
+    if _xattr_functions is None:
+        libc = ctypes.CDLL(None, use_errno=True)
+        listing = libc.listxattr
+        listing.argtypes = [ctypes.c_char_p, ctypes.c_void_p, ctypes.c_size_t, ctypes.c_int]
+        listing.restype = ctypes.c_ssize_t
+        getter = libc.getxattr
+        getter.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_void_p,
+                           ctypes.c_size_t, ctypes.c_uint32, ctypes.c_int]
+        getter.restype = ctypes.c_ssize_t
+        # Keep the library and immutable ABI bindings alive. Every call below
+        # still rereads names and values; never cache observed attributes.
+        _xattr_functions = libc, listing, getter
+    _, listing, getter = _xattr_functions
     name = os.fsencode(path)
     size = listing(name, None, 0, 1)
     if not 0 <= size <= 1024*1024:

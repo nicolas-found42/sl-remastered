@@ -53,8 +53,8 @@ def attributes(path):
     if not hasattr(os, 'listxattr'):
         # This Python build omits xattr wrappers. Reuse the existing readonly
         # Darwin no-follow inventory, never omit attributes silently.
-        source = Path(__file__).with_name('storage.py')
         if _xattr_reader is None:
+            source = Path(__file__).with_name('storage.py')
             spec = importlib.util.spec_from_file_location('prepaid_xattr_storage', source)
             module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(module)
@@ -212,6 +212,8 @@ class PrepaidCapture:
         started = time.monotonic()
         records = {}
         logical = child_bytes = 0
+        child_name = self.child.name
+        child_prefix = child_name+'/'
         def walk(fd, path, key):
             nonlocal logical, child_bytes
             require(len(records) < self.max_entries and time.monotonic()-started < self.scan_seconds,
@@ -237,7 +239,10 @@ class PrepaidCapture:
                         require(stat.S_ISREG(info.st_mode) or stat.S_ISLNK(info.st_mode), 'special artifact refused')
                         require(not stat.S_ISREG(info.st_mode) or info.st_nlink == 1, 'hardlinked artifact refused')
                         logical += info.st_size
-                        if full == self.child or self.child in full.parents:
+                        # The admitted child is one direct component of the
+                        # parent. Match that exact component in the relative
+                        # key, without rebuilding all Path ancestors per file.
+                        if name == child_name or name.startswith(child_prefix):
                             child_bytes += info.st_size
                         # Final preservation compares only pre-existing bytes.
                         # Child hashes were discarded by check(), yet reading

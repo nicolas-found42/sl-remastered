@@ -197,6 +197,51 @@ class Tests(unittest.TestCase):
         with self.assertRaisesRegex(Refused, 'child budget'):
             budget.check('final')
 
+    def test_child_accounting_matches_only_its_exact_direct_component(self):
+        (self.parent/'freshness').write_bytes(bytes(20))
+        nested = self.parent/'elsewhere'/'fresh'
+        nested.mkdir(parents=True)
+        (nested/'outside').write_bytes(bytes(7))
+        budget = self.budget()
+        self.addCleanup(budget.close)
+        (budget.child/'capture').write_bytes(bytes(11))
+        sample = budget.check('final')
+        self.assertEqual((sample['logical_bytes'], sample['child_bytes']), (52, 11))
+        (self.parent/'fresh-other').write_bytes(b'x')
+        with self.assertRaisesRegex(Refused, 'membership'):
+            budget.check('final')
+
+    def test_attribute_values_are_fresh_after_repeated_observations(self):
+        path = self.parent/'old'
+        key = 'com.example.prepaid-fresh' if sys.platform=='darwin' else 'user.prepaid-fresh'
+        def change(value):
+            if hasattr(os, 'setxattr'):
+                os.setxattr(path, key, value.encode())
+            else:
+                subprocess.run(['/usr/bin/xattr','-w',key,value,str(path)],check=True)
+        change('first')
+        before = prepaid.attributes(path)
+        change('second')
+        after = prepaid.attributes(path)
+        lookup = key if hasattr(os, 'listxattr') else key.encode().hex()
+        self.assertEqual(before[lookup], hashlib.sha256(b'first').hexdigest())
+        self.assertEqual(after[lookup], hashlib.sha256(b'second').hexdigest())
+
+    @unittest.skipUnless(sys.platform=='darwin' and not hasattr(os, 'listxattr'),
+                         'specific to the Darwin ctypes xattr fallback')
+    def test_periodic_guard_does_not_rebind_libc_for_every_observation(self):
+        import ctypes
+        budget = self.budget(scan_seconds=.25)
+        self.addCleanup(budget.close)
+        original = ctypes.CDLL
+        def slow_bind(*args, **kwargs):
+            time.sleep(.30)
+            return original(*args, **kwargs)
+        with mock.patch.object(ctypes, 'CDLL', slow_bind):
+            sample = budget.check()
+        self.assertTrue(sample['complete'])
+        self.assertLedgerUnchanged()
+
     def test_old_tree_overflow_refuses_before_child_creation(self):
         (self.parent/'too-large').write_bytes(bytes(65))
         with self.assertRaisesRegex(Refused, 'parent budget'): self.budget()
