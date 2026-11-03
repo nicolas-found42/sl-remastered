@@ -77,6 +77,34 @@ static volatile LONG seen_btn[8], seen_key[256];
 static struct { int kind; DWORD ofs, data; } pending[256];
 static volatile int npending;
 static CRITICAL_SECTION cs;
+/* Optional bounded native Return witness. Recording occurs before injected bits
+ * are merged. A failed write terminates this diagnostic run rather than allow a
+ * successful capture to conceal a missing transition. No input is generated. */
+static HANDLE return_file = INVALID_HANDLE_VALUE;
+static int return_enabled;
+static unsigned char return_known[16], return_last[16];
+static unsigned long return_sequence;
+static void native_return(int device, unsigned char value, unsigned long call) {
+    DWORD saved_error = GetLastError(), written;
+    char line[256]; int length;
+    if (!return_enabled) return;
+    EnterCriticalSection(&cs);
+    value &= 0x80;
+    if (!return_known[device] || return_last[device] != value) {
+        if (++return_sequence > 64) TerminateProcess(GetCurrentProcess(), 86);
+        length = snprintf(line, sizeof line,
+            "{\"sequence\":%lu,\"source\":\"native\",\"device\":%d,\"offset\":28,\"data\":%u,\"state_call\":%lu,\"tick\":%lu}\n",
+            return_sequence, device, (unsigned)value, call, GetTickCount());
+        if (length <= 0 || (size_t)length >= sizeof line
+                || !WriteFile(return_file, line, (DWORD)length, &written, NULL)
+                || written != (DWORD)length || !FlushFileBuffers(return_file))
+            TerminateProcess(GetCurrentProcess(), 86);
+        return_known[device] = 1;
+        return_last[device] = value;
+    }
+    LeaveCriticalSection(&cs);
+    SetLastError(saved_error);
+}
 static void queue_event(int kind, DWORD ofs, DWORD data) {
     int queued, depth;
     EnterCriticalSection(&cs);
@@ -87,10 +115,25 @@ static void queue_event(int kind, DWORD ofs, DWORD data) {
     logf_("input_queue: %s kind=%d offset=%lu data=%lu depth=%d", queued ? "queued" : "dropped", kind, (unsigned long)ofs, (unsigned long)data, depth);
 }
 
+static LONG native_mouse_last[16][8];
+static unsigned char native_mouse_known[16][8];
 static HRESULT WINAPI hook_get_state(void *self, DWORD cb, LPVOID data) {
     HRESULT hr = ((get_state_fn)orig_of(self, 9))(self, cb, data);
     int k = kind_of(self), i = index_of(self);
     if (i >= 0) devs[i].state_calls++;
+    if (SUCCEEDED(hr) && data && k == KIND_KEYBOARD && cb >= 256 && i >= 0)
+        native_return(i, ((unsigned char *)data)[28], devs[i].state_calls);
+    if (SUCCEEDED(hr) && data && k == KIND_MOUSE && cb >= 16 && i >= 0) {
+        int button, count = cb >= 20 ? 8 : 4;
+        for (button = 0; button < count; ++button) {
+            LONG value = ((unsigned char *)data)[12 + button] & 0x80;
+            if (!native_mouse_known[i][button] || native_mouse_last[i][button] != value) {
+                logf_("input_poll: kind=1 offset=%d data=%ld source=native state_call=%lu", 12 + button, value, devs[i].state_calls);
+                native_mouse_last[i][button] = value;
+                native_mouse_known[i][button] = 1;
+            }
+        }
+    }
     if (SUCCEEDED(hr) && data) {
         if (k == KIND_MOUSE && cb >= 16) {
             unsigned char *b = (unsigned char *)data + 12; int n = cb >= 20 ? 8 : 4;
@@ -256,6 +299,19 @@ __declspec(dllexport) HRESULT WINAPI DirectInput8Create(HINSTANCE inst, DWORD ve
         logf_("clock_origin_tick=%lu", first_tick);
         logf_("input_telemetry=v1");
         snprintf(cmd_path, sizeof cmd_path, "%s\\dinput.cmd", dir);
+        {
+            char enabled[8], return_path[MAX_PATH];
+            return_enabled = GetEnvironmentVariableA("SLRR_NATIVE_RETURN_OBSERVER", enabled, sizeof enabled) == 1
+                && enabled[0] == '1';
+            if (return_enabled) {
+                int length = snprintf(return_path, sizeof return_path, "%s\\native-return.jsonl", dir);
+                if (length <= 0 || (size_t)length >= sizeof return_path)
+                    TerminateProcess(GetCurrentProcess(), 86);
+                return_file = CreateFileA(return_path, GENERIC_WRITE, FILE_SHARE_READ, NULL,
+                                          CREATE_NEW, FILE_ATTRIBUTE_NORMAL, NULL);
+                if (return_file == INVALID_HANDLE_VALUE) TerminateProcess(GetCurrentProcess(), 86);
+            }
+        }
         real_dll = LoadLibraryA(path);
         logf_("proxy loaded; real dinput8 path=%s handle=%p", path, (void *)real_dll);
         if (!real_dll) return E_FAIL;

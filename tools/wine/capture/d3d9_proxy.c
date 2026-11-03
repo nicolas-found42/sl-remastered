@@ -23,6 +23,11 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdarg.h>
+#ifdef SLRR_CONTROL_TAPE
+#include "control_tape.h"
+static char tape_path[MAX_PATH];
+static int tape_enabled;
+#endif
 
 typedef IDirect3D9 *(WINAPI *create9_fn)(UINT);
 typedef HRESULT (WINAPI *create_device_fn)(IDirect3D9 *, UINT, D3DDEVTYPE, HWND, DWORD, D3DPRESENT_PARAMETERS *, IDirect3DDevice9 **);
@@ -207,7 +212,15 @@ static void run_cmd(char *line) {
     WORD vk; int ext;
     if (n < 1 || cmd[0] == '#') return;
     logf_("input: %s", line);
-    if (!_stricmp(cmd, "sleep")) Sleep((DWORD)atoi(a));
+    if (!_stricmp(cmd, "tape_stop")) {
+#ifdef SLRR_CONTROL_TAPE
+        logf_("control_tape_stop result=%d", tape_enabled ? control_tape_stop(tape_path) : -1);
+        tape_enabled = 0;
+#else
+        logf_("control tape unavailable: proxy built without record-only support");
+#endif
+    }
+    else if (!_stricmp(cmd, "sleep")) Sleep((DWORD)atoi(a));
     else if (!_stricmp(cmd, "move") && n >= 3) { mouse_to(atoi(a), atoi(b)); }
     else if (!_stricmp(cmd, "click") || !_stricmp(cmd, "dclick")) {
         int times = _stricmp(cmd, "dclick") ? 1 : 2, i;
@@ -225,6 +238,12 @@ static void run_cmd(char *line) {
         POINT pt; RECT rc; GetCursorPos(&pt); GetWindowRect(game_hwnd, &rc);
         logf_("input: cursor=(%ld,%ld) game window rect=(%ld,%ld,%ld,%ld) screen=%dx%d", pt.x, pt.y, rc.left, rc.top, rc.right, rc.bottom,
               GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN));
+        { RECT client = {0}; POINT origin = {0, 0};
+          BOOL valid = GetClientRect(game_hwnd, &client);
+          valid = ClientToScreen(game_hwnd, &origin) && valid;
+          logf_("input_geometry: valid=%d hwnd=%p client=(%ld,%ld,%ld,%ld) origin=(%ld,%ld)", valid, (void *)game_hwnd,
+                client.left, client.top, client.right, client.bottom, origin.x, origin.y);
+        }
     }
     else if (!_stricmp(cmd, "postclick") && n >= 3) { /* window messages, client coordinates */
         LPARAM lp = MAKELPARAM(atoi(a), atoi(b));
@@ -269,8 +288,15 @@ static DWORD WINAPI input_thread(LPVOID unused) {
             }
             fclose(f);
         }
-        if (walk_trace_enabled && GetTickCount() - last_flush >= 1000) {
-            if (walk_trace_flush(walk_trace_path) < 0) logf_("walk trace flush failed");
+        if ((walk_trace_enabled
+#ifdef SLRR_CONTROL_TAPE
+             || tape_enabled
+#endif
+            ) && GetTickCount() - last_flush >= 1000) {
+            if (walk_trace_enabled && walk_trace_flush(walk_trace_path) < 0) logf_("walk trace flush failed");
+#ifdef SLRR_CONTROL_TAPE
+            if (tape_enabled && control_tape_flush(tape_path) < 0) logf_("control tape flush failed");
+#endif
             last_flush = GetTickCount();
         }
         Sleep(100);
@@ -363,6 +389,27 @@ __declspec(dllexport) IDirect3D9 *WINAPI Direct3DCreate9(UINT version) {
         CreateDirectoryA(dump_dir, NULL);
         snprintf(log_path, sizeof log_path, "%s\\d3d9proxy.log", dump_dir);
         logf_("clock_origin_tick=%lu", first_tick);
+#ifdef SLRR_CONTROL_TAPE
+        if (GetEnvironmentVariableA("SLRR_CONTROL_TAPE", env, sizeof env) && !strcmp(env, "1")) {
+            char exe_path[MAX_PATH];
+            DWORD len = GetModuleFileNameA(NULL, exe_path, sizeof exe_path);
+            int n = snprintf(tape_path, sizeof tape_path, "%s\\stock-control-tape.jsonl", dump_dir);
+            if (len && len < sizeof exe_path && n >= 0 && n < (int)sizeof tape_path)
+#ifdef SLRR_EARLY_CONTROL_TAPE
+                tape_enabled = control_tape_confirm_file(exe_path);
+#else
+                tape_enabled = control_tape_install(GetModuleHandleA(NULL), exe_path);
+#endif
+            logf_("control tape record-only %s", tape_enabled ? "installed" : "refused");
+            if(tape_enabled && GetEnvironmentVariableA("SLRR_ORDINARY_EXIT",env,sizeof env) && !strcmp(env,"1")) {
+                char report[MAX_PATH];
+                int rn=snprintf(report,sizeof report,"%s\\stock-control-shutdown.json",dump_dir);
+                int armed=rn>=0 && rn<(int)sizeof report ?
+                    control_tape_shutdown_arm(GetModuleHandleA(NULL),tape_path,report):0;
+                logf_("control tape ordinary ExitProcess boundary arm=%d",armed);
+            }
+        }
+#endif
         if (GetEnvironmentVariableA("SLRR_WALK_TRACE", env, sizeof env) && !strcmp(env, "1")) {
             char exe_path[MAX_PATH];
             DWORD len = GetModuleFileNameA(NULL, exe_path, sizeof exe_path);
@@ -386,4 +433,13 @@ __declspec(dllexport) IDirect3D9 *WINAPI Direct3DCreate9(UINT version) {
     return d3d;
 }
 
+#ifdef SLRR_EARLY_CONTROL_TAPE
+__attribute__((noinline,target("no-sse,no-sse2")))
+BOOL WINAPI DllMain(HINSTANCE h, DWORD reason, LPVOID r) {
+    (void)h; (void)r;
+    if (reason == DLL_PROCESS_ATTACH) return control_tape_bootstrap_stock() == 1;
+    return TRUE;
+}
+#else
 BOOL WINAPI DllMain(HINSTANCE h, DWORD reason, LPVOID r) { (void)h; (void)reason; (void)r; return TRUE; }
+#endif

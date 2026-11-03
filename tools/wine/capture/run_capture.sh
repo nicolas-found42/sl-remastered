@@ -5,6 +5,8 @@
 # The run directory must not exist. Leaves Wine running in the background; stop it with
 #   tools/wine/capture/stop.sh RUN-DIR
 set -euo pipefail
+echo 'Legacy unbounded background recorder is retired. Use tools/parity/run_stock.py with private display/audio, deadlines and per-run/cumulative storage admission.' >&2
+exit 2
 cd "$(dirname "$0")/../../.."
 ROOT="$PWD"
 RUN="${1:-local/wine-runs/capture-$(date +%Y%m%d-%H%M%S)}"
