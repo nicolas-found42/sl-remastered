@@ -1,8 +1,28 @@
 #include "physics_contact_geometry.hpp"
 #include "physics_core_pair.hpp"
+#include <bit>
 #include <cassert>
 using namespace physics;
 int main() {
+  {
+    // Original 0049ec00 selector, frozen rotated Port poses at step42:
+    // parity-selector-rotation-20261102/run-c1f92a2cf2. Two original runs
+    // produce these exact point words with CW=007f and declared empty cache.
+    // This checks interpolation arithmetic, not a historical Stock trajectory.
+    const auto f = [](uint32_t word) { return std::bit_cast<float>(word); };
+    Body rotating;
+    rotating.flags = kBodyActive;
+    rotating.current = 1;
+    rotating.state[1].pos = {f(0x401fdd44), f(0x3eabf240), f(0x3b0aec96)};
+    rotating.state[0].pos = {f(0x401f97cf), f(0x3eab90ab), f(0x3bd0603e)};
+    rotating.state[1].quat = {f(0x3d89d778), f(0xb4c00000), f(0x3d89d7a2), f(0x3f7ed673)};
+    rotating.state[0].quat = {f(0x3df6f978), f(0xb4c00000), f(0x3df6f996), f(0x3f7c3fe5)};
+    const auto pose = interpolateContactPose(rotating, 0.5f);
+    const auto point = transformPoint(pose.pos, pose.rot, {-0.25f, -0.25f, 0.25f});
+    assert(std::bit_cast<uint32_t>(point[0]) == 1075005110u);
+    assert(std::bit_cast<uint32_t>(point[1]) == 982673408u);
+    assert(std::bit_cast<uint32_t>(point[2]) == 1045140618u);
+  }
   BodyProto p, wall;
   p.invMass = 1;
   wall.flags = kProtoStatic;

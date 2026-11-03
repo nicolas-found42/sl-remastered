@@ -15,6 +15,22 @@ Vec3 contactVelocity(const State& s, const Vec3& point) {
 Vec3 response(const State& s, const Vec3& r, const Vec3& direction) {
   return cross(matrixTransformRows(s.invInertiaWorld, cross(r, direction)), r);
 }
+// 004a7190 / 004a69e0: contact-response and impulse radii have a
+// different sum order from the force radius in 004a6520.
+Vec3 contactRadius(const Mat34& m, const Vec3& v) {
+  return {(m[1] * v[1] + m[2] * v[2]) + m[0] * v[0],
+          (m[5] * v[1] + m[4] * v[0]) + m[6] * v[2],
+          (m[9] * v[1] + m[8] * v[0]) + m[10] * v[2]};
+}
+Vec3 directResponse(const State& s, const Vec3& r, const Vec3& direction) {
+  const Vec3 v = cross(r, direction);
+  const auto& m = s.invInertiaWorld;
+  // Inline 00496050 at 00496511..00496569: all rows add z, then y, then x.
+  const Vec3 transformed{(m[2] * v[2] + m[1] * v[1]) + m[0] * v[0],
+                         (m[6] * v[2] + m[5] * v[1]) + m[4] * v[0],
+                         (m[10] * v[2] + m[9] * v[1]) + m[8] * v[0]};
+  return cross(transformed, r);
+}
 void impulse(Body& b, const Vec3& r, const Vec3& j) {
   State& s = b.state[b.current];
   Vec3 angular = cross(r, j);
@@ -59,11 +75,15 @@ bool resolve(Body*& body, Vec3& point, bool first) {
   return body != nullptr;
 }
 float effectiveMass(const Body& a, const Body& b, bool da, bool db,
-                    const Vec3& ra, const Vec3& rb, const Vec3& direction) {
-  Vec3 x = da ? response(a.state[a.current], ra, direction) : Vec3{};
-  Vec3 y = db ? response(b.state[b.current], rb, direction) : Vec3{};
-  return (x[1]+y[1])*direction[1] + (x[0]+y[0])*direction[0] +
-         (x[2]+y[2])*direction[2] + (db ? b.proto->invMass : 0) + (da ? a.proto->invMass : 0);
+                    const Vec3& ra, const Vec3& rb, const Vec3& direction,
+                    bool tangent = false) {
+  Vec3 x = da ? directResponse(a.state[a.current], ra, direction) : Vec3{};
+  Vec3 y = db ? directResponse(b.state[b.current], rb, direction) : Vec3{};
+  // 00496709..0049676b normal z+x+y; 00496c5d..00496cb7 tangent y+z+x.
+  // Both then add inverse mass B followed by A.
+  const float value = tangent ? ((x[1] + y[1]) * direction[1] + (x[2] + y[2]) * direction[2]) + (x[0] + y[0]) * direction[0]
+                              : ((x[2] + y[2]) * direction[2] + (x[0] + y[0]) * direction[0]) + (x[1] + y[1]) * direction[1];
+  return value + (db ? b.proto->invMass : 0) + (da ? a.proto->invMass : 0);
 }
 }
 // FUN_004a3900 invokes 004925d0/004927f0 for every row before any
@@ -156,8 +176,11 @@ int correctDirectContact(DirectContact& c, DirectContactWorld& world) {
       (!db || (b.flags & kBodyAsleep))) return 0;
   Vec3 va = contactVelocity(a.state[a.current ^ 1], pointA);
   Vec3 vb = contactVelocity(b.state[b.current ^ 1], pointB);
-  Vec3 ra = matrixTransformRows(a.state[a.current].rot, pointA);
-  Vec3 rb = matrixTransformRows(b.state[b.current].rot, pointB);
+  const Vec3 ra = contactRadius(a.state[a.current].rot, pointA);
+  const Vec3 rb = contactRadius(b.state[b.current].rot, pointB);
+  // 004a6520's force/torque radius follows 00436880, unlike 004a7190.
+  const Vec3 forceA = matrixTransformRows(a.state[a.current].rot, pointA);
+  const Vec3 forceB = matrixTransformRows(b.state[b.current].rot, pointB);
   const float velocity = (va[1]-vb[1])*c.normal[1] + (va[0]-vb[0])*c.normal[0] + (va[2]-vb[2])*c.normal[2];
   if (!std::isfinite(c.friction) || !std::isfinite(c.bounce) ||
       !std::isfinite(c.normalImpulse) || !std::isfinite(c.frictionForce) ||
@@ -185,7 +208,7 @@ int correctDirectContact(DirectContact& c, DirectContactWorld& world) {
       const float speed=std::sqrt(tangent[1]*tangent[1]+tangent[2]*tangent[2]+tangent[0]*tangent[0]);
       const float inverse=1.0f/speed;
       for(float& v:tangent) v*=inverse;
-      const float mass=effectiveMass(a,b,da,db,ra,rb,tangent);
+      const float mass = effectiveMass(a, b, da, db, ra, rb, tangent, true);
       if (!std::isfinite(mass) || mass<=0) return -1;
       frictionMagnitude=(1.0f/world.step)*(speed/mass);
       const float bound=normalForce*c.friction;
@@ -199,16 +222,16 @@ int correctDirectContact(DirectContact& c, DirectContactWorld& world) {
     }
     if (c.resting) {
       for(unsigned i=0;i<3;++i) { j[i]=normalForce*c.normal[i]; opposite[i]=-j[i]; }
-      if (da) force(a,ra,j);
-      if (db) force(b,rb,opposite);
+      if (da) force(a, forceA, j);
+      if (db) force(b, forceB, opposite);
       c.normalForce+=normalForce;
     } else {
       if (da) impulse(a,ra,j);
       if (db) impulse(b,rb,opposite);
       c.normalImpulse+=jmag;
     }
-    if (da) force(a,ra,inverseForce);
-    if (db) force(b,rb,f);
+    if (da) force(a, forceA, inverseForce);
+    if (db) force(b, forceB, f);
     c.frictionForce+=frictionMagnitude;
     result=limited ? 2 : (jmag!=0 ? 1 : 0);
   }

@@ -2,8 +2,53 @@
 #include <cassert>
 #include <cmath>
 #include <limits>
+#include <bit>
+#include <cstring>
+#include "physics_contact_stock_fixture.hpp"
 using namespace physics;
+static void testStockContactGrouping() {
+  const auto& in = stock_contact_fixture::input;
+  BodyProto proto[3];
+  Body body[3];
+  for (unsigned i = 0; i < 3; ++i) {
+    proto[i].flags = in.proto[i];
+    proto[i].invMass = std::bit_cast<float>(in.mass[i]);
+    body[i].proto = &proto[i];
+    body[i].flags = in.flags[i];
+    body[i].current = in.current[i];
+    static_assert(sizeof body[i].state == sizeof in.states[i]);
+    std::memcpy(body[i].state, in.states[i], sizeof body[i].state);
+    if (in.parent[i] >= 0) body[i].attachment = BodyAttachment{&body[in.parent[i]], RelativeBodyPose({std::bit_cast<float>(in.position[i][0]), std::bit_cast<float>(in.position[i][1]), std::bit_cast<float>(in.position[i][2])}, {0, 0, 0, 1})};
+  }
+  DirectContact c;
+  c.a = &body[in.a];
+  c.b = &body[in.b];
+  c.resting = in.resting != 0;
+  for (unsigned i = 0; i < 3; ++i) {
+    c.pointA[i] = std::bit_cast<float>(in.contact[i]);
+    c.pointB[i] = std::bit_cast<float>(in.contact[i + 3]);
+    c.normal[i] = std::bit_cast<float>(in.contact[i + 6]);
+  }
+  c.separation = std::bit_cast<float>(in.contact[9]);
+  c.friction = std::bit_cast<float>(in.contact[10]);
+  c.bounce = std::bit_cast<float>(in.contact[11]);
+  c.normalImpulse = std::bit_cast<float>(in.contact[12]);
+  c.normalForce = std::bit_cast<float>(in.contact[13]);
+  c.frictionForce = std::bit_cast<float>(in.contact[14]);
+  DirectContactWorld world{in.corrections, std::bit_cast<float>(in.dt)};
+  assert(correctDirectContact(c, world) == static_cast<int>(in.expected_result));
+  assert(world.corrections == in.expected_corrections);
+  for (unsigned bi = 0; bi < 3; ++bi)
+    for (unsigned i = 0; i < 106; ++i) {
+      uint32_t bits;
+      std::memcpy(&bits, reinterpret_cast<const unsigned char*>(body[bi].state) + i * 4, 4);
+      assert(bits == in.expected_states[bi][i]);
+    }
+  const float values[] = {c.pointA[0], c.pointA[1], c.pointA[2], c.pointB[0], c.pointB[1], c.pointB[2], c.normal[0], c.normal[1], c.normal[2], c.separation, c.friction, c.bounce, c.normalImpulse, c.normalForce, c.frictionForce};
+  for (unsigned i = 0; i < 15; ++i) assert(std::bit_cast<uint32_t>(values[i]) == in.expected_contact[i]);
+}
 int main() {
+ testStockContactGrouping();
  BodyProto p, wall; wall.flags=kProtoStatic; Body a,b; a.proto=&p; b.proto=&p;
  DirectContact c{&a,&b,{1,0,0},0}; DirectContactWorld w;
  a.state[1].stepFlags=3; b.state[1].stepFlags=3;

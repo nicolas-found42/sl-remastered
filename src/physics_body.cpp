@@ -21,20 +21,19 @@ Mat34 matrixTranspose(const Mat34& a) {
   return r;
 }
 
-Mat34 matrixMultiply(const Mat34& b_, const Mat34& c_) {
-  // 0054e9c0: this = param_2 * param_3. Sum order follows the decompile.
-  const Mat34& a = b_;
-  const Mat34& b = c_;
+Mat34 matrixMultiply(const Mat34& a, const Mat34& b) {
+  // 0054e9c0: preserve each row's x87 FADD order (0054e9c8..0054ea9f).
+  // The decompile reassociates these sums; cancellation changes inertia/omega.
   Mat34 r{};
-  r[0] = a[2] * b[8] + a[1] * b[4] + a[0] * b[0];
-  r[1] = b[9] * a[2] + b[1] * a[0] + a[1] * b[5];
-  r[2] = b[10] * a[2] + b[2] * a[0] + a[1] * b[6];
-  r[4] = a[4] * b[0] + a[5] * b[4] + a[6] * b[8];
-  r[5] = a[4] * b[1] + a[5] * b[5] + a[6] * b[9];
-  r[6] = a[4] * b[2] + a[5] * b[6] + a[6] * b[10];
-  r[8] = a[9] * b[4] + a[10] * b[8] + a[8] * b[0];
-  r[9] = b[1] * a[8] + b[5] * a[9] + b[9] * a[10];
-  r[10] = b[2] * a[8] + b[6] * a[9] + b[10] * a[10];
+  r[0] = (a[0] * b[0] + a[1] * b[4]) + a[2] * b[8];
+  r[1] = (a[1] * b[5] + a[0] * b[1]) + a[2] * b[9];
+  r[2] = (a[1] * b[6] + a[0] * b[2]) + a[2] * b[10];
+  r[4] = (a[6] * b[8] + a[5] * b[4]) + a[4] * b[0];
+  r[5] = (a[6] * b[9] + a[5] * b[5]) + a[4] * b[1];
+  r[6] = (a[6] * b[10] + a[5] * b[6]) + a[4] * b[2];
+  r[8] = (a[8] * b[0] + a[10] * b[8]) + a[9] * b[4];
+  r[9] = (a[10] * b[9] + a[9] * b[5]) + a[8] * b[1];
+  r[10] = (a[10] * b[10] + a[9] * b[6]) + a[8] * b[2];
   return r;
 }
 
@@ -129,7 +128,8 @@ Quat quatMultiply(const Quat& a, const Quat& b) {
 }
 
 Quat quatNormalize(const Quat& q) {
-  float len = std::sqrt(q[0] * q[0] + q[1] * q[1] + q[2] * q[2] + q[3] * q[3]);
+  // 0054f810 accumulates w², z², y², x² in that order before FSQRT.
+  float len = std::sqrt(q[3] * q[3] + q[2] * q[2] + q[1] * q[1] + q[0] * q[0]);
   if (len == k::zero) return Quat{0.0f, 0.0f, 0.0f, 1.0f};
   const float inv = k::one / len;
   return Quat{inv * q[0], inv * q[1], inv * q[2], inv * q[3]};
@@ -141,9 +141,10 @@ Quat quatInverse(const Quat& q) {
 }
 
 Vec3 matrixTransformRows(const Mat34& m, const Vec3& v) {
-  return Vec3{m[0] * v[0] + m[1] * v[1] + m[2] * v[2],
-              m[5] * v[1] + m[4] * v[0] + m[6] * v[2],
-              m[9] * v[1] + m[8] * v[0] + m[10] * v[2]};
+  // 00436880 (0043688b..004368de): each component has its own FADD order.
+  return Vec3{(m[2] * v[2] + m[1] * v[1]) + m[0] * v[0],
+              (m[6] * v[2] + m[4] * v[0]) + m[5] * v[1],
+              (m[10] * v[2] + m[8] * v[0]) + m[9] * v[1]};
 }
 
 Vec3 transformPoint(const Vec3& pos, const Mat34& rot, const Vec3& v) {

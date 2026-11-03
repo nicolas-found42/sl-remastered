@@ -3,6 +3,7 @@
 // computed in double precision. The collision regression also has a stock
 // executable comparison.
 #include "physics_body.hpp"
+#include "physics_quaternion_stock_fixture.hpp"
 
 #include <cassert>
 #include <cmath>
@@ -435,10 +436,45 @@ static void testCollision() {
   assert(!pairDropped(1.5f, 1.0f, 1.0f));
 }
 
+static void testStockMatrixGrouping() {
+  // Original 0054e9c0 / 00436880, x87 CW 0x007f. The two cancellation
+  // inputs distinguish the instruction grouping from the decompile's sums.
+  // Retained original-code outputs: object-sleep-diagnosis-20261102/
+  // prediction/matrix-original/original.jsonl. The mapped game entry never ran.
+  constexpr float large = 0x1p25f;
+  const Mat34 a{1, 1, 1, 0, 1, 1, 1, 0, 1, 1, 1, 0};
+  const Mat34 expected[2] = {
+      {1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+      {0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0}};
+  const Vec3 expectedVector[2] = {{0, 0, 0}, {0, 1, 1}};
+  for (unsigned fixture = 0; fixture < 2; ++fixture) {
+    Mat34 b{}, m{};
+    for (unsigned column = 0; column < 3; ++column) {
+      b[column] = large;
+      b[4 + column] = fixture ? 1.0f : -large;
+      b[8 + column] = fixture ? -large : 1.0f;
+    }
+    for (unsigned row = 0; row < 3; ++row) {
+      m[row * 4] = large;
+      m[row * 4 + 1] = fixture ? 1.0f : -large;
+      m[row * 4 + 2] = fixture ? -large : 1.0f;
+    }
+    const auto product = matrixMultiply(a, b);
+    const auto transformed = matrixTransformRows(m, {1, 1, 1});
+    for (unsigned row = 0; row < 3; ++row) {
+      for (unsigned column = 0; column < 3; ++column)
+        assert(bits(product[row * 4 + column]) == bits(expected[fixture][row * 4 + column]));
+      assert(bits(transformed[row]) == bits(expectedVector[fixture][row]));
+    }
+  }
+}
+
 int main() {
   testConstants();
   testPrototypes();
   testMath();
+  testStockMatrixGrouping();
+  stockQuaternion83::check();
   testOrientedCreation();
   testForces();
   testFreeFall();

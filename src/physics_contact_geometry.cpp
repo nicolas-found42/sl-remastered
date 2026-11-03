@@ -109,11 +109,13 @@ State sampleInternal(const Body &b, float t) {
   dot = std::fabs(dot);
   float a = 1 - t, z = t;
   if (1 - dot > 0.0001) {
-    float product = (1 + dot) * (1 - dot);
-    float root = std::sqrt(product);
-    float angle = static_cast<float>(
-        std::atan2(static_cast<double>(root), static_cast<double>(dot)));
-    float divisor = static_cast<float>(std::sin(static_cast<double>(angle)));
+    // 00550270 stores the acos result with FST (not FSTP) at 0055030d:
+    // the divisor's FSIN still consumes the unrounded register value. Only
+    // the two numerator angles reload the float copy. Rounding before that
+    // first sine changes the sampled contact point on rotating bodies.
+    const double fullAngle = std::acos(static_cast<double>(dot));
+    const float angle = static_cast<float>(fullAngle);
+    const float divisor = static_cast<float>(std::sin(fullAngle));
     float left = (1 - t) * angle, right = angle * t;
     a = static_cast<float>(std::sin(static_cast<double>(left)) / divisor);
     z = static_cast<float>(std::sin(static_cast<double>(right)) / divisor);
