@@ -4,8 +4,6 @@ build/
 local/
 /.scratch/
 /.cmux/
-/docs/
-/experiments/
 /.claude/
 /.agents/
 .DS_Store
