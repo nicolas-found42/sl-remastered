@@ -203,10 +203,10 @@ GamePhysicsHit queryGamePhysicsFace(const GamePhysicsGeometry &geometry,
   return result;
 }
 
-ParentFaceMask queryParentFace(const GamePhysicsGeometry &geometry,
-                               size_t faceIndex, const physics::Body &parent,
-                               const ResourceBounds &bounds,
-                               bool inheritedRejected) {
+static ParentFaceMask queryBodyFaceImpl(const GamePhysicsGeometry& geometry,
+                                        size_t faceIndex, const physics::Body& parent,
+                                        const ResourceBounds& bounds,
+                                        bool inheritedRejected, bool requireChildren) {
   using physics::Vec3;
   if (inheritedRejected)
     return ParentFaceMask::Rejected;
@@ -215,12 +215,18 @@ ParentFaceMask queryParentFace(const GamePhysicsGeometry &geometry,
       (parent.attachment && !parent.attachment->parent) ||
       (parent.flags & (parent.attachment ? 0x20020u : 0x24u)) ||
       (parent.proto->flags & (parent.attachment ? 0x20u : 0x24u)) ||
-      !(parent.flags & physics::kBodyHasChildren) || bounds.mode != 1 ||
+      (requireChildren && !(parent.flags & physics::kBodyHasChildren)) || bounds.mode != 1 ||
       faceIndex >= geometry.triangles.size())
     return ParentFaceMask::Unsupported;
   const auto &shape = parent.proto->shape;
-  if (shape.type != physics::ShapeType::Box &&
+  if (requireChildren && shape.type != physics::ShapeType::Box &&
       shape.type != physics::ShapeType::Mesh)
+    return ParentFaceMask::Unsupported;
+  if ((parent.flags & 0x800u) || shape.type < physics::ShapeType::Sphere ||
+      shape.type > physics::ShapeType::Mesh ||
+      ((shape.type == physics::ShapeType::CylinderY ||
+        shape.type == physics::ShapeType::CylinderZ) &&
+       (parent.flags & 0x40u) && !(parent.flags & 0x1000u)))
     return ParentFaceMask::Unsupported;
   const auto &current = parent.state[parent.current];
   const auto &predicted = parent.state[parent.current ^ 1];
@@ -278,6 +284,10 @@ ParentFaceMask queryParentFace(const GamePhysicsGeometry &geometry,
     return ParentFaceMask::Rejected;
   const float radiusSquared = shape.boundRadius * shape.boundRadius;
   for (size_t i = 0; i < 3; ++i) {
+    // 004a0030 checks the first and last edge planes. The middle edge's
+    // separating plane is not part of this coarse sphere mask.
+    if (i == 1)
+      continue;
     const auto edge = sub(vertices[(i + 1) % 3], vertices[i]);
     const auto outward = cross(edge, normal);
     const float a = dot(sub(predicted.pos, vertices[i]), outward);
@@ -286,8 +296,11 @@ ParentFaceMask queryParentFace(const GamePhysicsGeometry &geometry,
     if (a > 0 && b > 0 && limit < a * a && limit < b * b)
       return ParentFaceMask::Rejected;
   }
+  if (shape.type == physics::ShapeType::Sphere)
+    return ParentFaceMask::Accepted;
   Vec3 center{}, half{};
-  if (shape.type == physics::ShapeType::Mesh) {
+  if (shape.type == physics::ShapeType::Mesh &&
+      (parent.flags & physics::kBodyHasChildren)) {
     if (!shape.core || shape.core->vertices.empty())
       return ParentFaceMask::Unsupported;
     Vec3 low = shape.core->vertices.front().position, high = low;
@@ -337,13 +350,30 @@ ParentFaceMask queryParentFace(const GamePhysicsGeometry &geometry,
   if (projected < std::fabs(dot(local[0], localNormal)))
     return ParentFaceMask::Rejected;
   for (size_t i = 0; i < 3; ++i) {
-    const float low = std::min(local[0][i], std::min(local[1][i], local[2][i]));
-    const float high =
-        std::max(local[0][i], std::max(local[1][i], local[2][i]));
+    // 004a05f0 stores the first two vertices' midpoint and half range before
+    // including the third. Direct min/max can differ at a rounded boundary.
+    const float midpoint = (local[0][i] + local[1][i]) * 0.5f;
+    const float radius = std::fabs(local[0][i] - local[1][i]) * 0.5f;
+    const float low = std::min(midpoint - radius, local[2][i]);
+    const float high = std::max(midpoint + radius, local[2][i]);
     if (half[i] < low || high < -half[i])
       return ParentFaceMask::Rejected;
   }
   return ParentFaceMask::Accepted;
+}
+
+ParentFaceMask queryParentFace(const GamePhysicsGeometry& geometry,
+                               size_t faceIndex, const physics::Body& parent,
+                               const ResourceBounds& bounds,
+                               bool inheritedRejected) {
+  return queryBodyFaceImpl(geometry, faceIndex, parent, bounds,
+                           inheritedRejected, true);
+}
+
+ParentFaceMask queryBodyFace(const GamePhysicsGeometry& geometry,
+                             size_t faceIndex, const physics::Body& body,
+                             const ResourceBounds& bounds) {
+  return queryBodyFaceImpl(geometry, faceIndex, body, bounds, false, false);
 }
 
 SectorNeighborTransition updateSectorNeighbor(bool linked, bool sameSector,

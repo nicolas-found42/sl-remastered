@@ -46,6 +46,10 @@ ParentFaceMask queryParentFace(const GamePhysicsGeometry &geometry, size_t face,
                                const physics::Body &parent,
                                const ResourceBounds &nodeBounds,
                                bool inheritedRejected);
+// The same 004a0aa0 filter at a true leaf, before 0049f4d0 creates candidates.
+ParentFaceMask queryBodyFace(const GamePhysicsGeometry& geometry, size_t face,
+                             const physics::Body& body,
+                             const ResourceBounds& nodeBounds);
 
 // 004b3850 directed neighbor membership transition for two extant records.
 // Both node bounds and their sector identity are supplied by the manager.
