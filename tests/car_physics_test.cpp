@@ -2,6 +2,7 @@
 #include "game_physics_geometry.hpp"
 #include "physics_polyhedron.hpp"
 #include "world_model.hpp"
+#include <array>
 #include <cassert>
 #include <cmath>
 #include <iostream>
@@ -107,10 +108,36 @@ int main() {
   assert(attachPartPhysics(*nested, partSlot, *installed, targetSlot));
   assert(nested->root->attachment->parent == installed->root.get());
   auto nestedObservation = car->bodyObservations.at(nested->root.get());
-  detachPartPhysics(*installed);
+  const auto nestedRelative = nested->root->attachment->relative;
+  const std::array<physics::State, 2> nestedStates{
+      nested->root->state[0], nested->root->state[1]};
+  // Newer00501d00 unlinks the external root, preserving its mounted subtree.
+  // The former fixture incorrectly expected this to dismantle the children.
+  assert(detachPartPhysics(*installed, &error) && error.empty());
+  assert(!installed->root->attachment && !installed->installedParent);
+  assert(installed->installedChildren.size() == 1 &&
+         installed->installedChildren.front() == nested.get());
+  assert(nested->installedParent == installed.get() &&
+         nested->root->attachment &&
+         nested->root->attachment->parent == installed->root.get());
+  assert(nested->root->attachment->relative.position == nestedRelative.position);
+  assert(nested->root->attachment->relative.rotation() == nestedRelative.rotation());
+  for (size_t i = 0; i < nestedStates.size(); ++i) {
+    assert(nested->root->state[i].pos == nestedStates[i].pos);
+    assert(nested->root->state[i].rot == nestedStates[i].rot);
+    assert(nested->root->state[i].quat == nestedStates[i].quat);
+  }
+  assert(!installed->indexedCar && !nested->indexedCar &&
+         !nestedObservation->body &&
+         !car->bodyObservations.count(nested->root.get()));
+  assert(attachPartPhysics(*installed, partSlot, *car->part, targetSlot));
+  assert(installed->indexedCar == car.get() && nested->indexedCar == car.get());
+  nestedObservation = car->bodyObservations.at(nested->root.get());
+  assert(nestedObservation->body == nested->root.get());
+  // Explicit child removal still detaches it and invalidates its observation.
+  assert(detachPartPhysics(*nested, &error) && error.empty());
   assert(!nested->root->attachment && !nested->installedParent &&
          !nestedObservation->body);
-  assert(attachPartPhysics(*installed, partSlot, *car->part, targetSlot));
   CarConfig clickOnly;
   CarGeometryPrototype click;
   auto clickProto = physics::createBodyProto(0, 1, 0.5f, 0, 0, nullptr, error);
