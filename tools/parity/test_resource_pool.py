@@ -1,5 +1,6 @@
 import importlib.util
 import fcntl
+import hashlib
 import json
 import io
 import os
@@ -994,6 +995,34 @@ class StockIntentAdmissionTest(unittest.TestCase):
                     with self.assertRaises(pool_module.StockOrphanPending):
                         with pool.acquire({'cpu': 1}, .2):self.fail('corrupt Stock state admitted work')
 
+    def test_protocol_two_wire_integer_fields_reject_bool_and_float_equivalence(self):
+        for mutation in ('capacity_bool','capacity_float','pool_identity','admission_identity',
+                         'layout_identity','record_identity','owner_identity','permit_identity'):
+            with self.subTest(mutation=mutation):
+                pool=pool_module.ResourcePool(self.root/mutation,self.capacity,protocol=2)
+                with pool.acquire({'cpu':1,'stock':1},.2) as lease:
+                    intent=lease.begin_stock_creation(self.specification())
+                    config_path=pool.directory/'capacity.json'
+                    config=json.loads(config_path.read_text())
+                    if mutation.startswith('capacity_'):
+                        config['capacity']['stock']=True if mutation=='capacity_bool' else 1.0
+                    elif mutation in ('pool_identity','admission_identity'):
+                        config[mutation]=[float(n) for n in config[mutation]]
+                    elif mutation=='layout_identity':
+                        config['layout']['permits-v2']=[float(n) for n in config['layout']['permits-v2']]
+                    else:
+                        path=pool.directory/'stock-intents-v2'/(intent.identifier+'.json')
+                        record=json.loads(path.read_text())
+                        if mutation=='permit_identity':record['permits'][0]['identity']=[float(n) for n in record['permits'][0]['identity']]
+                        else:record[mutation]=[float(n) for n in record[mutation]]
+                        path.write_text(json.dumps(record)+'\n')
+                        # Keep the byte binding valid to isolate typed schema
+                        # refusal from the independent corruption/hash guard.
+                        config['intents'][intent.identifier]['sha256']=hashlib.sha256(path.read_bytes()).hexdigest()
+                    config_path.write_text(json.dumps(config)+'\n')
+                    with self.assertRaises(pool_module.StockOrphanPending):
+                        with pool.acquire({'cpu':1},.2):self.fail('untyped wire integer admitted work')
+
     def test_registration_durability_failure_leaves_unresolved_barrier(self):
         pool = pool_module.ResourcePool(self.root / 'pool', self.capacity, protocol=2)
         with pool.acquire({'stock': 1}, .2) as lease:
@@ -1090,9 +1119,7 @@ with m.ResourcePool(sys.argv[2],json.loads(sys.argv[3]),protocol=2).acquire({'cp
         _,error=process.communicate(timeout=3)
         self.assertEqual(process.returncode,0,error.decode());self.assertTrue(sentinel.exists())
 
-    def test_creation_intent_survives_all_holders_and_blocks_new_command(self):
-        directory = self.root / 'pool'
-        pool = pool_module.ResourcePool(directory, self.capacity, protocol=2)
+    def stock_intent_holder(self, directory):
         ready = self.root / 'holders.json'
         script = '''import importlib.util,json,os,sys,time
 from pathlib import Path
@@ -1113,13 +1140,19 @@ with p.acquire({'cpu':1,'stock':1},2) as lease:
         def cleanup():
             if holder.returncode is None:
                 pool_module._signal_owned_group(holder, signal.SIGKILL, {})
-            holder.communicate(timeout=3)
+            return holder.communicate(timeout=3)
         self.addCleanup(cleanup)
         deadline = time.monotonic()+3
         while not ready.exists():
-            if holder.poll() is not None:self.fail(holder.communicate()[1].decode())
+            if pool_module._root_exited_unreaped(holder):self.fail(cleanup()[1].decode())
             self.assertLess(time.monotonic(), deadline)
             time.sleep(.01)
+        return holder
+
+    def test_creation_intent_survives_all_holders_and_blocks_new_command(self):
+        directory = self.root / 'pool'
+        pool_module.ResourcePool(directory, self.capacity, protocol=2)
+        holder=self.stock_intent_holder(directory)
         pool_module._signal_owned_group(holder, signal.SIGKILL, {})
         holder.communicate(timeout=3)
         # This is an independent kernel-lock observation, not a pool verdict.
@@ -1144,6 +1177,63 @@ except m.StockOrphanPending:sys.exit(7)
                                  json.dumps(self.capacity), str(sentinel)], capture_output=True, timeout=3)
         self.assertEqual(result.returncode, 7, result.stderr.decode()+f' sentinel_exists={sentinel.exists()}')
         self.assertFalse(sentinel.exists())
+
+    def test_holder_death_after_healthy_validation_cannot_reuse_committed_stock_slot(self):
+        directory=self.root/'pool'
+        pool_module.ResourcePool(directory,self.capacity,protocol=2)
+        holder=self.stock_intent_holder(directory)
+        validated, release, sentinel, slot_acquired=(self.root/name for name in
+                                                   ('validated','continue','incorrectly-admitted','reserved-slot-acquired'))
+        # The request runs in another real process. Its test-only hook pauses
+        # immediately after successful validation, under the admission mutex.
+        script='''import importlib.util,json,os,sys,time
+from pathlib import Path
+s=importlib.util.spec_from_file_location('pool',sys.argv[1]);m=importlib.util.module_from_spec(s);s.loader.exec_module(m)
+p=m.ResourcePool(sys.argv[2],json.loads(sys.argv[3]),protocol=2)
+stock=os.stat(Path(sys.argv[2])/'permits-v2/stock-0.lock')
+stock_identity=(stock.st_dev,stock.st_ino)
+real_flock=m.fcntl.flock
+def observed_flock(fd,mode):
+ result=real_flock(fd,mode)
+ info=os.fstat(fd)
+ if Path(sys.argv[5]).exists() and (info.st_dev,info.st_ino)==stock_identity:Path(sys.argv[7]).touch()
+ return result
+m.fcntl.flock=observed_flock
+original=p._check_stock_intents
+once=[]
+def after_validation(deadline):
+ result=original(deadline)
+ if not once:
+  once.append(True);Path(sys.argv[4]).touch()
+  while not Path(sys.argv[5]).exists():
+   if time.monotonic()>=deadline:raise TimeoutError('test validation handshake deadline')
+   time.sleep(.005)
+ return result
+p._check_stock_intents=after_validation
+try:
+ with p.acquire({'stock':1},2):Path(sys.argv[6]).touch()
+except m.StockOrphanPending:sys.exit(7)
+'''
+        request=subprocess.Popen([sys.executable,'-I','-c',script,str(TOOL),str(directory),
+                                  json.dumps(self.capacity),str(validated),str(release),str(sentinel),str(slot_acquired)],
+                                 stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.PIPE)
+        def cleanup():
+            if request.poll() is None:request.kill()
+            request.communicate(timeout=3)
+        self.addCleanup(cleanup)
+        deadline=time.monotonic()+2
+        while not validated.exists():
+            if request.poll() is not None:self.fail(request.communicate()[1].decode())
+            self.assertLess(time.monotonic(),deadline);time.sleep(.005)
+        pool_module._signal_owned_group(holder,signal.SIGKILL,{})
+        holder.communicate(timeout=3)
+        with (directory/'permits-v2/stock-0.lock').open('r+b') as stream:
+            fcntl.flock(stream.fileno(),fcntl.LOCK_EX | fcntl.LOCK_NB)
+        release.touch()
+        _,error=request.communicate(timeout=3)
+        self.assertEqual(request.returncode,7,error.decode()+f' sentinel_exists={sentinel.exists()}')
+        self.assertFalse(sentinel.exists())
+        self.assertFalse(slot_acquired.exists(),'committed Stock slot was temporarily reacquired before final recheck')
 
 
 if __name__ == '__main__':

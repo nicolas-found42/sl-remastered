@@ -81,6 +81,10 @@ Admission rereads committed state under the existing mutex. Healthy intents
 retain their actual permits and allow remaining capacity to run. Unresolved
 holder death, lost permits, missing/corrupt records, replaced identities or
 partial commits refuse new admission, even after all kernel locks disappear.
+Committed permit names also remain logically reserved throughout admission;
+holder death between validation and acquisition cannot recycle those slots.
+The final liveness check shares the original admission deadline. Protocol-2
+wire capacities and identity words require exact integer types.
 There is deliberately no retirement, reset or force-clear API yet. An empty
 Docker lookup cannot resolve an uncertain asynchronous creation.
 

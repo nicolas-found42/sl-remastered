@@ -57,6 +57,21 @@ def _stock_identity(info):
     return [info.st_dev, info.st_ino]
 
 
+def _stock_identity_valid(value):
+    return (type(value) is list and len(value) == 2
+            and all(type(word) is int and word >= 0 for word in value))
+
+
+def _stock_identity_matches(value, info):
+    return _stock_identity_valid(value) and value == _stock_identity(info)
+
+
+def _stock_capacity_matches(value, expected):
+    return (type(value) is dict and bool(value)
+            and all(type(key) is str and key.isidentifier() and type(count) is int and count > 0
+                    for key, count in value.items()) and value == expected)
+
+
 def _stock_regular(path, descriptor):
     info = os.fstat(descriptor)
     if (not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or info.st_uid != os.getuid()
@@ -725,7 +740,7 @@ class ResourcePool:
                 before = _stock_identity(os.fstat(gate))
                 if before != gate_identity:raise ValueError('admission inode changed before migration')
                 configured, _, _ = _stock_read(supplied / 'capacity.json')
-                if configured != pool.capacity:raise ValueError('migration capacities changed')
+                if not _stock_capacity_matches(configured, pool.capacity):raise ValueError('migration capacities changed')
                 slots = set(pool._stock_slots())
                 old = []
                 for path in supplied.iterdir():
@@ -751,9 +766,9 @@ class ResourcePool:
         names = ('permits-v2', 'stock-intents-v2', 'legacy-v1', *self._stock_slots())
         if (type(value) is not dict or set(value) != {'protocol', 'capacity', 'pool_identity', 'layout', 'admission_identity', 'intents'}
                 or type(value['protocol']) is not int or value['protocol'] != 2
-                or value['capacity'] != self.capacity
-                or value['pool_identity'] != _stock_identity(self.directory.stat())
-                or value['admission_identity'] != _stock_identity((self.directory / 'admission.lock').lstat())
+                or not _stock_capacity_matches(value['capacity'], self.capacity)
+                or not _stock_identity_matches(value['pool_identity'], self.directory.stat())
+                or not _stock_identity_matches(value['admission_identity'], (self.directory / 'admission.lock').lstat())
                 or type(value['layout']) is not dict or set(value['layout']) != set(names)
                 or type(value['intents']) is not dict or len(value['intents']) > 128
                 or (self.directory / 'protocol-v2.pending').exists()
@@ -770,12 +785,11 @@ class ResourcePool:
             info = (self.directory / name).lstat()
             if (not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid()
                     or stat.S_IMODE(info.st_mode) != 0o700
-                    or value['layout'][name] != _stock_identity(info)):
+                    or not _stock_identity_matches(value['layout'][name], info)):
                 raise StockOrphanPending('Stock pool layout replaced: '+name)
         for identifier, binding in value['intents'].items():
             if (not re.fullmatch(r'[0-9a-f]{32}', identifier) or type(binding) is not dict
-                    or set(binding) != {'identity', 'sha256'} or type(binding['identity']) is not list
-                    or len(binding['identity']) != 2 or any(type(n) is not int or n < 0 for n in binding['identity'])
+                    or set(binding) != {'identity', 'sha256'} or not _stock_identity_valid(binding['identity'])
                     or type(binding['sha256']) is not str or not re.fullmatch(r'[0-9a-f]{64}', binding['sha256'])):
                 raise StockOrphanPending('invalid committed Stock intent binding')
         return value
@@ -790,6 +804,7 @@ class ResourcePool:
             if time.monotonic() >= deadline:raise TimeoutError('Stock intent validation deadline')
             paths.append(path)
         records = envelope['intents']
+        reserved = set()
         if {p.name for p in paths} != {name+suffix for name in records for suffix in ('.json', '.owner')}:
             raise StockOrphanPending('unknown/uncommitted Stock creation state')
         for identifier in sorted(records):
@@ -800,7 +815,7 @@ class ResourcePool:
                 if (type(row) is not dict or set(row) != expected or type(row['schema']) is not int
                         or row['schema'] != 1 or row['kind'] != 'stock_creation_intent'
                         or row['identifier'] != identifier or row['state'] != 'create_may_be_pending'
-                        or row['record_identity'] != _stock_identity(info)
+                        or not _stock_identity_matches(row['record_identity'], info)
                         or envelope['intents'][identifier] != {'identity': _stock_identity(info), 'sha256': digest}):
                     raise StockOrphanPending('malformed/replaced Stock creation record')
                 self._validate_stock_spec(row['spec'])
@@ -808,7 +823,7 @@ class ResourcePool:
                 owner = os.open(owner_path, os.O_RDWR | os.O_NOFOLLOW)
                 try:
                     owner_info = _stock_regular(owner_path, owner)
-                    if owner_info.st_size or row['owner_identity'] != _stock_identity(owner_info):
+                    if owner_info.st_size or not _stock_identity_matches(row['owner_identity'], owner_info):
                         raise StockOrphanPending('Stock owner lock replaced')
                     try:fcntl.flock(owner, fcntl.LOCK_EX | fcntl.LOCK_NB)
                     except BlockingIOError:pass
@@ -821,10 +836,12 @@ class ResourcePool:
                     for permit in permits:
                         if time.monotonic() >= deadline:raise TimeoutError('Stock intent admission deadline')
                         if permit['name'] not in self._stock_slots():raise StockOrphanPending('unknown Stock permit')
+                        if permit['name'] in reserved:raise StockOrphanPending('overlapping Stock intent permits')
+                        reserved.add(permit['name'])
                         path = self.directory / 'permits-v2' / permit['name']
                         fd = os.open(path, os.O_RDWR | os.O_NOFOLLOW)
                         try:
-                            if permit['identity'] != _stock_identity(_stock_regular(path, fd)):
+                            if not _stock_identity_matches(permit['identity'], _stock_regular(path, fd)):
                                 raise StockOrphanPending('Stock permit identity replaced')
                             try:fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
                             except BlockingIOError:pass
@@ -837,6 +854,7 @@ class ResourcePool:
         if time.monotonic() >= deadline:raise TimeoutError('Stock intent admission deadline')
         if any(getattr(before, key) != getattr(after, key) for key in ('st_dev', 'st_ino', 'st_mtime_ns', 'st_ctime_ns')):
             raise StockOrphanPending('Stock intent namespace changed reading')
+        return reserved
 
     @staticmethod
     def _validate_stock_spec(spec):
@@ -949,8 +967,9 @@ class ResourcePool:
         deadline = time.monotonic()+timeout
         try:
             with self._gate(timeout):
+                reserved = set()
                 if self.protocol == 2:
-                    self._check_stock_intents(deadline)
+                    reserved = self._check_stock_intents(deadline)
                 elif (self.directory / 'protocol-v2.pending').exists():
                     raise ValueError('uncommitted Stock pool migration')
                 if self._first_waiter(waiter) != waiter:
@@ -960,6 +979,10 @@ class ResourcePool:
                     for slot in range(self.capacity[resource]):
                         if acquired == wanted:
                             break
+                        # Committed external work owns these logical slots even
+                        # if every holder dies after validation and frees flock.
+                        if f'{resource}-{slot}.lock' in reserved:
+                            continue
                         parent = self.directory / 'permits-v2' if self.protocol == 2 else self.directory
                         path = parent / f'{resource}-{slot}.lock'
                         descriptor = _open(path)
@@ -976,6 +999,8 @@ class ResourcePool:
                         acquired += 1
                     if acquired != wanted:
                         return None
+                if self.protocol == 2:
+                    self._check_stock_intents(deadline)
                 waiter.unlink()
             result, held = held, []
             return result

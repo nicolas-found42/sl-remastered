@@ -64,7 +64,10 @@ external creation can be authorized. Its committed envelope binds intent IDs,
 record hashes, owner locks and reserved permit identities. Every admission
 rereads the registry under the mutex; unresolved holder death or corrupt/partial
 state blocks new work even if all permit FDs have closed. Healthy intents allow
-remaining capacity to be used. There is no retirement/force-clear operation and
+remaining capacity to be used. Their committed slot names cannot be reallocated
+even if a holder dies after validation; the final recheck uses the same admission
+deadline. Wire capacities/identity words reject bool/float aliases of integers.
+There is no retirement/force-clear operation and
 no Stock caller enables this seam yet. The live default remains protocol 1,
 with its existing orphan limitations. Reviewed idle migration preserves capacity
 and the admission inode, archives legacy lock inodes, installs versioned permits
