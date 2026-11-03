@@ -68,6 +68,12 @@ NATIVE_INSTALLATION = {
     'code_mutations': [{'rva': 0x7bfeb, 'bytes': 5}],
 }
 NATIVE_FIELDS = set('event native ordinal phase thread lane lane_read role caller last_error fxsave_hex'.split())
+STORED_NATIVE_INSTALLATION = {
+    **NATIVE_INSTALLATION,
+    'native_boundary': 'after_original_native_bridge_fstp32',
+    'code_mutations': [{'rva': 0x20094, 'bytes': 7}],
+}
+STORED_NATIVE_FIELDS = NATIVE_FIELDS | {'callee', 'value_f32_bits'}
 
 
 def require(condition, reason):
@@ -77,7 +83,7 @@ def require(condition, reason):
 
 def phase_timeline(events, final, native_returns=()):
     count = len(events)
-    require(final.get("format_version") in (3, 4, 5, 8), "phase order requires format 3, 4, 5 or 8")
+    require(final.get("format_version") in (3, 4, 5, 8, 9), "phase order requires format 3, 4, 5, 8 or 9")
     phases = final.get("phases")
     require(type(phases) is int and phases == 2 * count + len(native_returns) and 0 < phases <= 0x7fffffff,
             "incomplete/exhausted phase count")
@@ -219,7 +225,7 @@ def compile_tape(path, max_bytes=MAX_BYTES, max_records=MAX_RECORDS):
 def compile_rows(rows, source_digest):
     require(all(type(row) is dict for row in rows), "record must be a JSON object")
     versions = {row.get("format_version") for row in rows if row.get("event") == "status"}
-    require(len(versions) == 1 and next(iter(versions)) in (2, 3, 4, 5, 8), "unsupported/mixed capture versions")
+    require(len(versions) == 1 and next(iter(versions)) in (2, 3, 4, 5, 8, 9), "unsupported/mixed capture versions")
     version = next(iter(versions))
     call_fields = FIELDS | ({"entry_phase", "return_phase"} if version >= 3 else set())
     rng_fields = call_fields | RNG_FIELDS
@@ -236,12 +242,13 @@ def compile_rows(rows, source_digest):
         kind = row.get("event")
         last_was_status = kind == "status"
         if kind == 'installation':
-            require(version in (4, 5, 8) and row is rows[0] and installation is None, 'unexpected/duplicate installation')
+            require(version in (4, 5, 8, 9) and row is rows[0] and installation is None, 'unexpected/duplicate installation')
             require(row == ({'event': 'installation', 'boundary': 'dll_process_attach_main_iat',
                              'identity': 'late_full_file_sha256_verified',
                              'initial_observations': 'not_restorable_checkpoint',
                              'file_sha256': STOCK_SHA256, 'scope': 'stock_main_image_api_interval'}
-                            if version == 4 else (RNG_INSTALLATION if version == 5 else NATIVE_INSTALLATION)),
+                            if version == 4 else (RNG_INSTALLATION if version == 5 else
+                                                 (NATIVE_INSTALLATION if version == 8 else STORED_NATIVE_INSTALLATION))),
                     'unsupported/unverified early installation')
             installation = row
         elif kind == "initial_global":
@@ -291,24 +298,32 @@ def compile_rows(rows, source_digest):
             check_rng(row, rng_blocks)
             events.append(row)
         elif kind == 'native_clock_return':
-            require(version == 8 and set(row) == NATIVE_FIELDS and base is not None,
+            native_fields = STORED_NATIVE_FIELDS if version == 9 else NATIVE_FIELDS
+            require(version in (8, 9) and set(row) == native_fields and base is not None,
                     'unknown/missing Native return fields')
             require(row['native'] == 'java.lang.System.currentTime()F' and row['role'] == 'unresolved',
                     'unsupported Native/role')
-            for key in NATIVE_FIELDS - {'event', 'native', 'role', 'fxsave_hex'}:
+            for key in native_fields - {'event', 'native', 'role', 'fxsave_hex'}:
                 uint(row[key])
             raw = row['fxsave_hex']
             require(type(raw) is str and len(raw) == 1024 and all(c in '0123456789abcdef' for c in raw),
                     'invalid FXSAVE return bytes')
-            fx = bytes.fromhex(raw)
-            # FXSAVE FTW identifies physical registers, while ST0 occupies the
-            # first 16-byte logical slot. Keep all raw bytes; do not round to F32.
-            top = (int.from_bytes(fx[2:4], 'little') >> 11) & 7
-            require(fx[4] & (1 << top), 'Native return has empty ST0')
+            if version == 8:
+                fx = bytes.fromhex(raw)
+                # Historical format8 requires architectural FXSAVE. Actual
+                # backend snapshots that fail this remain refused, not decoded
+                # as invented80-bit values. Format9 observes the original store.
+                top = (int.from_bytes(fx[2:4], 'little') >> 11) & 7
+                require(fx[4] & (1 << top), 'Native return has empty ST0')
+            else:
+                require(row['caller'] == base + 0x20090 and row['callee'] == base + 0x7bfe0,
+                        'wrong original Native Float32 store/callee binding')
+                require(row['value_f32_bits'] & 0x7f800000 != 0x7f800000,
+                        'nonfinite actual clock result is an unsupported observation')
             require(base <= row['caller'] < base + 0x3c0000, 'Native caller outside pinned image')
             native_returns.append(row)
         elif kind == 'native_clock_status':
-            require(version == 8 and set(row) == {'event', 'returns', 'phase_source', 'scope'} and
+            require(version in (8, 9) and set(row) == {'event', 'returns', 'phase_source', 'scope'} and
                     row['phase_source'] == 'shared_next_phase' and row['scope'] == 'return_only_not_replay',
                     'unsupported Native status')
             uint(row['returns']); native_statuses.append(row)
@@ -323,7 +338,7 @@ def compile_rows(rows, source_digest):
     require(last_was_status and statuses and set(initial) == set(INITIAL), "incomplete envelope")
     require(version < 4 or installation is not None, 'missing early installation provenance')
     final = statuses[-1]
-    if version == 8:
+    if version in (8, 9):
         native_returns.sort(key=lambda event: event['ordinal'])
         require(native_returns and native_statuses and len(native_statuses) == len(statuses),
                 'missing Native returns/status')
@@ -342,7 +357,7 @@ def compile_rows(rows, source_digest):
         require(rng_events, "format 5 declares RNG code mutations but recorded no RNG call")
         check_rng_chain(rng_events)
     lanes, threads, reads = {}, {}, collections.Counter()
-    if version == 8:
+    if version in (8, 9):
         observations = [(e['entry_phase'], e) for e in events] + [(e['phase'], e) for e in native_returns]
         for _, e in sorted(observations, key=lambda item: item[0]):
             lane, thread = e['lane'], e['thread']
@@ -357,7 +372,7 @@ def compile_rows(rows, source_digest):
         lane, thread = e["lane"], e["thread"]
         require(lane < 128 and thread != 0, "invalid lane/thread")
         require(lanes.setdefault(lane, thread) == thread and threads.setdefault(thread, lane) == lane, "lane/thread identity changed")
-        if version != 8:
+        if version not in (8, 9):
             reads[lane] += 1
             require(e["lane_read"] == reads[lane], "per-lane entry order mismatch")
         # Hooks are not themselves reentrant in this experiment. A same-thread
@@ -392,10 +407,11 @@ def compile_rows(rows, source_digest):
             result["rng_calls"] = sum(1 for e in events if e["event"] == "rng_return")
             result["rng_scope"] = "guarded CRT srand/rand tails after the original TLS getter; raw diagnostics, not a replay"
         result["phase_order"] = phase_timeline(events, final, native_returns)
-        if version == 8:
-            result['format'] = 'stock-api-native-return-interval-offline/1'
+        if version in (8, 9):
+            result['format'] = 'stock-api-native-return-interval-offline/' + ('2' if version == 9 else '1')
             result['native_returns'] = native_returns
-            result['scope'] = 'observed APIs plus return-only currentTime FXSAVE; no process replay'
+            result['scope'] = ('observed APIs plus original stored currentTime Float32; opaque backend FX; no process replay'
+                               if version == 9 else 'observed APIs plus return-only currentTime FXSAVE; no process replay')
     if installation is not None:
         result['installation'] = installation
     return result

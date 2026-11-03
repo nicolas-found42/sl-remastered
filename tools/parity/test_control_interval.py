@@ -114,6 +114,50 @@ class IntervalTest(unittest.TestCase):
         self.assertFalse(compared['offline_match'])
         self.assertEqual(compared['first_divergence']['path'], '$.native_returns[0].fxsave_hex')
 
+    def stored_native_fixture(self):
+        rows = self.native_fixture()
+        rows[0] = copy.deepcopy(interval.STORED_NATIVE_INSTALLATION)
+        rows[-1]['format_version'] = 9
+        rows[-3].update(caller=0x420090, callee=0x47bfe0, value_f32_bits=0x3f800000,
+                        fxsave_hex='00' * 512)
+        return rows
+
+    def test_post_original_store_reads_consumed_float32_and_leaves_backend_fx_opaque(self):
+        compiled = interval.compile_tape(self.write(self.stored_native_fixture()))
+        self.assertEqual(compiled['format'], 'stock-api-native-return-interval-offline/2')
+        self.assertEqual(compiled['native_returns'][0]['value_f32_bits'], 0x3f800000)
+        self.assertEqual(compiled['native_returns'][0]['fxsave_hex'], '00' * 512)
+        self.assertFalse(compiled['process_replay_qualified'])
+        legacy = self.native_fixture()
+        legacy[-3]['fxsave_hex'] = '00' * 512
+        with self.assertRaisesRegex(ValueError, 'empty ST0'):
+            interval.compile_tape(self.write(legacy))
+
+    def test_stored_native_wrong_store_callee_mutation_and_nonfinite_results_refuse(self):
+        for mutation in ('caller', 'callee', 'old-boundary', 'old-mutation', 'missing-bits',
+                         'infinity', 'nan', 'boolean-bits'):
+            rows = self.stored_native_fixture()
+            record = rows[-3]
+            if mutation == 'caller': record['caller'] += 1
+            elif mutation == 'callee': record['callee'] += 1
+            elif mutation == 'old-boundary': rows[0]['native_boundary'] = interval.NATIVE_INSTALLATION['native_boundary']
+            elif mutation == 'old-mutation': rows[0]['code_mutations'] = interval.NATIVE_INSTALLATION['code_mutations']
+            elif mutation == 'missing-bits': del record['value_f32_bits']
+            elif mutation == 'infinity': record['value_f32_bits'] = 0x7f800000
+            elif mutation == 'nan': record['value_f32_bits'] = 0x7fc00000
+            else: record['value_f32_bits'] = True
+            with self.subTest(mutation=mutation), self.assertRaises(ValueError):
+                interval.compile_tape(self.write(rows))
+
+    def test_changed_actual_stored_value_has_exact_first_difference(self):
+        rows = self.stored_native_fixture()
+        original = interval.compile_tape(self.write(rows))
+        rows[-3]['value_f32_bits'] ^= 1
+        changed = interval.compile_tape(self.write(rows))
+        compared = interval.compare(original, changed)
+        self.assertFalse(compared['offline_match'])
+        self.assertEqual(compared['first_divergence']['path'], '$.native_returns[0].value_f32_bits')
+
     def test_legacy_counters_cannot_be_promoted_to_shared_phase_order(self):
         result = interval.compile_tape(self.write(fixture(2)))
         self.assertNotIn('phase_order', result)
