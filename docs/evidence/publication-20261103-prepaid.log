@@ -1,0 +1,53 @@
+test_fake_lease_finalizes_all_outputs_and_old_bytes (__main__.NativeLifecycleTests.test_fake_lease_finalizes_all_outputs_and_old_bytes) ... ok
+test_late_final_scan_failure_rewrites_provisional_pass (__main__.NativeLifecycleTests.test_late_final_scan_failure_rewrites_provisional_pass) ... /opt/homebrew/Cellar/python@3.15/3.15.0_1/Frameworks/Python.framework/Versions/3.15/lib/python3.15/pathlib/__init__.py:333: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10b1a4ac0>
+  @property
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+run_native: prepaid finalization: second final scan fixture failure
+ok
+test_partial_constructor_retains_owned_child_failure (__main__.NativeLifecycleTests.test_partial_constructor_retains_owned_child_failure) ... run_native: prepaid admission: prelaunch fixture refusal
+ok
+test_adapter_translates_admission_and_periodic_failure (__main__.Tests.test_adapter_translates_admission_and_periodic_failure) ... ok
+test_attribute_values_are_fresh_after_repeated_observations (__main__.Tests.test_attribute_values_are_fresh_after_repeated_observations) ... ok
+test_child_accounting_matches_only_its_exact_direct_component (__main__.Tests.test_child_accounting_matches_only_its_exact_direct_component) ... ok
+test_child_directory_retry_cannot_hide_overflow_or_special_file (__main__.Tests.test_child_directory_retry_cannot_hide_overflow_or_special_file) ... ok
+test_child_must_be_unique_direct_descendant (__main__.Tests.test_child_must_be_unique_direct_descendant) ... ok
+test_child_permission_change_is_not_a_namespace_retry (__main__.Tests.test_child_permission_change_is_not_a_namespace_retry) ... ok
+test_child_retries_share_the_original_scan_deadline (__main__.Tests.test_child_retries_share_the_original_scan_deadline) ... ok
+test_concurrent_writer_refused_in_another_process (__main__.Tests.test_concurrent_writer_refused_in_another_process) ... {"exit_code": 0, "timed_out": false, "probe_unchanged": true, "elapsed_seconds": 0.00018379196990281343, "source_save_unchanged": true, "source_game_unchanged": true, "source_game_after": {"path": "source-game-after.json", "sha256": "317f20e0e79eb837a3073807dfae3a91c598c6f20abf7cbd02c5e4e01839c7a0"}, "milestones": {"menu": {"process_seconds": 1.0, "loop_seconds": 1.0, "frame": 1}}, "timing": {"preparation_seconds": 0.003226500004529953, "menu_seconds": 1.0, "driving_seconds": null, "total_seconds": 0.003747291979379952}, "artifact_finalization": "verified"}
+ok
+test_continuous_child_churn_has_finite_attempts (__main__.Tests.test_continuous_child_churn_has_finite_attempts) ... ok
+test_default_child_cap_is_one_gib (__main__.Tests.test_default_child_cap_is_one_gib) ... ok
+test_delayed_last_empty_directory_attributes_refuse (__main__.Tests.test_delayed_last_empty_directory_attributes_refuse) ... ok
+test_equivalent_ledger_inode_replacement_refuses (__main__.Tests.test_equivalent_ledger_inode_replacement_refuses) ... ok
+test_final_checks_old_bytes_even_when_metadata_witness_is_unchanged (__main__.Tests.test_final_checks_old_bytes_even_when_metadata_witness_is_unchanged) ... ok
+test_final_old_preservation_does_not_spend_deadline_reading_new_artifact_bytes (__main__.Tests.test_final_old_preservation_does_not_spend_deadline_reading_new_artifact_bytes) ... ok
+test_final_still_enforces_the_new_child_cap (__main__.Tests.test_final_still_enforces_the_new_child_cap) ... ok
+test_ledger_replacement_during_read_refuses (__main__.Tests.test_ledger_replacement_during_read_refuses) ... ok
+test_lock_and_state_replacement_refuse (__main__.Tests.test_lock_and_state_replacement_refuse) ... ok
+test_maintenance_excludes_capture_and_capture_excludes_maintenance (__main__.Tests.test_maintenance_excludes_capture_and_capture_excludes_maintenance) ... ok
+test_max_and_allowance_mismatch_refused (__main__.Tests.test_max_and_allowance_mismatch_refused) ... ok
+test_nested_new_child_directory_race_is_fully_recounted (__main__.Tests.test_nested_new_child_directory_race_is_fully_recounted) ... ok
+test_new_child_retry_cannot_reset_entry_limit (__main__.Tests.test_new_child_retry_cannot_reset_entry_limit) ... ok
+test_new_child_retry_does_not_hide_old_evidence_mutation (__main__.Tests.test_new_child_retry_does_not_hide_old_evidence_mutation) ... ok
+test_nonfinite_scan_deadlines_refuse (__main__.Tests.test_nonfinite_scan_deadlines_refuse) ... ok
+test_old_bytes_metadata_and_membership_mutation_refuse (__main__.Tests.test_old_bytes_metadata_and_membership_mutation_refuse) ... ok
+test_old_tree_overflow_refuses_before_child_creation (__main__.Tests.test_old_tree_overflow_refuses_before_child_creation) ... ok
+test_one_new_child_directory_race_restarts_complete_scan (__main__.Tests.test_one_new_child_directory_race_restarts_complete_scan) ... ok
+test_overlapping_ledger_entry_refused (__main__.Tests.test_overlapping_ledger_entry_refused) ... ok
+test_parent_and_child_overflow_are_distinct (__main__.Tests.test_parent_and_child_overflow_are_distinct) ... ok
+test_parent_replacement_during_capture_refuses (__main__.Tests.test_parent_replacement_during_capture_refuses) ... ok
+test_periodic_guard_does_not_rebind_libc_for_every_observation (__main__.Tests.test_periodic_guard_does_not_rebind_libc_for_every_observation) ... ok
+test_positive_separate_caps_readonly_ledger_and_atime_evidence (__main__.Tests.test_positive_separate_caps_readonly_ledger_and_atime_evidence) ... ok
+test_preexisting_directory_race_does_not_retry (__main__.Tests.test_preexisting_directory_race_does_not_retry) ... ok
+test_recreated_parent_different_inode_refused (__main__.Tests.test_recreated_parent_different_inode_refused) ... ok
+test_renamed_registered_inode_refused (__main__.Tests.test_renamed_registered_inode_refused) ... ok
+test_root_and_child_replacement_during_capture_refuse (__main__.Tests.test_root_and_child_replacement_during_capture_refuse) ... ok
+test_same_inode_ledger_transaction_allowed (__main__.Tests.test_same_inode_ledger_transaction_allowed) ... ok
+test_state_cannot_create_lock_files_inside_old_evidence (__main__.Tests.test_state_cannot_create_lock_files_inside_old_evidence) ... ok
+test_symlink_parent_refused (__main__.Tests.test_symlink_parent_refused) ... ok
+test_unknown_parent_refused_without_new_reservation (__main__.Tests.test_unknown_parent_refused_without_new_reservation) ... ok
+
+----------------------------------------------------------------------
+Ran 42 tests in 0.293s
+
+OK

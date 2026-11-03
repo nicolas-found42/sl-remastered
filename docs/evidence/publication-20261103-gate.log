@@ -1,0 +1,649 @@
+....
+----------------------------------------------------------------------
+Ran 4 tests in 1.104s
+
+OK
+......
+----------------------------------------------------------------------
+Ran 6 tests in 3.359s
+
+OK
+..........
+----------------------------------------------------------------------
+Ran 10 tests in 0.311s
+
+OK
+..............................
+----------------------------------------------------------------------
+Ran 30 tests in 7.355s
+
+OK
+[1/344] Building CXX object CMakeFiles/sl_video.dir/src/video_player.cpp.o
+[2/344] Linking CXX static library libsl_video.a
+[3/344] Building CXX object CMakeFiles/vm_test.dir/src/natives/physics.cpp.o
+[4/344] Building CXX object CMakeFiles/vm_test.dir/src/ground_runtime.cpp.o
+[5/344] Building CXX object CMakeFiles/vm_test.dir/src/natives/video.cpp.o
+[6/344] Building CXX object CMakeFiles/vm_test.dir/src/natives/car_part.cpp.o
+[7/344] Building CXX object CMakeFiles/vm_test.dir/src/car_runtime.cpp.o
+[8/344] Building CXX object CMakeFiles/vm_test.dir/src/natives/text.cpp.o
+[9/344] Building CXX object CMakeFiles/vm_test.dir/src/natives/sfx.cpp.o
+[10/344] Building CXX object CMakeFiles/sl_game_application.dir/src/game_application.cpp.o
+[11/344] Building CXX object CMakeFiles/vm_test.dir/src/scene_mesh.cpp.o
+[12/344] Building CXX object CMakeFiles/vm_test.dir/src/natives/file.cpp.o
+[13/344] Building CXX object CMakeFiles/vm_test.dir/src/scene_material.cpp.o
+[14/344] Building CXX object CMakeFiles/vm_test.dir/src/natives/registry.cpp.o
+[15/344] Building CXX object CMakeFiles/vm_test.dir/src/natives/lang_system.cpp.o
+[16/344] Building CXX object CMakeFiles/vm_test.dir/src/natives/viewport.cpp.o
+[17/344] Building CXX object CMakeFiles/vm_test.dir/src/game_creation.cpp.o
+[18/344] Building CXX object CMakeFiles/vm_test.dir/src/natives/resource_ref.cpp.o
+[19/344] Building CXX object CMakeFiles/vm_test.dir/src/camera_device_factory.cpp.o
+[20/344] Building CXX object CMakeFiles/vm_test.dir/src/resource_extp_bounds.cpp.o
+[21/344] Building CXX object CMakeFiles/vm_test.dir/src/game_physics_geometry.cpp.o
+[22/344] Building CXX object CMakeFiles/vm_test.dir/src/sector_collision.cpp.o
+[23/344] Building CXX object CMakeFiles/vm_test.dir/src/resource_world.cpp.o
+[24/344] Building CXX object CMakeFiles/vm_test.dir/src/natives/navigator.cpp.o
+[25/344] Building CXX object CMakeFiles/vm_test.dir/src/game_spatial_payload.cpp.o
+[26/344] Building CXX object CMakeFiles/vm_test.dir/src/natives/ground_road.cpp.o
+[27/344] Building CXX object CMakeFiles/vm_test.dir/src/world_model.cpp.o
+[28/344] Building CXX object CMakeFiles/vm_test.dir/src/object_runtime.cpp.o
+[29/344] Building CXX object CMakeFiles/vm_test.dir/src/car_variable_refresh.cpp.o
+[30/344] Building CXX object CMakeFiles/vm_thread_test.dir/src/ground_runtime.cpp.o
+[31/344] Building CXX object CMakeFiles/vm_thread_test.dir/src/natives/physics.cpp.o
+[32/344] Building CXX object CMakeFiles/vm_test.dir/src/natives/game_type.cpp.o
+[33/344] Building CXX object CMakeFiles/vm_thread_test.dir/tests/vm_thread_test.cpp.o
+[34/344] Building CXX object CMakeFiles/vm_thread_test.dir/src/car_runtime.cpp.o
+[35/344] Building CXX object CMakeFiles/vm_thread_test.dir/src/natives/video.cpp.o
+[36/344] Building CXX object CMakeFiles/vm_thread_test.dir/src/natives/car_part.cpp.o
+[37/344] Building CXX object CMakeFiles/vm_thread_test.dir/src/natives/text.cpp.o
+[38/344] Building CXX object CMakeFiles/vm_thread_test.dir/src/natives/sfx.cpp.o
+[39/344] Building CXX object CMakeFiles/vm_thread_test.dir/src/scene_material.cpp.o
+[40/344] Building CXX object CMakeFiles/vm_thread_test.dir/src/scene_mesh.cpp.o
+[41/344] Building CXX object CMakeFiles/vm_thread_test.dir/src/natives/lang_system.cpp.o
+[42/344] Building CXX object CMakeFiles/vm_thread_test.dir/src/natives/file.cpp.o
+[43/344] Building CXX object CMakeFiles/vm_thread_test.dir/src/natives/registry.cpp.o
+[44/344] Building CXX object CMakeFiles/vm_thread_test.dir/src/natives/viewport.cpp.o
+[45/344] Building CXX object CMakeFiles/vm_thread_test.dir/src/game_creation.cpp.o
+[46/344] Building CXX object CMakeFiles/vm_thread_test.dir/src/natives/resource_ref.cpp.o
+[47/344] Building CXX object CMakeFiles/vm_thread_test.dir/src/camera_device_factory.cpp.o
+[48/344] Building CXX object CMakeFiles/vm_thread_test.dir/src/resource_extp_bounds.cpp.o
+[49/344] Building CXX object CMakeFiles/vm_thread_test.dir/src/game_physics_geometry.cpp.o
+[50/344] Building CXX object CMakeFiles/vm_thread_test.dir/src/sector_collision.cpp.o
+[51/344] Building CXX object CMakeFiles/vm_thread_test.dir/src/resource_world.cpp.o
+[52/344] Building CXX object CMakeFiles/vm_thread_test.dir/src/natives/navigator.cpp.o
+[53/344] Building CXX object CMakeFiles/vm_thread_test.dir/src/game_spatial_payload.cpp.o
+[54/344] Building CXX object CMakeFiles/vm_thread_test.dir/src/natives/ground_road.cpp.o
+[55/344] Building CXX object CMakeFiles/vm_thread_test.dir/src/world_model.cpp.o
+[56/344] Building CXX object CMakeFiles/vm_thread_test.dir/src/object_runtime.cpp.o
+[57/344] Building CXX object CMakeFiles/vm_thread_test.dir/src/car_variable_refresh.cpp.o
+[58/344] Building CXX object CMakeFiles/game_creation_test.dir/src/game_creation.cpp.o
+[59/344] Building CXX object CMakeFiles/vm_thread_test.dir/src/natives/game_type.cpp.o
+[60/344] Building CXX object CMakeFiles/game_creation_test.dir/tests/game_creation_test.cpp.o
+[61/344] Building CXX object CMakeFiles/game_creation_test.dir/src/part_config.cpp.o
+[62/344] Building CXX object CMakeFiles/game_creation_test.dir/src/resource_world.cpp.o
+[63/344] Building CXX object CMakeFiles/game_creation_test.dir/src/car_runtime.cpp.o
+[64/344] Building CXX object CMakeFiles/game_creation_test.dir/src/resource_extp_bounds.cpp.o
+[65/344] Building CXX object CMakeFiles/game_creation_test.dir/src/game_physics_geometry.cpp.o
+[66/344] Building CXX object CMakeFiles/game_creation_test.dir/src/ground_runtime.cpp.o
+[67/344] Building CXX object CMakeFiles/resource_world_test.dir/src/game_creation.cpp.o
+[68/344] Building CXX object CMakeFiles/game_creation_test.dir/src/game_spatial_payload.cpp.o
+[69/344] Building CXX object CMakeFiles/game_creation_test.dir/src/world_model.cpp.o
+[70/344] Building CXX object CMakeFiles/resource_world_test.dir/src/part_config.cpp.o
+[71/344] Building CXX object CMakeFiles/resource_world_test.dir/src/resource_world.cpp.o
+[72/344] Building CXX object CMakeFiles/resource_world_test.dir/tests/resource_world_test.cpp.o
+[73/344] Building CXX object CMakeFiles/resource_world_test.dir/src/game_physics_geometry.cpp.o
+[74/344] Building CXX object CMakeFiles/resource_world_test.dir/src/car_runtime.cpp.o
+[75/344] Building CXX object CMakeFiles/resource_world_test.dir/src/ground_runtime.cpp.o
+[76/344] Building CXX object CMakeFiles/resource_world_test.dir/src/resource_extp_bounds.cpp.o
+[77/344] Building CXX object CMakeFiles/native_file_test.dir/src/natives/physics.cpp.o
+[78/344] Building CXX object CMakeFiles/resource_world_test.dir/src/world_model.cpp.o
+[79/344] Building CXX object CMakeFiles/native_file_test.dir/src/ground_runtime.cpp.o
+[80/344] Building CXX object CMakeFiles/resource_world_test.dir/src/game_spatial_payload.cpp.o
+[81/344] Building CXX object CMakeFiles/native_file_test.dir/src/natives/video.cpp.o
+[82/344] Building CXX object CMakeFiles/native_file_test.dir/src/car_runtime.cpp.o
+[83/344] Building CXX object CMakeFiles/native_file_test.dir/src/natives/car_part.cpp.o
+[84/344] Building CXX object CMakeFiles/native_file_test.dir/src/natives/sfx.cpp.o
+[85/344] Building CXX object CMakeFiles/native_file_test.dir/src/natives/text.cpp.o
+[86/344] Building CXX object CMakeFiles/native_file_test.dir/src/scene_mesh.cpp.o
+[87/344] Building CXX object CMakeFiles/native_file_test.dir/src/scene_material.cpp.o
+[88/344] Building CXX object CMakeFiles/native_file_test.dir/src/natives/lang_system.cpp.o
+[89/344] Building CXX object CMakeFiles/native_file_test.dir/src/natives/file.cpp.o
+[90/344] Building CXX object CMakeFiles/native_file_test.dir/src/natives/registry.cpp.o
+[91/344] Building CXX object CMakeFiles/native_file_test.dir/src/natives/viewport.cpp.o
+[92/344] Building CXX object CMakeFiles/native_file_test.dir/src/game_creation.cpp.o
+[93/344] Building CXX object CMakeFiles/native_file_test.dir/src/natives/resource_ref.cpp.o
+[94/344] Building CXX object CMakeFiles/native_file_test.dir/src/camera_device_factory.cpp.o
+[95/344] Building CXX object CMakeFiles/native_file_test.dir/src/resource_extp_bounds.cpp.o
+[96/344] Building CXX object CMakeFiles/native_file_test.dir/src/game_physics_geometry.cpp.o
+[97/344] Building CXX object CMakeFiles/native_file_test.dir/src/sector_collision.cpp.o
+[98/344] Building CXX object CMakeFiles/native_file_test.dir/src/resource_world.cpp.o
+[99/344] Building CXX object CMakeFiles/native_file_test.dir/src/natives/navigator.cpp.o
+[100/344] Building CXX object CMakeFiles/native_file_test.dir/src/game_spatial_payload.cpp.o
+[101/344] Building CXX object CMakeFiles/native_file_test.dir/src/natives/ground_road.cpp.o
+[102/344] Building CXX object CMakeFiles/native_file_test.dir/src/world_model.cpp.o
+[103/344] Building CXX object CMakeFiles/native_file_test.dir/src/object_runtime.cpp.o
+[104/344] Building CXX object CMakeFiles/native_file_test.dir/src/car_variable_refresh.cpp.o
+[105/344] Building CXX object CMakeFiles/native_measure_test.dir/src/ground_runtime.cpp.o
+[106/344] Building CXX object CMakeFiles/native_measure_test.dir/src/natives/physics.cpp.o
+[107/344] Building CXX object CMakeFiles/native_measure_test.dir/src/natives/video.cpp.o
+[108/344] Building CXX object CMakeFiles/native_file_test.dir/src/natives/game_type.cpp.o
+[109/344] Building CXX object CMakeFiles/native_measure_test.dir/src/car_runtime.cpp.o
+[110/344] Building CXX object CMakeFiles/native_measure_test.dir/src/natives/text.cpp.o
+[111/344] Building CXX object CMakeFiles/native_measure_test.dir/src/natives/car_part.cpp.o
+[112/344] Building CXX object CMakeFiles/native_measure_test.dir/src/natives/sfx.cpp.o
+[113/344] Building CXX object CMakeFiles/native_measure_test.dir/src/scene_mesh.cpp.o
+[114/344] Building CXX object CMakeFiles/native_measure_test.dir/src/scene_material.cpp.o
+[115/344] Building CXX object CMakeFiles/native_measure_test.dir/src/natives/file.cpp.o
+[116/344] Building CXX object CMakeFiles/native_measure_test.dir/src/natives/registry.cpp.o
+[117/344] Building CXX object CMakeFiles/native_measure_test.dir/src/natives/lang_system.cpp.o
+[118/344] Building CXX object CMakeFiles/native_measure_test.dir/src/natives/viewport.cpp.o
+[119/344] Building CXX object CMakeFiles/native_measure_test.dir/src/game_creation.cpp.o
+[120/344] Building CXX object CMakeFiles/native_measure_test.dir/src/natives/resource_ref.cpp.o
+[121/344] Building CXX object CMakeFiles/native_measure_test.dir/src/camera_device_factory.cpp.o
+[122/344] Building CXX object CMakeFiles/native_measure_test.dir/src/resource_extp_bounds.cpp.o
+[123/344] Building CXX object CMakeFiles/native_measure_test.dir/src/game_physics_geometry.cpp.o
+[124/344] Building CXX object CMakeFiles/native_measure_test.dir/src/sector_collision.cpp.o
+[125/344] Building CXX object CMakeFiles/native_measure_test.dir/src/resource_world.cpp.o
+[126/344] Building CXX object CMakeFiles/native_measure_test.dir/src/natives/navigator.cpp.o
+[127/344] Building CXX object CMakeFiles/native_measure_test.dir/src/game_spatial_payload.cpp.o
+[128/344] Building CXX object CMakeFiles/native_measure_test.dir/src/natives/ground_road.cpp.o
+[129/344] Building CXX object CMakeFiles/native_measure_test.dir/src/world_model.cpp.o
+[130/344] Building CXX object CMakeFiles/native_measure_test.dir/src/object_runtime.cpp.o
+[131/344] Building CXX object CMakeFiles/native_measure_test.dir/src/car_variable_refresh.cpp.o
+[132/344] Building CXX object CMakeFiles/native_sound_test.dir/src/ground_runtime.cpp.o
+[133/344] Building CXX object CMakeFiles/native_sound_test.dir/src/natives/physics.cpp.o
+[134/344] Building CXX object CMakeFiles/native_sound_test.dir/src/natives/video.cpp.o
+[135/344] Building CXX object CMakeFiles/native_sound_test.dir/src/car_runtime.cpp.o
+[136/344] Building CXX object CMakeFiles/native_measure_test.dir/src/natives/game_type.cpp.o
+[137/344] Building CXX object CMakeFiles/native_sound_test.dir/src/natives/text.cpp.o
+[138/344] Building CXX object CMakeFiles/native_sound_test.dir/src/natives/car_part.cpp.o
+[139/344] Building CXX object CMakeFiles/native_sound_test.dir/src/natives/sfx.cpp.o
+[140/344] Building CXX object CMakeFiles/native_sound_test.dir/src/scene_mesh.cpp.o
+[141/344] Building CXX object CMakeFiles/native_sound_test.dir/src/natives/file.cpp.o
+[142/344] Building CXX object CMakeFiles/native_sound_test.dir/src/natives/lang_system.cpp.o
+[143/344] Building CXX object CMakeFiles/native_sound_test.dir/src/scene_material.cpp.o
+[144/344] Building CXX object CMakeFiles/native_sound_test.dir/src/natives/registry.cpp.o
+[145/344] Building CXX object CMakeFiles/native_sound_test.dir/src/natives/viewport.cpp.o
+[146/344] Building CXX object CMakeFiles/native_sound_test.dir/src/game_creation.cpp.o
+[147/344] Building CXX object CMakeFiles/native_sound_test.dir/src/natives/resource_ref.cpp.o
+[148/344] Building CXX object CMakeFiles/native_sound_test.dir/src/camera_device_factory.cpp.o
+[149/344] Building CXX object CMakeFiles/native_sound_test.dir/src/resource_extp_bounds.cpp.o
+[150/344] Building CXX object CMakeFiles/native_sound_test.dir/src/game_physics_geometry.cpp.o
+[151/344] Building CXX object CMakeFiles/native_sound_test.dir/src/sector_collision.cpp.o
+[152/344] Building CXX object CMakeFiles/native_sound_test.dir/src/resource_world.cpp.o
+[153/344] Building CXX object CMakeFiles/native_sound_test.dir/src/natives/navigator.cpp.o
+[154/344] Building CXX object CMakeFiles/native_sound_test.dir/src/game_spatial_payload.cpp.o
+[155/344] Building CXX object CMakeFiles/native_sound_test.dir/src/natives/ground_road.cpp.o
+[156/344] Building CXX object CMakeFiles/native_sound_test.dir/src/world_model.cpp.o
+[157/344] Building CXX object CMakeFiles/native_sound_test.dir/src/object_runtime.cpp.o
+[158/344] Building CXX object CMakeFiles/native_sound_test.dir/src/car_variable_refresh.cpp.o
+[159/344] Building CXX object CMakeFiles/native_math_test.dir/src/ground_runtime.cpp.o
+[160/344] Building CXX object CMakeFiles/native_math_test.dir/src/natives/video.cpp.o
+[161/344] Building CXX object CMakeFiles/native_math_test.dir/src/natives/physics.cpp.o
+[162/344] Building CXX object CMakeFiles/native_math_test.dir/src/car_runtime.cpp.o
+[163/344] Building CXX object CMakeFiles/native_sound_test.dir/src/natives/game_type.cpp.o
+[164/344] Building CXX object CMakeFiles/native_math_test.dir/src/natives/text.cpp.o
+[165/344] Building CXX object CMakeFiles/native_math_test.dir/src/natives/car_part.cpp.o
+[166/344] Building CXX object CMakeFiles/native_math_test.dir/src/natives/sfx.cpp.o
+[167/344] Building CXX object CMakeFiles/native_math_test.dir/src/scene_mesh.cpp.o
+[168/344] Building CXX object CMakeFiles/native_math_test.dir/src/natives/file.cpp.o
+[169/344] Building CXX object CMakeFiles/native_math_test.dir/src/scene_material.cpp.o
+[170/344] Building CXX object CMakeFiles/native_math_test.dir/src/natives/lang_system.cpp.o
+[171/344] Building CXX object CMakeFiles/native_math_test.dir/src/natives/registry.cpp.o
+[172/344] Building CXX object CMakeFiles/native_math_test.dir/src/natives/viewport.cpp.o
+[173/344] Building CXX object CMakeFiles/native_math_test.dir/src/game_creation.cpp.o
+[174/344] Building CXX object CMakeFiles/native_math_test.dir/src/natives/resource_ref.cpp.o
+[175/344] Building CXX object CMakeFiles/native_math_test.dir/src/camera_device_factory.cpp.o
+[176/344] Building CXX object CMakeFiles/native_math_test.dir/src/resource_extp_bounds.cpp.o
+[177/344] Building CXX object CMakeFiles/native_math_test.dir/src/game_physics_geometry.cpp.o
+[178/344] Building CXX object CMakeFiles/native_math_test.dir/src/sector_collision.cpp.o
+[179/344] Building CXX object CMakeFiles/native_math_test.dir/src/resource_world.cpp.o
+[180/344] Building CXX object CMakeFiles/native_math_test.dir/src/natives/navigator.cpp.o
+[181/344] Building CXX object CMakeFiles/native_math_test.dir/src/game_spatial_payload.cpp.o
+[182/344] Building CXX object CMakeFiles/native_math_test.dir/src/natives/ground_road.cpp.o
+[183/344] Building CXX object CMakeFiles/native_math_test.dir/src/world_model.cpp.o
+[184/344] Building CXX object CMakeFiles/native_math_test.dir/src/object_runtime.cpp.o
+[185/344] Building CXX object CMakeFiles/native_lang_system_test.dir/src/natives/lang_system.cpp.o
+[186/344] Building CXX object CMakeFiles/native_math_test.dir/src/car_variable_refresh.cpp.o
+[187/344] Building CXX object CMakeFiles/native_lang_system_test.dir/tests/native_lang_system_test.cpp.o
+[188/344] Building CXX object CMakeFiles/car_activate_test.dir/tests/car_activate_test.cpp.o
+[189/344] Building CXX object CMakeFiles/native_math_test.dir/src/natives/game_type.cpp.o
+[190/344] Building CXX object CMakeFiles/vm_class_init_test.dir/src/ground_runtime.cpp.o
+[191/344] Building CXX object CMakeFiles/vm_class_init_test.dir/src/natives/physics.cpp.o
+[192/344] Building CXX object CMakeFiles/vm_class_init_test.dir/src/car_runtime.cpp.o
+[193/344] Building CXX object CMakeFiles/vm_class_init_test.dir/src/natives/video.cpp.o
+[194/344] Building CXX object CMakeFiles/vm_class_init_test.dir/src/natives/text.cpp.o
+[195/344] Building CXX object CMakeFiles/vm_class_init_test.dir/src/natives/sfx.cpp.o
+[196/344] Building CXX object CMakeFiles/vm_class_init_test.dir/src/natives/car_part.cpp.o
+[197/344] Building CXX object CMakeFiles/vm_class_init_test.dir/src/scene_mesh.cpp.o
+[198/344] Building CXX object CMakeFiles/vm_class_init_test.dir/src/scene_material.cpp.o
+[199/344] Building CXX object CMakeFiles/vm_class_init_test.dir/src/natives/registry.cpp.o
+[200/344] Building CXX object CMakeFiles/vm_class_init_test.dir/src/natives/file.cpp.o
+[201/344] Building CXX object CMakeFiles/vm_class_init_test.dir/src/natives/lang_system.cpp.o
+[202/344] Building CXX object CMakeFiles/vm_class_init_test.dir/tests/vm_class_init_test.cpp.o
+[203/344] Building CXX object CMakeFiles/vm_class_init_test.dir/src/natives/viewport.cpp.o
+[204/344] Building CXX object CMakeFiles/vm_class_init_test.dir/src/game_creation.cpp.o
+[205/344] Building CXX object CMakeFiles/vm_class_init_test.dir/src/natives/resource_ref.cpp.o
+[206/344] Building CXX object CMakeFiles/vm_class_init_test.dir/src/camera_device_factory.cpp.o
+[207/344] Building CXX object CMakeFiles/vm_class_init_test.dir/src/resource_extp_bounds.cpp.o
+[208/344] Building CXX object CMakeFiles/vm_class_init_test.dir/src/game_physics_geometry.cpp.o
+[209/344] Building CXX object CMakeFiles/vm_class_init_test.dir/src/sector_collision.cpp.o
+[210/344] Building CXX object CMakeFiles/vm_class_init_test.dir/src/resource_world.cpp.o
+[211/344] Building CXX object CMakeFiles/vm_class_init_test.dir/src/natives/navigator.cpp.o
+[212/344] Building CXX object CMakeFiles/vm_class_init_test.dir/src/game_spatial_payload.cpp.o
+[213/344] Building CXX object CMakeFiles/vm_class_init_test.dir/src/natives/ground_road.cpp.o
+[214/344] Building CXX object CMakeFiles/vm_class_init_test.dir/src/world_model.cpp.o
+[215/344] Building CXX object CMakeFiles/vm_class_init_test.dir/src/object_runtime.cpp.o
+[216/344] Building CXX object CMakeFiles/vm_class_init_test.dir/src/car_variable_refresh.cpp.o
+[217/344] Building CXX object CMakeFiles/vm_eval_name_test.dir/src/ground_runtime.cpp.o
+[218/344] Building CXX object CMakeFiles/vm_eval_name_test.dir/src/natives/physics.cpp.o
+[219/344] Building CXX object CMakeFiles/vm_eval_name_test.dir/src/natives/video.cpp.o
+[220/344] Building CXX object CMakeFiles/vm_eval_name_test.dir/src/car_runtime.cpp.o
+[221/344] Building CXX object CMakeFiles/vm_eval_name_test.dir/src/natives/text.cpp.o
+[222/344] Building CXX object CMakeFiles/vm_class_init_test.dir/src/natives/game_type.cpp.o
+[223/344] Building CXX object CMakeFiles/vm_eval_name_test.dir/src/natives/sfx.cpp.o
+[224/344] Building CXX object CMakeFiles/vm_eval_name_test.dir/src/natives/car_part.cpp.o
+[225/344] Building CXX object CMakeFiles/vm_eval_name_test.dir/src/scene_mesh.cpp.o
+[226/344] Building CXX object CMakeFiles/vm_eval_name_test.dir/src/scene_material.cpp.o
+[227/344] Building CXX object CMakeFiles/vm_eval_name_test.dir/src/natives/registry.cpp.o
+[228/344] Building CXX object CMakeFiles/vm_eval_name_test.dir/src/natives/lang_system.cpp.o
+[229/344] Building CXX object CMakeFiles/vm_eval_name_test.dir/src/natives/file.cpp.o
+[230/344] Building CXX object CMakeFiles/vm_eval_name_test.dir/src/natives/viewport.cpp.o
+[231/344] Building CXX object CMakeFiles/vm_eval_name_test.dir/src/natives/resource_ref.cpp.o
+[232/344] Building CXX object CMakeFiles/vm_eval_name_test.dir/src/game_creation.cpp.o
+[233/344] Building CXX object CMakeFiles/vm_eval_name_test.dir/src/camera_device_factory.cpp.o
+[234/344] Building CXX object CMakeFiles/vm_eval_name_test.dir/src/resource_extp_bounds.cpp.o
+[235/344] Building CXX object CMakeFiles/vm_eval_name_test.dir/src/game_physics_geometry.cpp.o
+[236/344] Building CXX object CMakeFiles/vm_eval_name_test.dir/src/sector_collision.cpp.o
+[237/344] Building CXX object CMakeFiles/vm_eval_name_test.dir/src/resource_world.cpp.o
+[238/344] Building CXX object CMakeFiles/vm_eval_name_test.dir/src/natives/navigator.cpp.o
+[239/344] Building CXX object CMakeFiles/vm_eval_name_test.dir/src/game_spatial_payload.cpp.o
+[240/344] Building CXX object CMakeFiles/vm_eval_name_test.dir/src/natives/ground_road.cpp.o
+[241/344] Building CXX object CMakeFiles/vm_eval_name_test.dir/src/world_model.cpp.o
+[242/344] Building CXX object CMakeFiles/vm_eval_name_test.dir/src/object_runtime.cpp.o
+[243/344] Building CXX object CMakeFiles/native_viewport_test.dir/tests/native_viewport_test.cpp.o
+[244/344] Building CXX object CMakeFiles/vm_eval_name_test.dir/src/car_variable_refresh.cpp.o
+[245/344] Building CXX object CMakeFiles/native_navigator_test.dir/tests/native_navigator_test.cpp.o
+[246/344] Building CXX object CMakeFiles/resource_ref_set_test.dir/tests/resource_ref_set_test.cpp.o
+[247/344] Building CXX object CMakeFiles/camera_traversal_test.dir/tests/camera_traversal_test.cpp.o
+[248/344] Building CXX object CMakeFiles/camera_frame_view.dir/tools/camera_frame_view.cpp.o
+[249/344] Building CXX object CMakeFiles/vm_eval_name_test.dir/src/natives/game_type.cpp.o
+[250/344] Building CXX object CMakeFiles/native_render_change_vm_test.dir/tests/native_render_change_vm_test.cpp.o
+/Users/nicolas/Documents/github/sl-remastered/tests/native_render_change_vm_test.cpp:481:39: warning: implicit conversion loses integer precision: 'size_type' (aka 'unsigned long') to 'uint32_t' (aka 'unsigned int') [-Wshorten-64-to-32]
+  481 |     resource.entry.payloadSize = data.size();
+      |                                ~ ~~~~~^~~~~~
+/Users/nicolas/Documents/github/sl-remastered/tests/native_render_change_vm_test.cpp:499:39: warning: implicit conversion loses integer precision: 'size_type' (aka 'unsigned long') to 'uint32_t' (aka 'unsigned int') [-Wshorten-64-to-32]
+  499 |     resource.entry.payloadSize = data.size();
+      |                                ~ ~~~~~^~~~~~
+/Users/nicolas/Documents/github/sl-remastered/tests/native_render_change_vm_test.cpp:506:39: warning: implicit conversion loses integer precision: 'size_type' (aka 'unsigned long') to 'uint32_t' (aka 'unsigned int') [-Wshorten-64-to-32]
+  506 |     resource.entry.payloadSize = data.size();
+      |                                ~ ~~~~~^~~~~~
+3 warnings generated.
+[251/344] Building CXX object CMakeFiles/native_camera_test.dir/tests/native_camera_test.cpp.o
+[252/344] Building CXX object CMakeFiles/scene_2d_test.dir/tests/scene_2d_test.cpp.o
+[253/344] Building CXX object CMakeFiles/camera_device_factory_test.dir/tests/camera_device_factory_test.cpp.o
+[254/344] Building CXX object CMakeFiles/camera_follow_step_test.dir/tests/camera_follow_step_test.cpp.o
+[255/344] Building CXX object CMakeFiles/camera_game_ref_test.dir/tests/camera_game_ref_test.cpp.o
+[256/344] Building CXX object CMakeFiles/video_player_test.dir/tests/video_player_test.cpp.o
+[257/344] Linking CXX static library libsl_game_application.a
+[258/344] Building CXX object CMakeFiles/camera_box_pick_test.dir/tests/camera_box_pick_test.cpp.o
+[259/344] Building CXX object CMakeFiles/font_test.dir/tests/font_test.cpp.o
+[260/344] Building CXX object CMakeFiles/part_config_test.dir/tests/part_config_test.cpp.o
+[261/344] Building CXX object CMakeFiles/force_render_test.dir/tests/force_render_test.cpp.o
+[262/344] Building CXX object CMakeFiles/car_wheel_geometry_test.dir/src/part_config.cpp.o
+[263/344] Building CXX object CMakeFiles/model_view.dir/tools/model_view.cpp.o
+[264/344] Building CXX object CMakeFiles/physics_friction_test.dir/tests/physics_friction_test.cpp.o
+[265/344] Building CXX object CMakeFiles/ground_road_native_test.dir/tests/ground_road_native_test.cpp.o
+[266/344] Building CXX object CMakeFiles/car_factory_census.dir/tools/car_factory_census.cpp.o
+[267/344] Building CXX object CMakeFiles/physics_friction_test.dir/src/physics_friction.cpp.o
+[268/344] Building CXX object CMakeFiles/ground_parameters_test.dir/tests/ground_parameters_test.cpp.o
+[269/344] Linking CXX executable sl_port
+[270/344] Linking CXX executable ptx_view
+[271/344] Linking CXX executable startup_probe
+[272/344] Linking CXX executable scene_skinning_test
+[273/344] Linking CXX executable vm_test
+[274/344] Linking CXX executable native_registry_test
+[275/344] Linking CXX executable native_registry_inventory
+[276/344] Linking CXX executable native_vm_audit_test
+[277/344] Linking CXX executable native_vm_dispatch_test
+[278/344] Linking CXX executable ptx_corpus
+[279/344] Linking CXX executable pack_registry_test
+[280/344] Linking CXX executable vm_thread_test
+[281/344] Building CXX object CMakeFiles/ground_traffic_test.dir/tests/ground_traffic_test.cpp.o
+[282/344] Building CXX object CMakeFiles/car_runtime_test.dir/tests/car_runtime_test.cpp.o
+[283/344] Linking CXX executable game_creation_test
+[284/344] Building CXX object CMakeFiles/ground_files_test.dir/tests/ground_files_test.cpp.o
+[285/344] Linking CXX executable resource_world_test
+[286/344] Linking CXX executable native_measure_test
+[287/344] Linking CXX executable native_file_test
+[288/344] Linking CXX executable native_sound_test
+[289/344] Building CXX object CMakeFiles/raster3d_test.dir/tests/raster3d_test.cpp.o
+[290/344] Linking CXX executable native_math_test
+[291/344] Linking CXX executable music_test
+[292/344] Linking CXX executable car_activate_test
+[293/344] Linking CXX executable native_music_test
+[294/344] Linking CXX executable native_lang_system_test
+[295/344] Linking CXX executable native_object_test
+[296/344] Linking CXX executable resource_ref_set_test
+[297/344] Building CXX object CMakeFiles/object_runtime_test.dir/tests/object_runtime_test.cpp.o
+[298/344] Linking CXX executable native_viewport_test
+[299/344] Linking CXX executable vm_class_init_test
+[300/344] Linking CXX executable vm_eval_name_test
+[301/344] Linking CXX executable loading_view
+[302/344] Linking CXX executable native_navigator_test
+[303/344] Linking CXX executable loading_view_test
+[304/344] Linking CXX executable geometry_backend_probe
+[305/344] Linking CXX executable scene_2d_test
+[306/344] Linking CXX executable native_render_change_vm_test
+[307/344] Linking CXX executable camera_traversal_test
+[308/344] Linking CXX executable camera_device_command_test
+[309/344] Linking CXX executable camera_frame_view
+[310/344] Linking CXX executable native_camera_test
+[311/344] Linking CXX executable camera_follow_force_test
+[312/344] Linking CXX executable object_sound_test
+[313/344] Linking CXX executable camera_device_body_test
+[314/344] Linking CXX executable camera_device_config_test
+[315/344] Linking CXX executable camera_follow_step_test
+[316/344] Linking CXX executable camera_device_factory_test
+[317/344] Linking CXX executable camera_game_ref_test
+[318/344] Linking CXX executable cursor_resource_test
+[319/344] Linking CXX executable video_test
+[320/344] Linking CXX executable sfx_test
+[321/344] Linking CXX executable video_player_test
+[322/344] Linking CXX executable font_test
+[323/344] Linking CXX executable camera_box_pick_test
+[324/344] Linking CXX executable force_render_test
+[325/344] Linking CXX executable renderer_buffer_inventory_test
+[326/344] Linking CXX executable part_config_test
+[327/344] Linking CXX executable ground_config_test
+[328/344] Linking CXX executable raster3d_test
+[329/344] Linking CXX executable "Street Legal Racing.app/Contents/MacOS/Street Legal Racing"
+[330/344] Linking CXX executable car_config_test
+[331/344] Linking CXX executable model_view
+[332/344] Linking CXX executable car_wheel_geometry_test
+[333/344] Linking CXX executable car_runtime_test
+[334/344] Linking CXX executable car_factory_census
+[335/344] Linking CXX executable car_click_geometry_test
+[336/344] Linking CXX executable car_wheel_runtime_test
+[337/344] Linking CXX executable physics_friction_test
+[338/344] Linking CXX executable ground_road_native_test
+[339/344] Linking CXX executable dyno_native_test
+[340/344] Linking CXX executable ground_parameters_test
+[341/344] Linking CXX executable ground_runtime_test
+[342/344] Linking CXX executable ground_traffic_test
+[343/344] Linking CXX executable ground_files_test
+[344/344] Linking CXX executable object_runtime_test
+Test project /Users/nicolas/Documents/github/sl-remastered/build
+        Start   1: parity_durable_wire_unit
+  1/129 Test   #1: parity_durable_wire_unit .........   Passed    0.05 sec
+        Start   2: parity_focus_observer_unit
+  2/129 Test   #2: parity_focus_observer_unit .......   Passed    5.70 sec
+        Start   3: scene_skinning_unit
+  3/129 Test   #3: scene_skinning_unit ..............   Passed    0.13 sec
+        Start   4: skeleton_unit
+  4/129 Test   #4: skeleton_unit ....................   Passed    0.01 sec
+        Start   5: native_arm64
+  5/129 Test   #5: native_arm64 .....................   Passed    0.05 sec
+        Start   6: rpk_unit
+  6/129 Test   #6: rpk_unit .........................   Passed    0.02 sec
+        Start   7: rpk_corpus
+  7/129 Test   #7: rpk_corpus .......................   Passed    0.29 sec
+        Start   8: scx_unit
+  8/129 Test   #8: scx_unit .........................   Passed    0.02 sec
+        Start   9: scx_corpus
+  9/129 Test   #9: scx_corpus .......................   Passed    0.60 sec
+        Start  10: scy_corpus
+ 10/129 Test  #10: scy_corpus .......................   Passed    0.02 sec
+        Start  11: tufa_unit
+ 11/129 Test  #11: tufa_unit ........................   Passed    0.02 sec
+        Start  12: class_corpus
+ 12/129 Test  #12: class_corpus .....................   Passed    0.18 sec
+        Start  13: sdat_unit
+ 13/129 Test  #13: sdat_unit ........................   Passed    0.01 sec
+        Start  14: sdat_corpus
+ 14/129 Test  #14: sdat_corpus ......................   Passed    0.42 sec
+        Start  15: vm_unit
+ 15/129 Test  #15: vm_unit ..........................   Passed    0.21 sec
+        Start  16: vm_native_call_unit
+ 16/129 Test  #16: vm_native_call_unit ..............   Passed    0.11 sec
+        Start  17: vm_thread_unit
+ 17/129 Test  #17: vm_thread_unit ...................   Passed    0.15 sec
+        Start  18: wheel_tire_force_unit
+ 18/129 Test  #18: wheel_tire_force_unit ............   Passed    0.01 sec
+        Start  19: wheel_unit
+ 19/129 Test  #19: wheel_unit .......................   Passed    0.01 sec
+        Start  20: native_registry_unit
+ 20/129 Test  #20: native_registry_unit .............   Passed    0.10 sec
+        Start  21: native_registry_inventory_unit
+ 21/129 Test  #21: native_registry_inventory_unit ...   Passed    0.08 sec
+        Start  22: native_vm_audit_unit
+ 22/129 Test  #22: native_vm_audit_unit .............   Passed    0.09 sec
+        Start  23: native_vm_dispatch_unit
+ 23/129 Test  #23: native_vm_dispatch_unit ..........   Passed    0.09 sec
+        Start  24: audio_unit
+ 24/129 Test  #24: audio_unit .......................   Passed    0.21 sec
+        Start  25: private_audio_unit
+ 25/129 Test  #25: private_audio_unit ...............   Passed    0.44 sec
+        Start  26: render2d_unit
+ 26/129 Test  #26: render2d_unit ....................   Passed    0.04 sec
+        Start  27: offscreen_render_unit
+ 27/129 Test  #27: offscreen_render_unit ............   Passed    0.15 sec
+        Start  28: platform_unit
+ 28/129 Test  #28: platform_unit ....................   Passed    0.03 sec
+        Start  29: ptx_unit
+ 29/129 Test  #29: ptx_unit .........................   Passed    0.03 sec
+        Start  30: resource_id_unit
+ 30/129 Test  #30: resource_id_unit .................   Passed    0.02 sec
+        Start  31: resource_material_unit
+ 31/129 Test  #31: resource_material_unit ...........   Passed    0.63 sec
+        Start  32: resource_texture_unit
+ 32/129 Test  #32: resource_texture_unit ............   Passed    0.05 sec
+        Start  33: pack_registry_unit
+ 33/129 Test  #33: pack_registry_unit ...............   Passed    0.10 sec
+        Start  34: class_environment_unit
+ 34/129 Test  #34: class_environment_unit ...........   Passed    0.02 sec
+        Start  35: startup_probe_unit
+ 35/129 Test  #35: startup_probe_unit ...............   Passed    0.30 sec
+        Start  36: owner_links_unit
+ 36/129 Test  #36: owner_links_unit .................   Passed    0.01 sec
+        Start  37: resource_tree_unit
+ 37/129 Test  #37: resource_tree_unit ...............   Passed    0.01 sec
+        Start  38: game_creation_unit
+ 38/129 Test  #38: game_creation_unit ...............   Passed    0.16 sec
+        Start  39: resource_world_unit
+ 39/129 Test  #39: resource_world_unit ..............   Passed    1.49 sec
+        Start  40: instance_ids_unit
+ 40/129 Test  #40: instance_ids_unit ................   Passed    0.02 sec
+        Start  41: native_resource_duplicate_unit
+ 41/129 Test  #41: native_resource_duplicate_unit ...   Passed    0.05 sec
+        Start  42: native_random_unit
+ 42/129 Test  #42: native_random_unit ...............   Passed    0.12 sec
+        Start  43: native_math_unit
+ 43/129 Test  #43: native_math_unit .................   Passed    0.13 sec
+        Start  44: native_sound_unit
+ 44/129 Test  #44: native_sound_unit ................   Passed    0.14 sec
+        Start  45: native_measure_unit
+ 45/129 Test  #45: native_measure_unit ..............   Passed    0.14 sec
+        Start  46: native_file_unit
+ 46/129 Test  #46: native_file_unit .................   Passed    0.15 sec
+        Start  47: file_state_unit
+ 47/129 Test  #47: file_state_unit ..................   Passed    0.11 sec
+        Start  48: game_file_unit
+ 48/129 Test  #48: game_file_unit ...................   Passed    0.02 sec
+        Start  49: ptx_view_smoke
+ 49/129 Test  #49: ptx_view_smoke ...................   Passed    0.20 sec
+        Start  50: rpk_texture_view_smoke
+ 50/129 Test  #50: rpk_texture_view_smoke ...........   Passed    0.15 sec
+        Start  51: music_unit
+ 51/129 Test  #51: music_unit .......................   Passed    1.54 sec
+        Start  52: native_music_unit
+ 52/129 Test  #52: native_music_unit ................   Passed    0.29 sec
+        Start  53: native_lang_string_unit
+ 53/129 Test  #53: native_lang_string_unit ..........   Passed    0.08 sec
+        Start  54: native_vector3_unit
+ 54/129 Test  #54: native_vector3_unit ..............   Passed    0.07 sec
+        Start  55: native_lang_system_unit
+ 55/129 Test  #55: native_lang_system_unit ..........   Passed    0.15 sec
+        Start  56: game_type_native_unit
+ 56/129 Test  #56: game_type_native_unit ............   Passed    0.18 sec
+        Start  57: car_activate_unit
+ 57/129 Test  #57: car_activate_unit ................   Passed    0.14 sec
+        Start  58: vm_class_init_unit
+ 58/129 Test  #58: vm_class_init_unit ...............   Passed    0.16 sec
+        Start  59: vm_eval_name_unit
+ 59/129 Test  #59: vm_eval_name_unit ................   Passed    0.14 sec
+        Start  60: resource_ref_set_unit
+ 60/129 Test  #60: resource_ref_set_unit ............   Passed    0.34 sec
+        Start  61: native_object_unit
+ 61/129 Test  #61: native_object_unit ...............   Passed    0.13 sec
+        Start  62: native_viewport_unit
+ 62/129 Test  #62: native_viewport_unit .............   Passed    0.08 sec
+        Start  63: native_navigator_unit
+ 63/129 Test  #63: native_navigator_unit ............   Passed    0.08 sec
+        Start  64: dds_unit
+ 64/129 Test  #64: dds_unit .........................   Passed    0.04 sec
+        Start  65: loading_view_unit
+ 65/129 Test  #65: loading_view_unit ................   Passed    0.06 sec
+        Start  66: loading_view_smoke
+ 66/129 Test  #66: loading_view_smoke ...............   Passed    0.19 sec
+        Start  67: scene_2d_unit
+ 67/129 Test  #67: scene_2d_unit ....................   Passed    0.24 sec
+        Start  68: native_render_change_vm_unit
+ 68/129 Test  #68: native_render_change_vm_unit .....   Passed    0.14 sec
+        Start  69: camera_traversal_unit
+ 69/129 Test  #69: camera_traversal_unit ............   Passed    0.10 sec
+        Start  70: native_camera_unit
+ 70/129 Test  #70: native_camera_unit ...............   Passed    0.08 sec
+        Start  71: camera_device_command_unit
+ 71/129 Test  #71: camera_device_command_unit .......   Passed    0.04 sec
+        Start  72: camera_follow_force_unit
+ 72/129 Test  #72: camera_follow_force_unit .........   Passed    0.04 sec
+        Start  73: object_sound_unit
+ 73/129 Test  #73: object_sound_unit ................   Passed    0.10 sec
+        Start  74: camera_follow_step_unit
+ 74/129 Test  #74: camera_follow_step_unit ..........   Passed    0.18 sec
+        Start  75: camera_device_config_unit
+ 75/129 Test  #75: camera_device_config_unit ........   Passed    0.07 sec
+        Start  76: camera_device_body_unit
+ 76/129 Test  #76: camera_device_body_unit ..........   Passed    0.04 sec
+        Start  77: camera_device_factory_unit
+ 77/129 Test  #77: camera_device_factory_unit .......   Passed    0.11 sec
+        Start  78: camera_game_ref_unit
+ 78/129 Test  #78: camera_game_ref_unit .............   Passed    0.08 sec
+        Start  79: cursor_resource_unit
+ 79/129 Test  #79: cursor_resource_unit .............   Passed    0.18 sec
+        Start  80: resource_sound_unit
+ 80/129 Test  #80: resource_sound_unit ..............   Passed    0.01 sec
+        Start  81: sfx_unit
+ 81/129 Test  #81: sfx_unit .........................   Passed    1.13 sec
+        Start  82: video_unit
+ 82/129 Test  #82: video_unit .......................   Passed    0.17 sec
+        Start  83: video_player_unit
+ 83/129 Test  #83: video_player_unit ................   Passed    0.21 sec
+        Start  84: font_unit
+ 84/129 Test  #84: font_unit ........................   Passed    0.16 sec
+        Start  85: physics_box_ray_unit
+ 85/129 Test  #85: physics_box_ray_unit .............   Passed    0.01 sec
+        Start  86: camera_box_pick_unit
+ 86/129 Test  #86: camera_box_pick_unit .............   Passed    0.12 sec
+        Start  87: force_render_unit
+ 87/129 Test  #87: force_render_unit ................   Passed    0.17 sec
+        Start  88: renderer_buffer_inventory_unit
+ 88/129 Test  #88: renderer_buffer_inventory_unit ...   Passed    0.05 sec
+        Start  89: part_config_unit
+ 89/129 Test  #89: part_config_unit .................   Passed    0.09 sec
+        Start  90: ground_config_unit
+ 90/129 Test  #90: ground_config_unit ...............   Passed    0.05 sec
+        Start  91: physics_body_unit
+ 91/129 Test  #91: physics_body_unit ................   Passed    0.01 sec
+        Start  92: car_sfx_table_unit
+ 92/129 Test  #92: car_sfx_table_unit ...............   Passed    0.01 sec
+        Start  93: game_application_paths_unit
+ 93/129 Test  #93: game_application_paths_unit ......   Passed    0.02 sec
+        Start  94: run_log_unit
+ 94/129 Test  #94: run_log_unit .....................   Passed    0.87 sec
+        Start  95: raster3d_unit
+ 95/129 Test  #95: raster3d_unit ....................   Passed    0.15 sec
+        Start  96: car_config_unit
+ 96/129 Test  #96: car_config_unit ..................   Passed    0.07 sec
+        Start  97: car_runtime_unit
+ 97/129 Test  #97: car_runtime_unit .................   Passed    0.19 sec
+        Start  98: car_geometry_unit
+ 98/129 Test  #98: car_geometry_unit ................   Passed    0.02 sec
+        Start  99: physics_mesh_mass_unit
+ 99/129 Test  #99: physics_mesh_mass_unit ...........   Passed    0.01 sec
+        Start 100: car_wheel_geometry_unit
+100/129 Test #100: car_wheel_geometry_unit ..........   Passed    0.06 sec
+        Start 101: car_wheel_runtime_unit
+101/129 Test #101: car_wheel_runtime_unit ...........   Passed    0.08 sec
+        Start 102: physics_compound_unit
+102/129 Test #102: physics_compound_unit ............   Passed    0.00 sec
+        Start 103: physics_compound_mass_unit
+103/129 Test #103: physics_compound_mass_unit .......   Passed    0.00 sec
+        Start 104: physics_polyhedron_unit
+104/129 Test #104: physics_polyhedron_unit ..........   Passed    0.00 sec
+        Start 105: part_physics_unit
+105/129 Test #105: part_physics_unit ................   Passed    0.01 sec
+        Start 106: car_click_geometry_unit
+106/129 Test #106: car_click_geometry_unit ..........   Passed    0.05 sec
+        Start 107: physics_solver_unit
+107/129 Test #107: physics_solver_unit ..............   Passed    0.02 sec
+        Start 108: car_physics_unit
+108/129 Test #108: car_physics_unit .................   Passed    0.02 sec
+        Start 109: physics_suspension_unit
+109/129 Test #109: physics_suspension_unit ..........   Passed    0.02 sec
+        Start 110: physics_core_pair_unit
+110/129 Test #110: physics_core_pair_unit ...........   Passed    0.02 sec
+        Start 111: physics_cached_unit
+111/129 Test #111: physics_cached_unit ..............   Passed    0.02 sec
+        Start 112: road_network_unit
+112/129 Test #112: road_network_unit ................   Passed    0.03 sec
+        Start 113: road_alignment_unit
+113/129 Test #113: road_alignment_unit ..............   Passed    0.50 sec
+        Start 114: road_route_unit
+114/129 Test #114: road_route_unit ..................   Passed    0.04 sec
+        Start 115: ground_road_native_unit
+115/129 Test #115: ground_road_native_unit ..........   Passed    0.18 sec
+        Start 116: physics_friction_unit
+116/129 Test #116: physics_friction_unit ............   Passed    0.06 sec
+        Start 117: physics_multi_root_step_unit
+117/129 Test #117: physics_multi_root_step_unit .....   Passed    0.01 sec
+        Start 118: physics_compound_step_unit
+118/129 Test #118: physics_compound_step_unit .......   Passed    0.02 sec
+        Start 119: car_engine_unit
+119/129 Test #119: car_engine_unit ..................   Passed    0.01 sec
+        Start 120: dyno_native_unit
+120/129 Test #120: dyno_native_unit .................   Passed    0.14 sec
+        Start 121: physics_contact_geometry_unit
+121/129 Test #121: physics_contact_geometry_unit ....   Passed    0.02 sec
+        Start 122: ground_parameters_unit
+122/129 Test #122: ground_parameters_unit ...........   Passed    0.24 sec
+        Start 123: ground_runtime_unit
+123/129 Test #123: ground_runtime_unit ..............   Passed    0.09 sec
+        Start 124: ground_traffic_unit
+124/129 Test #124: ground_traffic_unit ..............   Passed    0.15 sec
+        Start 125: ground_files_unit
+125/129 Test #125: ground_files_unit ................   Passed    0.24 sec
+        Start 126: object_runtime_unit
+126/129 Test #126: object_runtime_unit ..............   Passed    0.09 sec
+        Start 127: car_world_step_unit
+127/129 Test #127: car_world_step_unit ..............Subprocess aborted***Exception:   0.43 sec
+Assertion failed: (parkedRoot.current == parkedCurrent), function main, file car_world_step_test.cpp, line 372.
+
+        Start 128: object_world_step_unit
+128/129 Test #128: object_world_step_unit ...........Subprocess aborted***Exception:   0.47 sec
+Assertion failed: (speed < 0.3f), function main, file object_world_step_test.cpp, line 240.
+box: lowestY=0.274 finalY=0.306 vel=0.315 pairs=4
+box rest gate: omegaSq=10.6435 scaledTorqueSq=0 scaledActivitySq=96.9915 flags=0x9
+box support: lastForce=(-235.205,-196.155,-14.2563) omega=(-1.74809,-1.83397,-2.0553) activity=(-14.7745,-196.163,9.92405)
+
+        Start 129: probe_script_unit
+129/129 Test #129: probe_script_unit ................   Passed    0.01 sec
+
+98% tests passed, 2 tests failed out of 129
+
+Total Test time (real) =  24.97 sec
+
+The following tests FAILED:
+	127 - car_world_step_unit (Subprocess aborted)
+	128 - object_world_step_unit (Subprocess aborted)
+Errors while running CTest

@@ -2873,6 +2873,697 @@
           "equals": 8
         }
       ]
+    },
+    {
+      "id": "issue53-engine-removal-native-regression",
+      "deliverable": "3",
+      "sequence": 26,
+      "scope": "US16/17/19 matching installed engine removal clears owner/running/Dyno before rempart; original red and3focusedgreen; unrelated Car physics abort independently reproduces with old/current source. No whole-game manipulation Journey or paired acceptance.",
+      "outcome": "incomplete",
+      "review": "pending",
+      "evidence": {
+        "red": {
+          "path": "local/verify/issue53-car-refresh-20261102/engine-removal-red-v1/result.json",
+          "sha256": "719010a4eb58fda26a12b1ac17feacc26f81b5b0cb12409f7aec5fae17552bd4"
+        },
+        "focused": {
+          "path": "local/verify/issue53-car-refresh-20261102/engine-removal-green-v2/result.json",
+          "sha256": "34bdb095629cebc107d8b9e4c47eba6d2372e27a3d0b979150ad616de22b0d46"
+        },
+        "baseline": {
+          "path": "local/verify/issue53-car-refresh-20261102/engine-removal-car-physics-baseline-v1/result.json",
+          "sha256": "2f1c0249731e4461919cf8933ac5abfa660f426d60aea7fb545e8e2150bf298c"
+        },
+        "review": {
+          "path": "local/verify/issue53-car-refresh-20261102/engine-removal-review-v1/review.json",
+          "sha256": "7ea30eb169c241d076c4eb0266c869277c6c740ed861e707847275056bb89e69"
+        }
+      },
+      "assertions": [
+        {
+          "evidence": "focused",
+          "pointer": "/execution_passed",
+          "equals": true
+        },
+        {
+          "evidence": "focused",
+          "pointer": "/parity_verified",
+          "equals": false
+        },
+        {
+          "evidence": "baseline",
+          "pointer": "/stages/original-removal-car-physics/actual_exit",
+          "equals": -6
+        },
+        {
+          "evidence": "baseline",
+          "pointer": "/stages/current-removal-car-physics/actual_exit",
+          "equals": -6
+        }
+      ]
+    },
+    {
+      "id": "issue53-actual-native-clock-v4-closed-interval",
+      "deliverable": "5",
+      "sequence": 5,
+      "scope": "Actual normal Stock intro/menu/name/cancel record independently validates64351API/442storedNative/129144phases; original adapter remainsfailed65 due CRLF stop parser. OwnedPython mixed response19tests consume exact tape; no actual game replay, stable thread incarnation, Port consumption, same-side game repeat or paired proof.",
+      "outcome": "incomplete",
+      "review": "escalated",
+      "evidence": {
+        "audit": {
+          "path": "local/verify/issue53-resume-20261103-v1/v4-independent-audit.json",
+          "sha256": "1060b1819dc020864329797b463fcf8493008aa7b86e2851830e77ec1a03b2ce"
+        },
+        "original": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-raw-fix-fourth/issue53-stock-native-clock-stored-v4/result.json",
+          "sha256": "e22b58c0a69bfb6d1613fcbdd80261586093e325ec37505f8c112f28bd57073a"
+        },
+        "raw": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-raw-fix-fourth/issue53-stock-native-clock-stored-v4/game/dumps/stock-control-tape.jsonl",
+          "sha256": "0408fcc13ccb67293ec154ff7c9316cdf05804157be9929e8329056c14d4f05e"
+        },
+        "pcm": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-raw-fix-fourth/issue53-stock-native-clock-stored-v4/stock.wav",
+          "sha256": "26bf232cb2d05f54ed1e0af9ff4613473c4cf445bc612841f0a6451aad769504"
+        },
+        "mixed": {
+          "path": "local/verify/issue53-resume-20261103-v1/v4-mixed-response-report.json",
+          "sha256": "88cc4b0f4d8d55f1369e37a9412bba48b8812c06f9f611159c4359cd1352fed6"
+        },
+        "control_archive": {
+          "path": "local/verify/issue53-resume-20261103-v1/response-controls.tar.gz",
+          "sha256": "df1249f79e58c6545cb75da724e331dca280d9f7e65f67453532540c0fb76fd5"
+        },
+        "jev": {
+          "path": "local/verify/issue53-resume-20261103-v1/jev-progress-verification.json",
+          "sha256": "864fc0c578e09d95ab059ecf05a25424fec0a24bb9b8f8249d0735184406592d"
+        }
+      },
+      "assertions": [
+        {
+          "evidence": "audit",
+          "pointer": "/closed_interval_validated",
+          "equals": true
+        },
+        {
+          "evidence": "audit",
+          "pointer": "/original_adapter_passed",
+          "equals": false
+        },
+        {
+          "evidence": "audit",
+          "pointer": "/api_calls",
+          "equals": 64351
+        },
+        {
+          "evidence": "audit",
+          "pointer": "/native_returns",
+          "equals": 442
+        },
+        {
+          "evidence": "audit",
+          "pointer": "/phases",
+          "equals": 129144
+        },
+        {
+          "evidence": "mixed",
+          "pointer": "/tests_successful",
+          "equals": true
+        },
+        {
+          "evidence": "mixed",
+          "pointer": "/full_consumption/consumed_native_returns",
+          "equals": 442
+        },
+        {
+          "evidence": "mixed",
+          "pointer": "/process_replay_qualified",
+          "equals": false
+        },
+        {
+          "evidence": "jev",
+          "pointer": "/result/isError",
+          "equals": true
+        }
+      ]
+    },
+    {
+      "id": "issue53-child-scan-guards-and-sustained-refusal",
+      "deliverable": "6",
+      "sequence": 2,
+      "scope": "New-child transient namespace retry preserves original5s/cumulative100k entries,42scratch-ledger tests and original-source red. Actual v5 prep directory/hash refusal and v6 sustained3attempt prep refusal retained; fresh complete capture coordination and completeD6 remain unverified.",
+      "outcome": "incomplete",
+      "review": "escalated",
+      "evidence": {
+        "checkpoint": {
+          "path": "local/verify/issue53-resume-20261103-v1/checkpoint.json",
+          "sha256": "a7472bab240c898bf9eae7be7df7a5cb38813f8cd22352b326315a7768ed9129"
+        },
+        "red": {
+          "path": "local/verify/issue53-resume-20261103-v1/prepaid-original-red.json",
+          "sha256": "45fd54e5ea73e83b36437f62d5f53e7fdc184f27f95c643e4d271417cb262a12"
+        },
+        "tests": {
+          "path": "local/verify/issue53-resume-20261103-v1/prepaid-final-tests.log",
+          "sha256": "3d6f5ae4edccffc7f875725a4d93959d88d6ceed6d8ffe1f91d58b445f3ed225"
+        },
+        "v5": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-refusal-exact-env/issue53-stock-native-clock-stored-v5/result.json",
+          "sha256": "fa9565efafa49e24e74487fd4ce8f162780a432db23b3368f893796c40338fbd"
+        },
+        "v6": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-fx-mutant/issue53-stock-native-clock-stored-v6/result.json",
+          "sha256": "cc203c2a44b63151736a26e9e976afe65ee8832acb403f0d637357918cd89476"
+        }
+      },
+      "assertions": [
+        {
+          "evidence": "red",
+          "pointer": "/expected_exit",
+          "equals": 1
+        },
+        {
+          "evidence": "red",
+          "pointer": "/actual_exit",
+          "equals": 1
+        },
+        {
+          "evidence": "checkpoint",
+          "pointer": "/verification/prepaid_tests",
+          "equals": 42
+        },
+        {
+          "evidence": "v6",
+          "pointer": "/passed",
+          "equals": false
+        },
+        {
+          "evidence": "v6",
+          "pointer": "/observer_error",
+          "equals": "prepaid observation: child directory scan retry bound"
+        },
+        {
+          "evidence": "v6",
+          "pointer": "/artifact_finalization",
+          "equals": "verified"
+        }
+      ]
+    },
+    {
+      "id": "issue53-resume-full-gate-129",
+      "deliverable": "8",
+      "sequence": 12,
+      "scope": "Complete integration invocation exited8 at127/129CTest; car_physics_unit nested-detach and object_world_step_unit true-sleep fail. PostCTest stages unreached. Focused controls/reviews do not repair gate; Jev verification currently unavailable OpenRouter402.",
+      "outcome": "failed",
+      "review": "escalated",
+      "evidence": {
+        "gate": {
+          "path": "local/verify/issue53-resume-20261103-v1/integration-gate-result.json",
+          "sha256": "84a212f20e4972f785cf36a54d598810ae7c621137a3af39fb29d8e114ea8411"
+        },
+        "log": {
+          "path": "local/verify/issue53-resume-20261103-v1/integration-gate.log",
+          "sha256": "dbbba83fd872befeb75dd087ccb582ad606691f389073a9fe8bb8d0638e06955"
+        },
+        "checkpoint": {
+          "path": "local/verify/issue53-resume-20261103-v1/checkpoint.json",
+          "sha256": "a7472bab240c898bf9eae7be7df7a5cb38813f8cd22352b326315a7768ed9129"
+        },
+        "jev": {
+          "path": "local/verify/issue53-resume-20261103-v1/jev-progress-verification.json",
+          "sha256": "864fc0c578e09d95ab059ecf05a25424fec0a24bb9b8f8249d0735184406592d"
+        }
+      },
+      "assertions": [
+        {
+          "evidence": "gate",
+          "pointer": "/exit_code",
+          "equals": 8
+        },
+        {
+          "evidence": "checkpoint",
+          "pointer": "/integration_gate/ctest_passed",
+          "equals": 127
+        },
+        {
+          "evidence": "checkpoint",
+          "pointer": "/integration_gate/ctest_total",
+          "equals": 129
+        },
+        {
+          "evidence": "checkpoint",
+          "pointer": "/integration_gate/failures",
+          "equals": [
+            "car_physics_unit",
+            "object_world_step_unit"
+          ]
+        },
+        {
+          "evidence": "jev",
+          "pointer": "/result/isError",
+          "equals": true
+        }
+      ]
+    },
+    {
+      "id": "issue53-nested-detach-stock-contract-correction",
+      "deliverable": "3",
+      "sequence": 27,
+      "scope": "US16/19 fixture correction only: newer00501d00 preserves mounted children on parent detach. Strengthened topology/pose/index assertions and original childdetach assertion retained after explicit childdetach;4focusedpass, recursiveflatteningmutantred. No productionphysics or whole-game parity claim.",
+      "outcome": "incomplete",
+      "review": "pending",
+      "evidence": {
+        "result": {
+          "path": "local/verify/issue53-car-refresh-20261102/nested-detach-contract-v1/result.json",
+          "sha256": "e02deef3188dce14144f5ed99724ee28a174e5d70332557ae48ce7f69a84fef7"
+        },
+        "bindings": {
+          "path": "local/verify/issue53-car-refresh-20261102/nested-detach-contract-v1/bindings.json",
+          "sha256": "bc20936070b07c120a60332d833c658854ea625d3d95e1ed54a45add0ada0ee4"
+        }
+      },
+      "assertions": [
+        {
+          "evidence": "result",
+          "pointer": "/execution_passed",
+          "equals": true
+        },
+        {
+          "evidence": "result",
+          "pointer": "/parity_verified",
+          "equals": false
+        },
+        {
+          "evidence": "result",
+          "pointer": "/stages/old-expectation/actual_exit",
+          "equals": 8
+        },
+        {
+          "evidence": "result",
+          "pointer": "/stages/corrected-contract/actual_exit",
+          "equals": 0
+        },
+        {
+          "evidence": "result",
+          "pointer": "/stages/flattening-control-test/actual_exit",
+          "equals": -6
+        }
+      ]
+    },
+    {
+      "id": "issue53-current-gate-128of129-provider-restored",
+      "deliverable": "8",
+      "sequence": 13,
+      "scope": "Current complete gate exits8 with128/129CTest: onlyobject_world_step_unit true-sleep fails, settling assertions unchanged; postCTest stages unexecuted. Capturerootwrites include gueststartup, not merelyhostprep; correction retained. Providercredit restored, Jev5factsverified with1reviewflag; no whole-product completion assessment.",
+      "outcome": "failed",
+      "review": "pending",
+      "evidence": {
+        "gate": {
+          "path": "local/verify/issue53-resume-20261103-v1/integration-gate-v2-result.json",
+          "sha256": "501b3616c7c9da1230a4e9e979332b15cdf389aa946247fe6167bb1222452034"
+        },
+        "log": {
+          "path": "local/verify/issue53-resume-20261103-v1/integration-gate-v2.log",
+          "sha256": "4393ff39c0db56a4161af434b82dd85ffccbacc2c02dbd1a141d7b9016b18237"
+        },
+        "correction": {
+          "path": "local/verify/issue53-resume-20261103-v1/checkpoint-v2.json",
+          "sha256": "fcf0ac8784e8d1b078b9ceac2c271bc0ce8d3b60001c896e98e83d03d97d34d6"
+        },
+        "jev": {
+          "path": "local/verify/issue53-resume-20261103-v1/jev-progress-restored.json",
+          "sha256": "39682dc10aaa61820ac2648588f4377861554543a6eacc63078f94aba892f152"
+        }
+      },
+      "assertions": [
+        {
+          "evidence": "gate",
+          "pointer": "/exit_code",
+          "equals": 8
+        },
+        {
+          "evidence": "correction",
+          "pointer": "/latest_full_gate/ctest_passed",
+          "equals": 128
+        },
+        {
+          "evidence": "correction",
+          "pointer": "/latest_full_gate/ctest_total",
+          "equals": 129
+        },
+        {
+          "evidence": "correction",
+          "pointer": "/latest_full_gate/failed",
+          "equals": [
+            "object_world_step_unit"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "issue53-provider-second-restoration-current-gate",
+      "deliverable": "8",
+      "sequence": 14,
+      "scope": "User second provider restoration permits smallpinned1.14verification again; currentfullgate remains128/129object true-sleep failure withpostCTestunexecuted. Prior402 andcapturewriter-attributioncorrection retained; no completion assessment.",
+      "outcome": "incomplete",
+      "review": "pending",
+      "evidence": {
+        "gate_audit": {
+          "path": "local/verify/issue53-resume-20261103-v1/gate-v2-audit.json",
+          "sha256": "9b5d39b4d77b8630a81b013cbb50e177201ad2893d4a9e10636043eb883ec6a6"
+        },
+        "scanner_audit": {
+          "path": "local/verify/issue53-resume-20261103-v1/scanner-audit.json",
+          "sha256": "8328bc993c18b3d688d68f338cfa7334562af0e744e210583a29122a83778ec6"
+        },
+        "prior_error": {
+          "path": "local/verify/issue53-resume-20261103-v1/jev-current-gate-access-check.json",
+          "sha256": "ad986a098e9be730c62223562e471480d08c93631cbe9e398ca72eff8297c249"
+        },
+        "restored": {
+          "path": "local/verify/issue53-resume-20261103-v1/jev-current-gate-restored-v2.json",
+          "sha256": "49a1535221cdd9912e0aec71eb56e797386a5be0b26e2b7f9532d5bc11a260e9"
+        }
+      },
+      "assertions": [
+        {
+          "evidence": "gate_audit",
+          "pointer": "/ctest_passed",
+          "equals": 128
+        },
+        {
+          "evidence": "gate_audit",
+          "pointer": "/ctest_total",
+          "equals": 129
+        },
+        {
+          "evidence": "gate_audit",
+          "pointer": "/post_ctest_executed",
+          "equals": false
+        },
+        {
+          "evidence": "prior_error",
+          "pointer": "/result/isError",
+          "equals": true
+        },
+        {
+          "evidence": "scanner_audit",
+          "pointer": "/capture_passed",
+          "equals": false
+        }
+      ]
+    },
+    {
+      "id": "issue53-original-constructor-full-floor-first-input",
+      "deliverable": "3",
+      "sequence": 28,
+      "scope": "Conditional original constructor-to-step64 collector uses all2048synthetic floor triangles; sector/resource queue substituted. Repeat64/control32 exact341rows, initial258bodyrecords match until step40. First correction contact selects996 where oldPort drops996 and selects997. Original wrapper false retained; no retail discovery, solver or whole-game acceptance.",
+      "outcome": "incomplete",
+      "review": "pending",
+      "evidence": {
+        "analysis": {
+          "path": "local/verify/native-background-tests/attempt-z_x05__f/flag/issue53-full-floor-analysis-v1/report.json",
+          "sha256": "e0406c4385a84235ad33ac2ea5a2368d290a1e646fc793012e6487a8bd7b8125"
+        },
+        "input": {
+          "path": "local/verify/native-background-tests/attempt-z_x05__f/flag/issue53-first-input-analysis-v1/report.json",
+          "sha256": "43038a54fcc12afc66fbf75a492026784b778595b82113199f8abfe93bada364"
+        },
+        "independent": {
+          "path": "local/verify/issue53-resume-20261103-v1/full-floor-independent-audit.json",
+          "sha256": "c869f23a727ac9a2c4e648bf08f5e8220fbde960c861ec95427354478208a606"
+        }
+      },
+      "assertions": [
+        {
+          "evidence": "analysis",
+          "pointer": "/normalized_repeat_controls/repeat64/equal_after_batch_label_removal",
+          "equals": true
+        },
+        {
+          "evidence": "analysis",
+          "pointer": "/normalized_repeat_controls/control32/equal_after_batch_label_removal",
+          "equals": true
+        },
+        {
+          "evidence": "analysis",
+          "pointer": "/first_body_state_difference/step",
+          "equals": 40
+        },
+        {
+          "evidence": "analysis",
+          "pointer": "/settling_acceptance",
+          "equals": false
+        },
+        {
+          "evidence": "input",
+          "pointer": "/first_original_contact/face",
+          "equals": 996
+        },
+        {
+          "evidence": "input",
+          "pointer": "/observer_transparency/original/equal",
+          "equals": true
+        },
+        {
+          "evidence": "independent",
+          "pointer": "/all_declared_bindings_rehashed",
+          "equals": true
+        },
+        {
+          "evidence": "independent",
+          "pointer": "/original_wrapper_still_failed",
+          "equals": true
+        }
+      ]
+    },
+    {
+      "id": "issue53-port-stored-native-clock-handler-v3",
+      "deliverable": "5",
+      "sequence": 6,
+      "scope": "Owned Port currentTime handler consumes442 stored Native Float32 words exactly; raw metadata/value projection independently audited. Nine expected outcomes incl legacy20358, zero controls and malformed/nonfinite refusals. Optional provider not installed in actual game; no ABI/scheduler/process/game replay or paired proof.",
+      "outcome": "incomplete",
+      "review": "escalated",
+      "evidence": {
+        "result": {
+          "path": "local/verify/issue53-resume-20261103-v1/port-native-clock-seam-v3-result.json",
+          "sha256": "8dbabc1012a9de76b0ccf0dffc36da6f9db79f706e13193e6b85c966ee0ab6c2"
+        },
+        "independent": {
+          "path": "local/verify/issue53-resume-20261103-v1/native-clock-v3-independent-audit.json",
+          "sha256": "7a6511d5be68585b74db75bd35cfc6fd3c87520b75eef77d532faeba3816638c"
+        },
+        "fixture": {
+          "path": "local/verify/issue53-resume-20261103-v1/v4-native-current-time-fixture.json",
+          "sha256": "33de28772b955774c810225aa75d69f579effe528a7fab244293a60088c07ed5"
+        },
+        "jev": {
+          "path": "local/verify/issue53-resume-20261103-v1/native-clock-v3-jev-verification.json",
+          "sha256": "a73bd7a886aeb75d453b488922d02b768a4727605f4ade9800946636a2d9fef1"
+        },
+        "prior_gate": {
+          "path": "local/verify/issue53-resume-20261103-v1/port-native-clock-seam-v2-jev.json",
+          "sha256": "ce64967b76fd233352ea191771eda6c588c47fc8e3024d81350fd10047fc9d56"
+        }
+      },
+      "assertions": [
+        {
+          "evidence": "result",
+          "pointer": "/all_expected_exits",
+          "equals": true
+        },
+        {
+          "evidence": "result",
+          "pointer": "/parity_verified",
+          "equals": false
+        },
+        {
+          "evidence": "independent",
+          "pointer": "/native_returns",
+          "equals": 442
+        },
+        {
+          "evidence": "independent",
+          "pointer": "/all_442_raw_metadata_and_float_words_exact",
+          "equals": true
+        },
+        {
+          "evidence": "independent",
+          "pointer": "/nine_expected_outcomes",
+          "equals": true
+        },
+        {
+          "evidence": "independent",
+          "pointer": "/process_game_ABI_scheduler_pair_qualified",
+          "equals": false
+        }
+      ]
+    },
+    {
+      "id": "issue53-opt-in-stock-intent-admission-race-reviewed",
+      "deliverable": "6",
+      "sequence": 3,
+      "scope": "Opt-in protocol2 durable pre-create intent/barrier, exact typed identities and committed logical slot reservation.66scratch-pool tests incl17intent controls; four source-bound race/schema mutants red with behavioral witnesses. Independent Standards/Spec no findings; Jev lowconfidence escalation retained. No live migration/caller/realintent/Docker lifecycle/pause or D6 acceptance.",
+      "outcome": "incomplete",
+      "review": "escalated",
+      "evidence": {
+        "result": {
+          "path": "local/verify/issue53-resume-20261103-v1/stock-intent-final-result.json",
+          "sha256": "b0628c4de27897d837c48cb867bde849b2fde2b02e888a0f94cff16548d942cc"
+        },
+        "independent": {
+          "path": "local/verify/issue53-resume-20261103-v1/stock-intent-independent-audit.json",
+          "sha256": "90a9e8a03a95222b74e9ae0be820b1f0c25222afeb52238db9317afe49b84adb"
+        },
+        "retention": {
+          "path": "local/verify/issue53-resume-20261103-v1/stock-intent-review-retention.json",
+          "sha256": "f00814c031f8241774122272eb529ce586a4c7be3823f695aa35e8b83da067cf"
+        },
+        "archive": {
+          "path": "local/verify/issue53-resume-20261103-v1/stock-intent-review-controls.tar.gz",
+          "sha256": "6f201e53f8471999c85ad6080ef48c64f7fe50373864a70df9a4a267f5806651"
+        },
+        "jev": {
+          "path": "local/verify/issue53-resume-20261103-v1/stock-intent-final-jev.json",
+          "sha256": "2dec6e172f16668b1fcb1b15ef66353ef2be0ef6b79bff67f3b71e8c97ffd912"
+        }
+      },
+      "assertions": [
+        {
+          "evidence": "result",
+          "pointer": "/tests/run",
+          "equals": 66
+        },
+        {
+          "evidence": "result",
+          "pointer": "/tests/passed",
+          "equals": 66
+        },
+        {
+          "evidence": "result",
+          "pointer": "/real_Stock_intents",
+          "equals": false
+        },
+        {
+          "evidence": "result",
+          "pointer": "/Docker_operations",
+          "equals": false
+        },
+        {
+          "evidence": "independent",
+          "pointer": "/four_behavioral_fault_witnesses_verified",
+          "equals": true
+        },
+        {
+          "evidence": "independent",
+          "pointer": "/all_declared_final_source_and_result_bindings_rehashed",
+          "equals": true
+        },
+        {
+          "evidence": "independent",
+          "pointer": "/live_pool_migration_applied",
+          "equals": false
+        },
+        {
+          "evidence": "independent",
+          "pointer": "/D6_complete",
+          "equals": false
+        }
+      ]
+    },
+    {
+      "id": "issue53-published-paused-worktree-gate",
+      "deliverable": "8",
+      "sequence": 15,
+      "scope": "User-authorized source publication of paused work. Source bytes preserved; current gate exits8 at127/129CTest with carparked/objectsettling failures, postCTestunexecuted. Focused42scanner/66pool/7shutdown/21dev pass. Seven source checkpoint hooks bypassed after formatting rejection; clang-tidy incomplete. No resumed game implementation/release acceptance.",
+      "outcome": "failed",
+      "review": "escalated",
+      "evidence": {
+        "result": {
+          "path": "docs/evidence/publication-20261103-result.json",
+          "sha256": "a82a0cb0e435559e4c1c8774debb11efae3b7f19f988098e09b865c1de113bbc"
+        },
+        "gate": {
+          "path": "docs/evidence/publication-20261103-gate.log",
+          "sha256": "a1a9c19ae01a72804ab71556038006d322609af02544ef7790cd817ca45ad763"
+        },
+        "pool": {
+          "path": "docs/evidence/publication-20261103-pool.log",
+          "sha256": "afc22427a5a665601fe988bf704733aaf517bbe3cd71166520f7bc04e7b19c36"
+        },
+        "scanner": {
+          "path": "docs/evidence/publication-20261103-prepaid.log",
+          "sha256": "a0d628329fdc9d974959339cd5d2948bf24df09689ae6d0fbc0586425096e047"
+        },
+        "shutdown_dev": {
+          "path": "docs/evidence/publication-20261103-shutdown-dev.log",
+          "sha256": "89cc772fa83738657feb93533c49b56ff8358de249274ad72ebc973ee1b2f3a6"
+        },
+        "jev": {
+          "path": "docs/evidence/publication-20261103-jev.json",
+          "sha256": "458f9a266fe3bcfb570f7cdda21aab625665db22c50045635631c4c7e780f040"
+        }
+      },
+      "assertions": [
+        {
+          "evidence": "result",
+          "pointer": "/goal_status",
+          "equals": "paused"
+        },
+        {
+          "evidence": "result",
+          "pointer": "/runtime_source_bytes_match_original_paused_handoff",
+          "equals": true
+        },
+        {
+          "evidence": "result",
+          "pointer": "/integration_gate/exit_code",
+          "equals": 8
+        },
+        {
+          "evidence": "result",
+          "pointer": "/integration_gate/ctest_passed",
+          "equals": 127
+        },
+        {
+          "evidence": "result",
+          "pointer": "/integration_gate/ctest_total",
+          "equals": 129
+        },
+        {
+          "evidence": "result",
+          "pointer": "/integration_gate/failed",
+          "equals": [
+            "car_world_step_unit",
+            "object_world_step_unit"
+          ]
+        },
+        {
+          "evidence": "result",
+          "pointer": "/focused_checks/prepaid_budget_tests/count",
+          "equals": 42
+        },
+        {
+          "evidence": "result",
+          "pointer": "/focused_checks/resource_pool_tests/count",
+          "equals": 66
+        },
+        {
+          "evidence": "result",
+          "pointer": "/focused_checks/shutdown_receipt_tests/count",
+          "equals": 7
+        },
+        {
+          "evidence": "result",
+          "pointer": "/focused_checks/developer_lane_tests/count",
+          "equals": 21
+        },
+        {
+          "evidence": "result",
+          "pointer": "/release_complete",
+          "equals": false
+        }
+      ]
     }
   ]
 }
