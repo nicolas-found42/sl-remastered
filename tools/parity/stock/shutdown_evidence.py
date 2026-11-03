@@ -1,11 +1,23 @@
 """Validate the declared application recorder boundary; never whole-process replay."""
+import argparse
 import hashlib
 import json
 from pathlib import Path
+import re
 import stat
+import sys
 
 
 BOUNDARY = 'main_image_before_ExitProcess_after_CRT_callbacks'
+
+
+def control_stop_evidence(text):
+    """Require one whole successful acknowledgement, with native CRLF or LF."""
+    values = re.findall(r'^\[[ \t]*[0-9]+ ms\] control_tape_stop result=(-?[0-9]+)\r?$', text, re.MULTILINE)
+    count = int(values[0]) if len(values) == 1 else None
+    return {'passed': len(values) == text.count('control_tape_stop result=') == 1 and
+                     not values[0].startswith('-') and 0 <= count <= 65536,
+            'observations': len(values), 'committed_api_rows': count}
 
 
 def read(path, maximum):
@@ -15,7 +27,11 @@ def read(path, maximum):
     info = path.stat()
     if not stat.S_ISREG(info.st_mode) or info.st_size > maximum:
         raise ValueError('invalid/oversized recorder shutdown artifact')
-    return path.read_bytes()
+    with path.open('rb') as stream:
+        raw = stream.read(maximum + 1)
+    if len(raw) > maximum:
+        raise ValueError('oversized recorder shutdown artifact')
+    return raw
 
 
 def decode(raw):
@@ -69,3 +85,16 @@ def inspect(out, interval):
             'limits': ['new roots after atomic admission close excluded',
                        'DLL detach excluded', 'thread incarnations unqualified',
                        'no whole-process or replay qualification']}
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--stop-receipt', type=Path, required=True)
+    args = parser.parse_args()
+    try:
+        receipt = control_stop_evidence(read(args.stop_receipt, 4 * 1024**2).decode('utf-8'))
+    except (OSError, ValueError) as error:
+        print('recorder stop receipt: ' + str(error), file=sys.stderr)
+        raise SystemExit(2)
+    print(json.dumps(receipt))
+    raise SystemExit(0 if receipt['passed'] else 1)

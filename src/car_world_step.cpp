@@ -1089,7 +1089,8 @@ bool CarWorldStepper::step(float seconds, std::string& error) {
                   continue;
                 const PairKey key{leaf, face->leafOwner(), faceIndex};
                 auto entry = objectPairs_.find(key);
-                if (entry == objectPairs_.end()) {
+                const bool newlyCreated = entry == objectPairs_.end();
+                if (newlyCreated) {
                   auto ground = face->bodyOwner();
                   if (!ground) {
                     why = "car step: object ground body unavailable";
@@ -1129,6 +1130,22 @@ bool CarWorldStepper::step(float seconds, std::string& error) {
                 }
                 if (result == physics::ContactGeometryResult::Dropped) {
                   pendingObjectErase_.insert(key);
+                  seenObject.erase(key);
+                  continue;
+                }
+                // Stock 0049b830 admits a NEW ground row only within core
+                // separation 0.02 (constant 005f1070). The wider k::skin
+                // (0.05) band is the retained-row 004a2d10 tolerance, not
+                // the admission band; applying it at creation let the
+                // pending stage manufacture out-of-band impact contacts
+                // Stock would never have admitted (verified against the
+                // stock .bak.exe and the contact-lifecycle investigation).
+                if (newlyCreated && !(pair.pair.contact.separation <= 0.02f)) {
+                  // Immediate erase (not the deferred pendingObjectErase_) so a
+                  // re-encountered key this gather is re-created and re-gated
+                  // rather than treated as a retained pair.
+                  objectPairs_.erase(entry);
+                  pendingObjectErase_.erase(key);
                   seenObject.erase(key);
                   continue;
                 }

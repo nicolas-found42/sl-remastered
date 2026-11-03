@@ -269,6 +269,47 @@ int main() {
                                     runtime.drivetrainContext(runtime.effectiveConfig(prototype), .01f), error));
     assert(runtime.driveTorque > 100 && runtime.engineAngularSpeed > beforeEngineSpeed);
     engine->scriptReceiver = nullptr;
+    // Newer004acdf0 clears the native engine before rempart. Removing the
+    // installed engine must not leave its still-live Dyno driving the Car.
+    car->scriptReceiver = nullptr;
+    f.arena.callScript = {};
+    auto* hood = f.add(f.id("cars\\racers\\Baiern.rpk", 0x10d), kHoodClass,
+                       kHoodConfig, "part");
+    assert(carPartInstall(*hood, car, 0, f.arena, error));
+    assert(carPartRemove(*hood, 0, f.arena, error));
+    assert(runtime.engineRunning && runtime.installedEngine.owner == engine &&
+           !runtime.engineDyno.expired());
+    assert(carPartRemove(*engine, 0, f.arena, error));
+    assert(!runtime.engineRunning && !runtime.installedEngine.owner &&
+           runtime.engineDyno.expired());
+    car->scriptReceiver = &receiver;
+    f.arena.callScript = [&](const VmObject* target, const std::string& name, std::vector<VmValue> arguments) {
+      return vmHostCall(f.arena, target, name, arguments, &nativeRegistry(), &classes, &states);
+    };
+    assert(std::holds_alternative<std::monostate>(chassisForceUpdate({}, &receiver, &f.arena, nullptr)));
+    runtime.engineAngularSpeed = 3000.0f / 9.549296379089355f;
+    runtime.previousEngineRpm = 3000;
+    const float removedEngineSpeed = runtime.engineAngularSpeed;
+    assert(runtime.advanceDrivetrain(runtime.effectiveConfig(prototype),
+                                     runtime.drivetrainContext(runtime.effectiveConfig(prototype), .01f), error));
+    assert(runtime.driveTorque == 0 && runtime.engineAngularSpeed <= removedEngineSpeed);
+    // Reinstalling the removed engine rebinds the same live model normally.
+    car->scriptReceiver = nullptr;
+    f.arena.callScript = {};
+    engine->scriptReceiver = &engineScript;
+    assert(carPartInstall(*engine, car, 401, f.arena, error));
+    car->scriptReceiver = &receiver;
+    f.arena.callScript = [&](const VmObject* target, const std::string& name, std::vector<VmValue> arguments) {
+      return vmHostCall(f.arena, target, name, arguments, &nativeRegistry(), &classes, &states);
+    };
+    assert(std::holds_alternative<std::monostate>(chassisForceUpdate({}, &receiver, &f.arena, nullptr)));
+    assert(runtime.engineRunning);
+    runtime.engineAngularSpeed = 3000.0f / 9.549296379089355f;
+    runtime.previousEngineRpm = 3000;
+    assert(runtime.advanceDrivetrain(runtime.effectiveConfig(prototype),
+                                     runtime.drivetrainContext(runtime.effectiveConfig(prototype), .01f), error));
+    assert(runtime.driveTorque > 100);
+    engine->scriptReceiver = nullptr;
     assert(std::holds_alternative<std::monostate>(dynoDataDeleteNative({}, &dyno, &f.arena, nullptr)));
 
     receiver.fields[0].value = int32_t{0};

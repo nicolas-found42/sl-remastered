@@ -22,11 +22,13 @@ class ActualResponseReplayTest(unittest.TestCase):
     def setUpClass(cls):
         cls.raw, cls.digest = replay.control.read_rows(CAPTURE,128*1024**2,500000)
         cls.calls = {row['seq']:row for row in cls.raw if row['event']=='api_return'}
+        cls.native = {row['ordinal']:row for row in cls.raw if row['event']=='native_clock_return'}
         cls.phases = sorted((phase,tag,row['seq']) for row in cls.calls.values()
                             for tag,phase in [('entry',row['entry_phase']),('return',row['return_phase'])])
+        cls.phases = sorted(cls.phases + [(row['phase'], 'native_return', row['ordinal']) for row in cls.native.values()])
         cls.base=next(row['image_base'] for row in cls.raw if row['event']=='initial_global')
         cls.program=replay.RecordedProgram.from_tape(CAPTURE)
-        cls.bindings={f'owned_fixture_token_{i}':lane for i,lane in enumerate(sorted({r['lane'] for r in cls.calls.values()}))}
+        cls.bindings={f'owned_fixture_token_{i}':lane for i,lane in enumerate(sorted({r['lane'] for r in [*cls.calls.values(), *cls.native.values()]}))}
         cls.tokens={lane:token for token,lane in cls.bindings.items()}
         EVIDENCE.update(source_sha256=cls.digest,source=str(CAPTURE.resolve()),bindings=cls.bindings,
                         binding_scope='explicit owned harness tokens; native roles unresolved')
@@ -38,12 +40,23 @@ class ActualResponseReplayTest(unittest.TestCase):
                     argument=replay.control.pointer(row['api'],row['caller_rva'],row['arg'],self.base),
                     last_error=row['last_error_before'],cw=row['cw'][0],mxcsr=row['mxcsr'][0])
 
+    def native_request(self, row):
+        return dict(source_sha256=self.digest, capture_lane=row['lane'], lane_read=row['lane_read'],
+                    native=row['native'], caller=row['caller'], callee=row['callee'],
+                    ordinal=row['ordinal'], phase=row['phase'])
+
     def drive(self,session,stop_before=None):
         handles={};emitted=hashlib.sha256()
         for ordinal,phase,identifier in self.phases:
-            row=self.calls[identifier];token=self.tokens[row['lane']]
+            row=(self.native if phase=='native_return' else self.calls)[identifier];token=self.tokens[row['lane']]
             if stop_before and stop_before(row,phase):return row,handles
             if phase=='entry':handles[identifier]=session.enter(token,self.request(row))
+            elif phase=='native_return':
+                result=session.native_return(token,self.native_request(row))
+                expected={key:row[key] for key in ('value_f32_bits','last_error','fxsave_hex')}
+                self.assertEqual(result,expected)
+                emitted.update(struct.pack('<II',result['value_f32_bits'],result['last_error']))
+                emitted.update(bytes.fromhex(result['fxsave_hex']))
             else:
                 output=bytearray(b'\x7e'*12) if row['output_valid'] else None
                 result=session.leave(token,handles.pop(identifier),output)
@@ -63,12 +76,46 @@ class ActualResponseReplayTest(unittest.TestCase):
         first,first_hash=self.drive(first_session);second,second_hash=self.drive(self.session())
         self.assertEqual(first,second);self.assertEqual(first_hash,second_hash)
         self.assertEqual(first['consumed_calls'],len(self.calls))
+        self.assertEqual(first.get('consumed_native_returns',0),len(self.native))
         self.assertEqual(first['consumed_phases'],len(self.phases))
         self.assertFalse(first['process_replay_qualified'])
         self.assertFalse(first['scheduler_replay_qualified'])
         EVIDENCE.update(full_consumption=first,emitted_reply_sha256=first_hash,offline_repeat_equal=True)
         row=self.calls[self.phases[0][2]]
         with self.assertRaises(replay.ReplayMismatch):first_session.enter(self.tokens[row['lane']],self.request(row))
+
+    def test_actual_native_request_mismatches_latch(self):
+        if not self.native:self.skipTest('API-only capture has no stored Native observations')
+        for key,value in [('source_sha256','0'*64),('capture_lane',12345),('native','invented()F'),
+                          ('caller',0),('callee',0),('ordinal',0),('phase',0),('lane_read',0)]:
+            session=self.session()
+            row,_=self.drive(session,lambda row,phase:phase=='native_return')
+            request=self.native_request(row);request[key]=value
+            with self.subTest(key=key):
+                with self.assertRaises(replay.ReplayMismatch):session.native_return(self.tokens[row['lane']],request)
+                with self.assertRaises(replay.ReplayMismatch):session.native_return(self.tokens[row['lane']],self.native_request(row))
+
+    def test_actual_native_phase_lane_and_foreign_thread_refuse(self):
+        if not self.native:self.skipTest('API-only capture has no stored Native observations')
+        row=next(iter(self.native.values()))
+        with self.assertRaises(replay.ReplayMismatch):
+            self.session().native_return(self.tokens[row['lane']],self.native_request(row))
+        session=self.session();row,_=self.drive(session,lambda row,phase:phase=='native_return')
+        wrong=next(token for token,lane in self.bindings.items() if lane!=row['lane'])
+        with self.assertRaises(replay.ReplayMismatch):session.native_return(wrong,self.native_request(row))
+        session=self.session();row,_=self.drive(session,lambda row,phase:phase=='native_return');errors=[]
+        def foreign():
+            try:session.native_return(self.tokens[row['lane']],self.native_request(row))
+            except replay.ReplayMismatch as error:errors.append(str(error))
+        worker=threading.Thread(target=foreign);worker.start();worker.join(timeout=5)
+        self.assertFalse(worker.is_alive());self.assertEqual(len(errors),1)
+        with self.assertRaises(replay.ReplayMismatch):session.finish()
+
+    def test_actual_unused_native_observation_refuses_finish(self):
+        if not self.native:self.skipTest('API-only capture has no stored Native observations')
+        session=self.session()
+        self.drive(session,lambda row,phase:phase=='native_return' and row['ordinal']==len(self.native))
+        with self.assertRaises(replay.ReplayMismatch):session.finish()
 
     def test_explicit_exact_lane_bindings_required(self):
         for bad in ({},dict(self.bindings,extra=12345),{token:True for token in self.bindings}):
@@ -174,7 +221,7 @@ if __name__=='__main__':
     CAPTURE,REPORT=args.capture,args.report
     result=unittest.main(argv=['test_response_replay.py',*rest],verbosity=2,exit=False).result
     EVIDENCE.update(tests_run=result.testsRun,tests_successful=result.wasSuccessful(),
-                    scope='actual recorded API replies consumed by owned Python harness only',
+                    scope='actual recorded API/Native replies consumed by owned Python harness only',
                     process_replay_qualified=False,native_ABI_application_qualified=False)
     with REPORT.open('x') as stream:json.dump(EVIDENCE,stream,indent=2);stream.write('\n')
     raise SystemExit(0 if result.wasSuccessful() else 1)

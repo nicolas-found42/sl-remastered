@@ -1,4 +1,4 @@
-"""Consume recorded Stock API replies in an explicit owned caller harness.
+"""Consume recorded Stock API/Native replies in an explicit owned caller harness.
 
 This does not launch/inject Stock, assign native thread roles, set CPU/FPU state,
 restore a checkpoint or schedule instructions. Caller tokens are supplied by the
@@ -38,8 +38,8 @@ class RecordedProgram:
     """Validated immutable serialized program; use from_tape, never a JSON plan."""
     def __init__(self, path):
         compiled = control.compile_tape(path)
-        if compiled['format'] != 'stock-api-interval-offline/2':
-            raise ReplayMismatch('only phase-qualified API streams are implemented; RNG/input/callback streams refuse')
+        if compiled['format'] not in ('stock-api-interval-offline/2', 'stock-api-native-return-interval-offline/2'):
+            raise ReplayMismatch('only phase-qualified API/stored-Native streams are implemented; RNG/input/callback streams refuse')
         if any(call['request']['api'] not in control.CALLERS for call in compiled['calls']):
             raise ReplayMismatch('unsupported response stream')
         self._encoded = json.dumps(compiled, sort_keys=True, separators=(',', ':')).encode()
@@ -50,10 +50,14 @@ class RecordedProgram:
 
     def describe(self):
         value = json.loads(self._encoded)
-        return {'source_sha256': value['source_sha256'], 'calls': len(value['calls']),
+        result = {'source_sha256': value['source_sha256'], 'calls': len(value['calls']),
                 'phases': len(value['phase_order']),
-                'capture_lanes': sorted({call['request']['capture_lane'] for call in value['calls']}),
+                'capture_lanes': sorted({phase['lane'] for phase in value['phase_order']}),
                 'scope': 'owned_harness_API_response_consumption', 'process_replay_qualified': False}
+        if 'native_returns' in value:
+            result.update(native_returns=len(value['native_returns']),
+                          scope='owned_harness_API_Native_response_consumption')
+        return result
 
     def new_session(self, bindings):
         return ResponseSession(self, bindings)
@@ -64,7 +68,7 @@ class ResponseSession:
         if type(program) is not RecordedProgram or type(bindings) is not dict:
             raise ReplayMismatch('validated program and explicit harness bindings required')
         value = json.loads(program._encoded)
-        lanes = {call['request']['capture_lane'] for call in value['calls']}
+        lanes = {phase['lane'] for phase in value['phase_order']}
         if (not bindings or any(type(token) is not str or not token for token in bindings) or
                 any(type(lane) is not int for lane in bindings.values()) or
                 len(set(bindings.values())) != len(bindings) or set(bindings.values()) != lanes):
@@ -73,9 +77,19 @@ class ResponseSession:
         self._calls = {call['entry']: call for call in value['calls']}
         self._timeline = value['phase_order']
         self._source = value['source_sha256']
+        self._native = {}
+        for row in value.get('native_returns', []):
+            request = {key: row[key] for key in ('native', 'caller', 'callee', 'ordinal', 'phase', 'lane_read')}
+            request.update(source_sha256=self._source, capture_lane=row['lane'])
+            self._native[row['ordinal']] = {
+                'request': request,
+                'reply': {key: row[key] for key in ('value_f32_bits', 'last_error', 'fxsave_hex')}}
+        self._scope = ('owned_harness_API_Native_response_consumption' if self._native else
+                       'owned_harness_API_response_consumption')
         self._index = 0
         self._active = {}
         self._returned = 0
+        self._native_returned = 0
         self._failure = None
         self._owner_thread = threading.current_thread()
 
@@ -136,6 +150,23 @@ class ResponseSession:
         self._returned += 1
         return copy.deepcopy(reply)
 
+    def native_return(self, token, request):
+        """Consume one original stored Float32 observation, not a Native entry.
+
+        Shared API phases must be consumed explicitly before this operation.
+        The reply's opaque backend FX bytes are retained, never applied or
+        interpreted as architectural state by this owned Python harness.
+        """
+        expected = self._next(token, 'native_return')
+        observed = self._native[expected['native_return']]
+        if type(request) is not dict or not bounded_request(request):
+            self._refuse('malformed or unbounded Native request')
+        if control.first_difference(observed['request'], request):
+            self._refuse('recorded Native request mismatch at ordinal ' + str(expected['ordinal']))
+        self._index += 1
+        self._native_returned += 1
+        return copy.deepcopy(observed['reply'])
+
     def finish(self):
         if threading.current_thread() is not self._owner_thread:
             self._refuse('unsupported foreign harness completion thread')
@@ -143,7 +174,10 @@ class ResponseSession:
             raise ReplayMismatch('replay already failed: ' + self._failure)
         if self._index != len(self._timeline) or any(self._active.values()):
             self._refuse('recorded responses remain unconsumed')
-        return {'scope': 'owned_harness_API_response_consumption', 'source_sha256': self._source,
+        result = {'scope': self._scope, 'source_sha256': self._source,
                 'consumed_calls': self._returned, 'consumed_phases': self._index,
                 'pending': 0, 'process_replay_qualified': False,
                 'native_lane_binding_qualified': False, 'scheduler_replay_qualified': False}
+        if self._native:
+            result['consumed_native_returns'] = self._native_returned
+        return result

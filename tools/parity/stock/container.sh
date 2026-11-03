@@ -82,7 +82,7 @@ if [ "${SLRR_CONTROL_TAPE:-0}" = 1 ] && [ "${SLRR_ORDINARY_EXIT:-0}" != 1 ]; the
  if ! timeout 5 sh -c 'until grep -q "control_tape_stop result=" /work/game/dumps/d3d9proxy.log; do sleep .1; done'; then
   echo 'record-only API recorder did not stop before its deadline' >/work/control-stop-error.txt
   STATUS=65
- elif ! grep -Eq 'control_tape_stop result=[0-9]+$' /work/game/dumps/d3d9proxy.log; then
+ elif ! python3 /work/instrumentation-source/shutdown_evidence.py --stop-receipt /work/game/dumps/d3d9proxy.log >/work/control-stop-receipt.json; then
   echo 'record-only API recorder explicitly refused its final commit' >/work/control-stop-error.txt
   STATUS=65
  fi

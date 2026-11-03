@@ -5113,6 +5113,18 @@ bool changePartRegistry(WorldNode& owner, WorldNode& part, bool add,
         ++it;
       }
     }
+    auto& car = *owner.carInstance;
+    // Newer004acdf0 clears +2098/+20a0, flag4000 and cfg+c30 before
+    // rempart, and only when the removed id is the installed engine.
+    if (owner.nativeDevice == "car" &&
+        car.installedEngine.cachedValue == part.instanceId) {
+      setLinkOwner(car.installedEngine, nullptr);
+      car.engineRunning = false;
+      car.engineDyno.reset();
+      runlog::event(runlog::EventKind::Note,
+                    "Car engine removed: car=0x%08x engine=0x%08x running=0 dyno=0",
+                    owner.instanceId, part.instanceId);
+    }
   }
   if (!owner.scriptReceiver || !arena.callScript)
     return !add || bindAddedCarEngine(owner, part, arena, error);

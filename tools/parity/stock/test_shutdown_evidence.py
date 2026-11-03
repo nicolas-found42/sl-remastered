@@ -3,6 +3,8 @@ import hashlib
 import importlib.util
 import json
 from pathlib import Path
+import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -64,6 +66,58 @@ class ShutdownEvidenceTest(unittest.TestCase):
         self.report['caller'] += 4
         with self.assertRaisesRegex(ValueError, 'caller'):
             self.inspect()
+
+
+class StopReceiptTest(unittest.TestCase):
+    def receipt(self, raw):
+        with tempfile.TemporaryDirectory() as directory:
+            log = Path(directory).resolve() / 'd3d9proxy.log'
+            log.write_bytes(raw)
+            result = subprocess.run(
+                [sys.executable, '-I', str(Path(checker.__file__).resolve()),
+                 '--stop-receipt', str(log)],
+                capture_output=True, timeout=5)
+            return result, json.loads(result.stdout)
+
+    def test_native_windows_receipt_and_lf_receipt(self):
+        # Actual format-9 attempt v4 stopped successfully, then the shell
+        # rejected this CRLF line as an explicit failure (container exit 65).
+        for ending in (b'\r\n', b'\n'):
+            with self.subTest(ending=ending):
+                result, receipt = self.receipt(
+                    b'[   55641 ms] input: tape_stop' + ending +
+                    b'[   55652 ms] control_tape_stop result=2167' + ending)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(receipt, {
+                    'passed': True, 'observations': 1, 'committed_api_rows': 2167})
+
+    def test_incomplete_failed_duplicate_or_malformed_receipt_refuses(self):
+        good = b'[ 12 ms] control_tape_stop result=2167\r\n'
+        for raw in (b'', good.replace(b'=2167', b'=-1'), good + good,
+                    good.replace(b'=2167', b'=65537'),
+                    good.replace(b'=2167', b'=+1'), good.replace(b'\r\n', b' garbage\r\n'),
+                    good + b'control_tape_stop result=1\r\n'):
+            with self.subTest(raw=raw):
+                result, receipt = self.receipt(raw)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertFalse(receipt['passed'])
+
+    def test_oversized_missing_and_linked_logs_refuse_without_receipt(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            large = root / 'large'
+            with large.open('wb') as stream:
+                stream.truncate(4 * 1024**2 + 1)
+            linked = root / 'linked'
+            linked.symlink_to(large)
+            for path in (large, linked, root / 'absent'):
+                with self.subTest(path=path):
+                    result = subprocess.run(
+                        [sys.executable, '-I', str(Path(checker.__file__).resolve()),
+                         '--stop-receipt', str(path)],
+                        capture_output=True, timeout=5)
+                    self.assertEqual(result.returncode, 2)
+                    self.assertEqual(result.stdout, b'')
 
 
 if __name__ == '__main__':

@@ -40,6 +40,8 @@ pool = module('stock_pool', HERE / 'resource_pool.py')
 storage = module('stock_storage', HERE / 'storage.py')
 prepaid = module('stock_prepaid', HERE / 'prepaid_budget.py')
 prefix_archive = module('stock_prefix_archive', HERE / 'stock/prefix_archive.py')
+shutdown = module('stock_shutdown_evidence', HERE / 'stock/shutdown_evidence.py')
+control_stop_evidence = shutdown.control_stop_evidence
 
 
 def digest(path):
@@ -237,15 +239,6 @@ def isolated(inspected, out, disc, image_id, prefix_seed=None, *, memory_limit_b
             mounts == expected_mounts)
 
 
-def control_stop_evidence(text):
-    """A completed-looking tape cannot override a missing/failed stop result."""
-    values = re.findall(r'^\[[ \t]*[0-9]+ ms\] control_tape_stop result=(-?[0-9]+)$', text, re.MULTILINE)
-    count = int(values[0]) if len(values) == 1 else None
-    return {'passed': len(values) == text.count('control_tape_stop result=') == 1 and
-                     not values[0].startswith('-') and 0 <= count <= 65536,
-            'observations': len(values), 'committed_api_rows': count}
-
-
 def scenario_evidence(flow, text, consumed=None):
     actions = [a['label'] for a in flow.get('actions', [])]
     transitions = [int(v) for v in re.findall(r'input_poll: kind=1 offset=12 data=(\d+) source=native', text)]
@@ -389,6 +382,7 @@ def worker(config_path):
                             ('prefix_archive.sh', 'prefix_archive.py')})
         if config['record_controls']:
             sources.update({name: HERE / 'stock' / name for name in ('control_tape.c', 'control_tape.h')})
+            sources['shutdown_evidence.py'] = HERE / 'stock/shutdown_evidence.py'
             sources['control_interval.py'] = HERE / 'control_interval.py'
             if config.get('input_observer'):
                 sources.update({name: HERE / 'stock' / name for name in

@@ -16,9 +16,29 @@ stub body, is a violation. If a part genuinely cannot be done, say so in your re
 of stubbing it.
 
 # Do not run destructive commands that erase uncommitted work
-`git reset --hard`, `git checkout -- .`, `git clean -fd`, and similar commands that discard
-untracked or uncommitted changes are forbidden. These destroy work that has no backup. If a
-clean tree is needed, create a worktree instead or ask the user.
+`git reset --hard`, `git checkout -- .`, `git clean -fd`, `git worktree remove --force`, and
+similar commands that discard untracked or uncommitted changes are forbidden. The same applies
+to recursive deletion: `rm -rf`/`rm -r` on a path outside the repository (absolute, `~`, a
+parent such as `../name`, or a variable), and `find ... -delete` or `find ... -exec rm`. An
+unregistered worktree cannot be recovered with `git diff`, so its unmerged deltas die with the
+directory. These destroy work that has no backup. If a clean tree is needed, create a worktree
+instead or ask the user.
+Measured 2026-11-02: holds 7 (rm-recursive-dangerous-target 6, find-delete 1), in
+2026-11-01T10-18-30-526Z_01a1969e-2afe-705d-b869-2fa5a41133d7.jsonl (6) and
+2026-11-01T07-34-55-734Z_01a19608-67f6-71c0-9bc0-078d42c57736.jsonl (1); the calls were
+`rm -rf` over unregistered `../slrr-wt-*` worktree directories and `find ... -exec rm`.
+
+# A pi-warden hold is a stop, not an obstacle
+When pi-warden holds a call, do not reach the same effect another way: not through `eval` or
+`python`/`shutil.rmtree`, not by retrying a variant of the same deletion, and not by editing or
+filtering a committed script to drop the held command (for example running `tools/check.sh`
+with its `trap 'rm -rf ...'` line removed). Report the blocked command and wait for the user, or
+use a recoverable alternative inside the project.
+Measured 2026-11-02: holds 7 (rm-recursive-dangerous-target 6, find-delete 1), in
+2026-11-01T10-18-30-526Z_01a1969e-2afe-705d-b869-2fa5a41133d7.jsonl and
+2026-11-01T07-34-55-734Z_01a19608-67f6-71c0-9bc0-078d42c57736.jsonl; after six holds in the
+first, `shutil.rmtree` through `eval` ran the deletion anyway and permanently destroyed
+`/tmp/wt-backups`; in the second, `tools/check.sh`'s `trap` line was stripped to dodge the hold.
 
 # Issues live in GitHub Issues for nicolas-found42/sl-remastered via the gh CLI
 source: AGENTS.md:5
@@ -38,10 +58,16 @@ rule.
 
 # One GLOSSARY.md at the repo root
 source: AGENTS.md:13
-paths: **/GLOSSARY.md, **/GLOSSARY-MAP.md
-The project is single-context: there is one `GLOSSARY.md`, at the repo root. A `GLOSSARY.md` in
-any subdirectory (for example `src/<context>/GLOSSARY.md` or `docs/GLOSSARY.md`), or a
-`GLOSSARY-MAP.md` anywhere, is a violation.
+paths: */GLOSSARY.md, */**/GLOSSARY.md, **/GLOSSARY-MAP.md
+The project is single-context: the only allowed glossary path is `GLOSSARY.md` at the repo root,
+with no directory prefix. A changed file is a violation when its own path matches either form:
+
+- any `.../GLOSSARY.md` with at least one directory component, for example
+  `docs/GLOSSARY.md` or `src/billing/GLOSSARY.md`; the repo-root `GLOSSARY.md` is the only
+  allowed case and is never a violation;
+- a filename of exactly `GLOSSARY-MAP.md` at any depth, including the repo root.
+
+No other file needs to be read: the changed file's path alone decides whether it is a violation.
 
 # ADRs live in docs/adr/ at the repo root
 source: AGENTS.md:13
