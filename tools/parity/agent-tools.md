@@ -64,6 +64,41 @@ locks, free-disk reserve and preservation checks still run at launch. Deleting
 files does not reduce ledger charges. Link/socket metadata is counted without
 following links or connecting sockets.
 
+## Opt-in Stock intent admission
+
+`ResourcePool(..., protocol=2)` is an opt-in library seam. The default remains
+legacy protocol 1; no live pool is migrated and no Stock capture caller enables
+intents. Protocol 2 adds no permits, retention allowance or disk-floor changes.
+
+`lease.begin_stock_creation(spec)` requires an active one-Stock reservation and
+accepts `container_name` (`slrr-parity-` plus 32 hex digits), pinned `image_id`
+and `configuration_sha256`. It commits the creation record and its hash/identity
+binding in the pool envelope before returning. One permit set authorizes one
+unretired intent. Guardians must receive and acknowledge all
+`lease.descriptors`, including its owner lock, before any external creation.
+
+Admission rereads committed state under the existing mutex. Healthy intents
+retain their actual permits and allow remaining capacity to run. Unresolved
+holder death, lost permits, missing/corrupt records, replaced identities or
+partial commits refuse new admission, even after all kernel locks disappear.
+There is deliberately no retirement, reset or force-clear API yet. An empty
+Docker lookup cannot resolve an uncertain asynchronous creation.
+
+`ResourcePool.migrate_stock_intents(canonical_pool, exact_capacity)` is an
+explicit reviewed migration API, never an import/admission side effect. Before
+using it on a live pool, qualify terminal exact-ID cleanup and coordinate every
+client's protocol rollout. It requires idle resource/waiter locks, preserves the
+admission-lock inode and capacity values, archives old lock inodes, installs
+versioned permits and legacy refusal directories, and atomically commits protocol
+2 last. New code refuses partial/unknown state; there is no automatic migration
+recovery. A frozen legacy client may still use an unmodified legacy slot during
+an interrupted migration, but protocol 2 and its intent API cannot activate in
+that state. Completed migration rejects cached legacy clients too.
+
+The existing resource-pool suite exercises this seam using scratch pools only.
+It does not qualify Docker lifecycle cleanup, pausing, whole-game containment or
+D6 completion. Pre-v2 orphan limitations remain in effect for current captures.
+
 ## Current evidence index
 
 `python3 -I tools/parity/dev.py evidence-index tools/parity/session-evidence.json --markdown`

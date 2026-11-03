@@ -59,6 +59,22 @@ release on exit. Console guardians and specialized observer roots inherit lease
 descriptors, so killing only the Python launcher does not immediately lose their
 reservation; console commands are cleaned up by their independent guardian.
 
+The opt-in protocol-2 library seam now persists Stock creation intents before
+external creation can be authorized. Its committed envelope binds intent IDs,
+record hashes, owner locks and reserved permit identities. Every admission
+rereads the registry under the mutex; unresolved holder death or corrupt/partial
+state blocks new work even if all permit FDs have closed. Healthy intents allow
+remaining capacity to be used. There is no retirement/force-clear operation and
+no Stock caller enables this seam yet. The live default remains protocol 1,
+with its existing orphan limitations. Reviewed idle migration preserves capacity
+and the admission inode, archives legacy lock inodes, installs versioned permits
+and legacy refusal directories, then commits protocol 2 atomically last. Partial
+migration cannot activate protocol 2; frozen old clients are only guaranteed to
+refuse after complete migration. See the command guide's opt-in Stock-intent
+section before planning a coordinated client rollout. This is an admission
+foundation; daemon creation/cancellation, exact-ID cleanup and freezer safety
+still need separate qualification.
+
 This is cooperative admission, not an OS CPU/RSS quota, a priority scheduler or
 an adaptive memory-pressure controller. Unwrapped commands are unaccounted for.
 It does not establish headless execution for an arbitrary command. The native

@@ -9,6 +9,7 @@ that a workload fits or that an abruptly killed adapter left no child processes.
 import argparse
 import contextlib
 import fcntl
+import hashlib
 import importlib.util
 import json
 import math
@@ -46,6 +47,64 @@ class OutputLimit(RuntimeError):
 
 class ArtifactLimit(RuntimeError):
     """Declared artifact trees exceeded bounds or could not be observed safely."""
+
+
+class StockOrphanPending(RuntimeError):
+    """Durable Stock creation state is unresolved; no new work may be admitted."""
+
+
+def _stock_identity(info):
+    return [info.st_dev, info.st_ino]
+
+
+def _stock_regular(path, descriptor):
+    info = os.fstat(descriptor)
+    if (not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or info.st_uid != os.getuid()
+            or stat.S_IMODE(info.st_mode) != 0o600
+            or _stock_identity(path.lstat()) != _stock_identity(info)):
+        raise StockOrphanPending('Stock state file identity/type/permissions: '+str(path))
+    return info
+
+
+def _stock_read(path):
+    """Bounded stable local state, never daemon evidence or an inferred cleanup."""
+    def unique(pairs):
+        result = {}
+        for key, value in pairs:
+            if key in result:raise ValueError('duplicate Stock state key')
+            result[key] = value
+        return result
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+    try:
+        before = _stock_regular(path, fd)
+        if not 0 < before.st_size <= 65536:raise StockOrphanPending('Stock state size bound')
+        raw = os.read(fd, 65537)
+        after = _stock_regular(path, fd)
+        fields = ('st_dev', 'st_ino', 'st_size', 'st_mtime_ns', 'st_ctime_ns')
+        if len(raw) != before.st_size or any(getattr(before, k) != getattr(after, k) for k in fields):
+            raise StockOrphanPending('Stock state changed reading')
+        return (json.loads(raw, object_pairs_hook=unique,
+                           parse_constant=lambda _: (_ for _ in ()).throw(ValueError('nonfinite state'))),
+                before, hashlib.sha256(raw).hexdigest())
+    finally:
+        os.close(fd)
+
+
+def _stock_sync_directory(path):
+    fd = os.open(path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:os.fsync(fd)
+    finally:os.close(fd)
+
+
+class StockCreationIntent:
+    """An unresolved external creation intent. No retirement/force-clear API.
+
+    The owning Lease keeps its owner lock alongside every permit. Independent
+    guardians must acknowledge those same FDs before external creation. Their
+    death never deletes this record or constitutes Docker cancellation evidence.
+    """
+    def __init__(self, identifier):
+        self.identifier = identifier
 
 
 class ArtifactBudget:
@@ -347,13 +406,22 @@ def _console_guardian(config_fd, lifeline_fd, status_fd):
 
 
 class Lease:
-    def __init__(self, description, descriptors, pressure=None):
+    def __init__(self, description, descriptors, pressure=None, stock_pool=None):
         self.description = description
         # Console guardians and specialized observer roots retain admission
         # independently of the Python launcher.
         self.descriptors = tuple(descriptors)
         self.pressure = pressure
         self.execution_pressure = {'samples': 0, 'stopped': False}
+        self._stock_pool = stock_pool
+        self._stock_descriptors = []
+        self._active = True
+
+    def begin_stock_creation(self, spec):
+        """Durably fence a possible daemon create; protocol 2 is opt-in only."""
+        if not self._active or self._stock_pool is None or self._stock_pool.protocol != 2:
+            raise ValueError('Stock creation intent requires pool protocol 2')
+        return self._stock_pool._begin_stock_creation(self, spec)
 
     def _check_artifacts(self, budget):
         if budget is None:
@@ -532,17 +600,27 @@ class Lease:
 
 
 class ResourcePool:
-    def __init__(self, directory=None, capacity=None, pressure=None):
+    @staticmethod
+    def _capacity(capacity):
+        result = dict(CAPACITY if capacity is None else capacity)
+        if (not result or any(not isinstance(k, str) or not k.isidentifier() or
+                type(v) is not int or v < 1 for k, v in result.items())):
+            raise ValueError('capacities must be named positive integers')
+        return result
+
+    def __init__(self, directory=None, capacity=None, pressure=None, *, protocol=1):
+        if type(protocol) is not int or protocol not in (1, 2):
+            raise ValueError('unsupported resource pool protocol')
+        self.protocol = protocol
         self.pressure = pressure
         supplied = Path(directory or os.environ.get('SLRR_RESOURCE_POOL', DEFAULT_POOL))
         self.directory = supplied.resolve()
         reference = (ROOT / 'ref').resolve()
         if self.directory == reference or reference in self.directory.parents:
             raise ValueError('resource pool must be outside ref/')
-        self.capacity = dict(CAPACITY if capacity is None else capacity)
-        if (not self.capacity or any(not isinstance(k, str) or not k.isidentifier() or
-                type(v) is not int or v < 1 for k, v in self.capacity.items())):
-            raise ValueError('capacities must be named positive integers')
+        self.capacity = self._capacity(capacity)
+        if protocol == 2 and (sum(self.capacity.values()) > 512 or any(len(k) > 64 for k in self.capacity)):
+            raise ValueError('Stock pool schema size bound')
         self.directory.mkdir(parents=True, exist_ok=True)
         with self._gate():
             config = self.directory / 'capacity.json'
@@ -550,12 +628,266 @@ class ResourcePool:
             with os.fdopen(descriptor, 'r+') as stream:
                 content = stream.read()
                 if content:
-                    if json.loads(content) != self.capacity:
+                    if protocol == 2:
+                        self._require_stock_protocol()
+                    elif (json.loads(content) != self.capacity or
+                          any((self.directory / name).exists() for name in
+                              ('protocol-v2.pending', 'permits-v2', 'stock-intents-v2', 'legacy-v1'))):
                         raise ValueError('pool capacity differs; use the existing configuration or a new pool')
                 else:
-                    stream.write(json.dumps(self.capacity, sort_keys=True) + '\n')
-                    stream.flush()
-                    os.fsync(stream.fileno())
+                    if protocol == 2:
+                        self._initialize_stock_protocol()
+                    else:
+                        if set(p.name for p in self.directory.iterdir()) != {'admission.lock', 'capacity.json'}:
+                            raise ValueError('partial/unknown pool initialization')
+                        stream.write(json.dumps(self.capacity, sort_keys=True) + '\n')
+                        stream.flush()
+                        os.fsync(stream.fileno())
+
+    def _stock_slots(self):
+        return [f'{resource}-{slot}.lock' for resource, count in sorted(self.capacity.items())
+                for slot in range(count)]
+
+    def _initialize_stock_protocol(self):
+        if set(p.name for p in self.directory.iterdir()) != {'admission.lock', 'capacity.json'}:
+            raise ValueError('partial/unknown pool initialization')
+        self._install_stock_protocol([])
+
+    def _install_stock_protocol(self, old_paths):
+        """Caller holds the legacy admission inode and every existing idle lock.
+
+        A failed partial migration remains uncommitted. Only the final atomic
+        capacity-envelope replacement activates protocol-2 permits and intents.
+        """
+        pending = self.directory / 'protocol-v2.pending'
+        fd = os.open(pending, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+        with os.fdopen(fd, 'w') as stream:
+            json.dump({'protocol': 2, 'capacity': self.capacity}, stream)
+            stream.flush();os.fsync(stream.fileno())
+        _stock_sync_directory(self.directory)
+        for name in ('permits-v2', 'stock-intents-v2', 'legacy-v1'):
+            (self.directory / name).mkdir(mode=0o700)
+        for path in old_paths:
+            path.rename(self.directory / 'legacy-v1' / path.name)
+        for name in self._stock_slots():
+            (self.directory / name).mkdir(mode=0o700)
+        layout = {name: _stock_identity((self.directory / name).stat())
+                  for name in ('permits-v2', 'stock-intents-v2', 'legacy-v1', *self._stock_slots())}
+        envelope = {'protocol': 2, 'capacity': self.capacity,
+                    'pool_identity': _stock_identity(self.directory.stat()), 'layout': layout,
+                    'admission_identity': _stock_identity((self.directory / 'admission.lock').stat()), 'intents': {}}
+        for name in ('permits-v2', 'stock-intents-v2', 'legacy-v1'):
+            _stock_sync_directory(self.directory / name)
+        # Preserve the intent to migrate as history, not an unexplained marker.
+        pending.rename(self.directory / 'legacy-v1' / pending.name)
+        _stock_sync_directory(self.directory / 'legacy-v1')
+        self._commit_stock_envelope(envelope)
+        self._require_stock_protocol()
+
+    def _commit_stock_envelope(self, envelope):
+        raw = (json.dumps(envelope, sort_keys=True)+'\n').encode()
+        if len(raw) > 65536:raise StockOrphanPending('Stock protocol envelope size bound')
+        path = self.directory / 'capacity-v2.pending'
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+        with os.fdopen(fd, 'wb') as stream:
+            stream.write(raw)
+            stream.flush();os.fsync(stream.fileno())
+        _stock_sync_directory(self.directory)
+        os.replace(path, self.directory / 'capacity.json')
+        _stock_sync_directory(self.directory)
+
+    @classmethod
+    def migrate_stock_intents(cls, directory, capacity, *, timeout=5):
+        """Explicit idle migration only. Never called by import or acquire.
+
+        This changes protocol, not capacities/retention. Interrupted migration
+        needs review; no resume/reset/force path is provided.
+        """
+        supplied = Path(directory).absolute()
+        if not math.isfinite(timeout) or timeout <= 0:raise ValueError('migration timeout bound')
+        if supplied.resolve(strict=True) != supplied or not supplied.is_dir():
+            raise ValueError('canonical existing pool required')
+        reference = (ROOT / 'ref').resolve()
+        if supplied == reference or reference in supplied.parents:
+            raise ValueError('resource pool must be outside ref/')
+        pool = cls.__new__(cls)
+        pool.directory, pool.capacity, pool.protocol, pool.pressure = supplied, cls._capacity(capacity), 1, None
+        gate_path = supplied / 'admission.lock'
+        gate_fd = os.open(gate_path, os.O_RDONLY | os.O_NOFOLLOW)
+        try:gate_identity = _stock_identity(_stock_regular(gate_path, gate_fd))
+        finally:os.close(gate_fd)
+        if sum(pool.capacity.values()) > 512 or any(len(k) > 64 for k in pool.capacity):
+            raise ValueError('Stock pool schema size bound')
+        locked = []
+        deadline = time.monotonic()+timeout
+        try:
+            with pool._gate(timeout) as gate:
+                before = _stock_identity(os.fstat(gate))
+                if before != gate_identity:raise ValueError('admission inode changed before migration')
+                configured, _, _ = _stock_read(supplied / 'capacity.json')
+                if configured != pool.capacity:raise ValueError('migration capacities changed')
+                slots = set(pool._stock_slots())
+                old = []
+                for path in supplied.iterdir():
+                    if time.monotonic() >= deadline:raise TimeoutError('Stock migration deadline')
+                    if path.name in ('admission.lock', 'capacity.json'):continue
+                    if path.name not in slots and not re.fullmatch(r'wait-[0-9]{20}-[0-9a-f]{32}\.lock', path.name):
+                        raise ValueError('unknown/partial migration state')
+                    fd = os.open(path, os.O_RDWR | os.O_NOFOLLOW)
+                    locked.append(fd);_stock_regular(path, fd)
+                    fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    old.append(path)
+                pool.protocol = 2
+                pool._install_stock_protocol(old)
+                if before != _stock_identity((supplied / 'admission.lock').stat()):
+                    raise ValueError('admission inode changed')
+        finally:
+            for fd in locked:os.close(fd)
+        return cls(supplied, capacity, protocol=2)
+
+    def _require_stock_protocol(self, deadline=None):
+        if deadline is None:deadline = time.monotonic()+5
+        value, _, _ = _stock_read(self.directory / 'capacity.json')
+        names = ('permits-v2', 'stock-intents-v2', 'legacy-v1', *self._stock_slots())
+        if (type(value) is not dict or set(value) != {'protocol', 'capacity', 'pool_identity', 'layout', 'admission_identity', 'intents'}
+                or type(value['protocol']) is not int or value['protocol'] != 2
+                or value['capacity'] != self.capacity
+                or value['pool_identity'] != _stock_identity(self.directory.stat())
+                or value['admission_identity'] != _stock_identity((self.directory / 'admission.lock').lstat())
+                or type(value['layout']) is not dict or set(value['layout']) != set(names)
+                or type(value['intents']) is not dict or len(value['intents']) > 128
+                or (self.directory / 'protocol-v2.pending').exists()
+                or (self.directory / 'capacity-v2.pending').exists()):
+            raise StockOrphanPending('uncommitted/incompatible Stock pool protocol')
+        allowed = {'capacity.json', 'admission.lock', *names}
+        for count, path in enumerate(self.directory.iterdir(), 1):
+            if count > 2048:raise StockOrphanPending('Stock pool scan entry bound')
+            if time.monotonic() >= deadline:raise TimeoutError('Stock pool validation deadline')
+            if path.name not in allowed and not re.fullmatch(r'wait-[0-9]{20}-[0-9a-f]{32}\.lock', path.name):
+                raise StockOrphanPending('unknown Stock pool state')
+        for name in names:
+            if time.monotonic() >= deadline:raise TimeoutError('Stock protocol validation deadline')
+            info = (self.directory / name).lstat()
+            if (not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid()
+                    or stat.S_IMODE(info.st_mode) != 0o700
+                    or value['layout'][name] != _stock_identity(info)):
+                raise StockOrphanPending('Stock pool layout replaced: '+name)
+        for identifier, binding in value['intents'].items():
+            if (not re.fullmatch(r'[0-9a-f]{32}', identifier) or type(binding) is not dict
+                    or set(binding) != {'identity', 'sha256'} or type(binding['identity']) is not list
+                    or len(binding['identity']) != 2 or any(type(n) is not int or n < 0 for n in binding['identity'])
+                    or type(binding['sha256']) is not str or not re.fullmatch(r'[0-9a-f]{64}', binding['sha256'])):
+                raise StockOrphanPending('invalid committed Stock intent binding')
+        return value
+
+    def _check_stock_intents(self, deadline):
+        envelope = self._require_stock_protocol(deadline)
+        root = self.directory / 'stock-intents-v2'
+        before = root.stat()
+        paths = []
+        for path in root.iterdir():
+            if len(paths) >= 256:raise StockOrphanPending('Stock intent scan entry bound')
+            if time.monotonic() >= deadline:raise TimeoutError('Stock intent validation deadline')
+            paths.append(path)
+        records = envelope['intents']
+        if {p.name for p in paths} != {name+suffix for name in records for suffix in ('.json', '.owner')}:
+            raise StockOrphanPending('unknown/uncommitted Stock creation state')
+        for identifier in sorted(records):
+            if time.monotonic() >= deadline:raise TimeoutError('Stock intent admission deadline')
+            try:
+                row, info, digest = _stock_read(root / (identifier+'.json'))
+                expected = {'schema', 'kind', 'identifier', 'state', 'spec', 'record_identity', 'owner_identity', 'permits'}
+                if (type(row) is not dict or set(row) != expected or type(row['schema']) is not int
+                        or row['schema'] != 1 or row['kind'] != 'stock_creation_intent'
+                        or row['identifier'] != identifier or row['state'] != 'create_may_be_pending'
+                        or row['record_identity'] != _stock_identity(info)
+                        or envelope['intents'][identifier] != {'identity': _stock_identity(info), 'sha256': digest}):
+                    raise StockOrphanPending('malformed/replaced Stock creation record')
+                self._validate_stock_spec(row['spec'])
+                owner_path = root / (identifier+'.owner')
+                owner = os.open(owner_path, os.O_RDWR | os.O_NOFOLLOW)
+                try:
+                    owner_info = _stock_regular(owner_path, owner)
+                    if owner_info.st_size or row['owner_identity'] != _stock_identity(owner_info):
+                        raise StockOrphanPending('Stock owner lock replaced')
+                    try:fcntl.flock(owner, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    except BlockingIOError:pass
+                    else:raise StockOrphanPending('unresolved orphan Stock creation: '+identifier)
+                    permits = row['permits']
+                    if (type(permits) is not list or not permits or len(permits) > len(self._stock_slots())
+                            or any(type(p) is not dict or set(p) != {'name', 'identity'} for p in permits)
+                            or len({p['name'] for p in permits}) != len(permits)):
+                        raise StockOrphanPending('invalid Stock permit bindings')
+                    for permit in permits:
+                        if time.monotonic() >= deadline:raise TimeoutError('Stock intent admission deadline')
+                        if permit['name'] not in self._stock_slots():raise StockOrphanPending('unknown Stock permit')
+                        path = self.directory / 'permits-v2' / permit['name']
+                        fd = os.open(path, os.O_RDWR | os.O_NOFOLLOW)
+                        try:
+                            if permit['identity'] != _stock_identity(_stock_regular(path, fd)):
+                                raise StockOrphanPending('Stock permit identity replaced')
+                            try:fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                            except BlockingIOError:pass
+                            else:raise StockOrphanPending('Stock owner lost a resource permit')
+                        finally:os.close(fd)
+                finally:os.close(owner)
+            except (OSError, ValueError, TypeError, KeyError, RecursionError) as error:
+                raise StockOrphanPending('unreadable/malformed Stock creation state: '+identifier) from error
+        after = root.stat()
+        if time.monotonic() >= deadline:raise TimeoutError('Stock intent admission deadline')
+        if any(getattr(before, key) != getattr(after, key) for key in ('st_dev', 'st_ino', 'st_mtime_ns', 'st_ctime_ns')):
+            raise StockOrphanPending('Stock intent namespace changed reading')
+
+    @staticmethod
+    def _validate_stock_spec(spec):
+        if (type(spec) is not dict or set(spec) != {'container_name', 'image_id', 'configuration_sha256'}
+                or type(spec['container_name']) is not str or not re.fullmatch(r'slrr-parity-[0-9a-f]{32}', spec['container_name'])
+                or type(spec['image_id']) is not str or not re.fullmatch(r'sha256:[0-9a-f]{64}', spec['image_id'])
+                or type(spec['configuration_sha256']) is not str or not re.fullmatch(r'[0-9a-f]{64}', spec['configuration_sha256'])):
+            raise ValueError('invalid Stock creation specification')
+
+    def _begin_stock_creation(self, lease, spec):
+        self._validate_stock_spec(spec)
+        if not lease._active or lease._stock_descriptors or lease.description['request'].get('stock') != 1:
+            raise ValueError('one Stock creation intent requires an active Stock reservation')
+        deadline = time.monotonic()+5
+        with self._gate():
+            self._check_stock_intents(deadline)
+            held = {tuple(_stock_identity(os.fstat(fd))) for fd in lease.descriptors}
+            permits = []
+            for name in self._stock_slots():
+                path = self.directory / 'permits-v2' / name
+                if path.exists() and tuple(_stock_identity(path.lstat())) in held:
+                    permits.append({'name': name, 'identity': _stock_identity(path.lstat())})
+            if len(permits) != len(lease.descriptors):raise StockOrphanPending('lease permit identity unavailable')
+            identifier = uuid.uuid4().hex
+            root = self.directory / 'stock-intents-v2'
+            path = root / (identifier+'.owner')
+            owner = os.open(path, os.O_RDWR | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+            try:
+                fcntl.flock(owner, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                os.fsync(owner)
+                record = dict(schema=1, kind='stock_creation_intent', identifier=identifier,
+                              state='create_may_be_pending', spec=dict(spec),
+                              owner_identity=_stock_identity(_stock_regular(path, owner)), permits=permits)
+                path = root / (identifier+'.json')
+                fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+                with os.fdopen(fd, 'w') as stream:
+                    record['record_identity'] = _stock_identity(os.fstat(stream.fileno()))
+                    json.dump(record, stream, sort_keys=True);stream.write('\n')
+                    stream.flush();os.fsync(stream.fileno())
+                _stock_sync_directory(root)
+                envelope = self._require_stock_protocol()
+                _, info, digest = _stock_read(path)
+                envelope['intents'][identifier] = {'identity': _stock_identity(info), 'sha256': digest}
+                self._commit_stock_envelope(envelope)
+                if time.monotonic() >= deadline:raise TimeoutError('Stock intent registration deadline')
+                lease._stock_descriptors.append(owner)
+                lease.descriptors = (*lease.descriptors, owner)
+                owner = None
+                return StockCreationIntent(identifier)
+            finally:
+                if owner is not None:os.close(owner)
 
     @contextlib.contextmanager
     def _gate(self, timeout=5):
@@ -571,14 +903,19 @@ class ResourcePool:
                     if remaining <= 0:
                         raise TimeoutError('resource pool admission mutex deadline exceeded')
                     time.sleep(min(.01, remaining))
-            yield
+            yield descriptor
         finally:
             os.close(descriptor)
 
     def _enqueue(self, timeout):
         # Creation and taking the liveness lock share the admission mutex: another
         # contender must never mistake a half-created waiter for a dead process.
+        deadline = time.monotonic()+timeout
         with self._gate(timeout):
+            if self.protocol == 2:
+                self._require_stock_protocol(deadline)
+            elif (self.directory / 'protocol-v2.pending').exists():
+                raise ValueError('uncommitted Stock pool migration')
             path = self.directory / f'wait-{time.monotonic_ns():020d}-{uuid.uuid4().hex}.lock'
             descriptor = _open(path)
             try:
@@ -609,8 +946,13 @@ class ResourcePool:
 
     def _try(self, request, timeout, waiter):
         held = []
+        deadline = time.monotonic()+timeout
         try:
             with self._gate(timeout):
+                if self.protocol == 2:
+                    self._check_stock_intents(deadline)
+                elif (self.directory / 'protocol-v2.pending').exists():
+                    raise ValueError('uncommitted Stock pool migration')
                 if self._first_waiter(waiter) != waiter:
                     return None
                 for resource, wanted in sorted(request.items()):
@@ -618,7 +960,13 @@ class ResourcePool:
                     for slot in range(self.capacity[resource]):
                         if acquired == wanted:
                             break
-                        descriptor = _open(self.directory / f'{resource}-{slot}.lock')
+                        parent = self.directory / 'permits-v2' if self.protocol == 2 else self.directory
+                        path = parent / f'{resource}-{slot}.lock'
+                        descriptor = _open(path)
+                        if self.protocol == 2:
+                            try:_stock_regular(path, descriptor)
+                            except BaseException:
+                                os.close(descriptor);raise
                         try:
                             fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
                         except BlockingIOError:
@@ -672,11 +1020,15 @@ class ResourcePool:
                 waiter.unlink(missing_ok=True)
             finally:
                 os.close(waiter_descriptor)
-        try:
-            yield Lease({'capacity': self.capacity, 'request': request,
+        lease = Lease({'capacity': self.capacity, 'request': request,
                          'pool': str(self.directory), 'wait_seconds': time.monotonic() - start,
-                         **({'pressure_sample': sample} if self.pressure is not None else {})}, held, self.pressure)
+                         **({'pressure_sample': sample} if self.pressure is not None else {})}, held, self.pressure,
+                      self if self.protocol == 2 else None)
+        try:
+            yield lease
         finally:
+            lease._active = False
+            for descriptor in lease._stock_descriptors:os.close(descriptor)
             for descriptor in held:
                 os.close(descriptor)
 

@@ -895,5 +895,256 @@ class ArtifactBudgetTest(unittest.TestCase):
                 pool_module.ArtifactBudget([self.root], 1000, socket_policy='connect')
 
 
+class StockIntentAdmissionTest(unittest.TestCase):
+    """Stock creation may outlive every process holding its permits."""
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name).resolve()
+        self.capacity = {'cpu': 2, 'stock': 1}
+
+    def specification(self):
+        return {'container_name': 'slrr-parity-'+'a'*32, 'image_id': 'sha256:'+'b'*64,
+                'configuration_sha256': 'c'*64}
+
+    def test_idle_migration_preserves_capacity_mutex_and_fences_cached_legacy_client(self):
+        directory = self.root / 'legacy'
+        cached = pool_module.ResourcePool(directory, self.capacity)
+        with cached.acquire({'cpu': 1}, .2):pass
+        gate = (directory / 'admission.lock').stat()
+        old = (directory / 'cpu-0.lock').stat()
+        modern = pool_module.ResourcePool.migrate_stock_intents(directory, self.capacity)
+        self.assertEqual(modern.capacity, self.capacity)
+        self.assertEqual((directory / 'admission.lock').stat().st_ino, gate.st_ino)
+        self.assertEqual((directory / 'legacy-v1/cpu-0.lock').stat().st_ino, old.st_ino)
+        with self.assertRaises(ValueError):pool_module.ResourcePool(directory, self.capacity)
+        # The already constructed client never rereads capacity.json at _try.
+        with self.assertRaises(OSError):
+            with cached.acquire({'cpu': 1}, .2):self.fail('cached legacy client bypassed new protocol')
+        with modern.acquire({'cpu': 2, 'stock': 1}, .2):pass
+
+    def test_healthy_stock_intent_keeps_other_capacity_usable(self):
+        pool = pool_module.ResourcePool(self.root / 'pool', self.capacity, protocol=2)
+        with pool.acquire({'cpu': 1, 'stock': 1}, .2) as lease:
+            lease.begin_stock_creation(self.specification())
+            with pool.acquire({'cpu': 1}, .2):pass
+            with self.assertRaises(TimeoutError):
+                with pool.acquire({'cpu': 2}, .05):pass
+        with self.assertRaises(pool_module.StockOrphanPending):
+            with pool.acquire({'cpu': 1}, .2):pass
+
+    def test_registration_requires_active_protocol_and_valid_spec_before_writes(self):
+        legacy = pool_module.ResourcePool(self.root / 'legacy', self.capacity)
+        with legacy.acquire({'stock': 1}, .2) as lease:
+            with self.assertRaises(ValueError):lease.begin_stock_creation(self.specification())
+        pool = pool_module.ResourcePool(self.root / 'pool', self.capacity, protocol=2)
+        with pool.acquire({'stock': 1}, .2) as lease:
+            with self.assertRaises(ValueError):lease.begin_stock_creation({'container_name': 'unknown'})
+        with pool.acquire({'cpu': 1}, .2) as lease:
+            with self.assertRaises(ValueError):lease.begin_stock_creation(self.specification())
+        with self.assertRaises(ValueError):lease.begin_stock_creation(self.specification())
+        with pool.acquire({'stock': 1}, .2):pass
+
+    def test_one_permit_set_cannot_authorize_two_unretired_creations(self):
+        pool=pool_module.ResourcePool(self.root/'pool',self.capacity,protocol=2)
+        with pool.acquire({'stock':1},.2) as lease:
+            lease.begin_stock_creation(self.specification())
+            with self.assertRaises(ValueError):lease.begin_stock_creation(self.specification())
+
+    def test_cached_v2_client_rereads_intents_after_holder_exits(self):
+        pool=pool_module.ResourcePool(self.root/'pool',self.capacity,protocol=2)
+        cached=pool_module.ResourcePool(pool.directory,self.capacity,protocol=2)
+        with pool.acquire({'stock':1},.2) as lease:lease.begin_stock_creation(self.specification())
+        with self.assertRaises(pool_module.StockOrphanPending):
+            with cached.acquire({'cpu':1},.2):self.fail('cached v2 client ignored committed orphan')
+
+    def test_live_intent_owner_without_its_permit_is_not_healthy(self):
+        pool=pool_module.ResourcePool(self.root/'pool',self.capacity,protocol=2)
+        with pool.acquire({'cpu':1,'stock':1},.2) as lease:
+            lease.begin_stock_creation(self.specification())
+            # Keep the owner alive while independently releasing a permit.
+            # Replace that FD with /dev/null so the Lease can still close it.
+            with open(os.devnull,'rb') as dummy:os.dup2(dummy.fileno(),lease.descriptors[0])
+            with self.assertRaises(pool_module.StockOrphanPending):
+                with pool.acquire({'cpu':1},.2):self.fail('owner lock hid a dropped resource permit')
+
+    def test_malformed_or_replaced_record_and_lock_refuse_even_with_live_owner(self):
+        for mutation in ('json', 'duplicate_key', 'nonfinite', 'extra_key', 'replace_record', 'replace_owner', 'replace_permit', 'extra_file'):
+            with self.subTest(mutation=mutation):
+                pool = pool_module.ResourcePool(self.root / mutation, self.capacity, protocol=2)
+                with pool.acquire({'cpu': 1, 'stock': 1}, .2) as lease:
+                    intent = lease.begin_stock_creation(self.specification())
+                    root = pool.directory / 'stock-intents-v2'
+                    record = root / (intent.identifier+'.json')
+                    owner = root / (intent.identifier+'.owner')
+                    if mutation == 'json':record.write_text('{')
+                    elif mutation == 'duplicate_key':record.write_text(record.read_text().replace('"schema": 1','"schema": 1, "schema": 1'))
+                    elif mutation == 'nonfinite':record.write_text(record.read_text().replace('"schema": 1','"schema": NaN'))
+                    elif mutation == 'extra_key':
+                        value=json.loads(record.read_text());value['cleared']=True;record.write_text(json.dumps(value))
+                    elif mutation == 'replace_record':
+                        raw=record.read_bytes();record.rename(root/'saved-record');record.write_bytes(raw);record.chmod(0o600)
+                        (root/'saved-record').unlink()
+                    elif mutation == 'replace_owner':
+                        owner.rename(root/'saved-owner');owner.touch(mode=0o600);(root/'saved-owner').unlink()
+                    elif mutation == 'replace_permit':
+                        path=pool.directory/'permits-v2/cpu-0.lock';path.rename(pool.directory/'saved-permit')
+                        path.touch(mode=0o600);(pool.directory/'saved-permit').unlink()
+                    else:(root/'unknown').touch()
+                    with self.assertRaises(pool_module.StockOrphanPending):
+                        with pool.acquire({'cpu': 1}, .2):self.fail('corrupt Stock state admitted work')
+
+    def test_registration_durability_failure_leaves_unresolved_barrier(self):
+        pool = pool_module.ResourcePool(self.root / 'pool', self.capacity, protocol=2)
+        with pool.acquire({'stock': 1}, .2) as lease:
+            with mock.patch.object(pool_module, '_stock_sync_directory', side_effect=OSError('fsync refused')):
+                with self.assertRaises(OSError):lease.begin_stock_creation(self.specification())
+            with self.assertRaises(pool_module.StockOrphanPending):
+                with pool.acquire({'cpu': 1}, .2):pass
+
+    def test_uncommitted_intent_never_returns_a_creation_handle(self):
+        pool=pool_module.ResourcePool(self.root/'pool',self.capacity,protocol=2)
+        with pool.acquire({'stock':1},.2) as lease:
+            with mock.patch.object(pool_module.os,'replace',side_effect=OSError('registry commit refused')):
+                with self.assertRaises(OSError):lease.begin_stock_creation(self.specification())
+        with self.assertRaises(pool_module.StockOrphanPending):
+            pool_module.ResourcePool(pool.directory,self.capacity,protocol=2)
+
+    def test_removing_entire_intent_pair_does_not_erase_committed_orphan(self):
+        pool=pool_module.ResourcePool(self.root/'pool',self.capacity,protocol=2)
+        with pool.acquire({'stock':1},.2) as lease:
+            intent=lease.begin_stock_creation(self.specification())
+        for suffix in ('.json','.owner'):
+            (pool.directory/'stock-intents-v2'/(intent.identifier+suffix)).unlink()
+        reopened=pool_module.ResourcePool(pool.directory,self.capacity,protocol=2)
+        with self.assertRaises(pool_module.StockOrphanPending):
+            with reopened.acquire({'cpu':1},.2):self.fail('deleted pair erased durable orphan')
+
+    def test_migration_refuses_live_locks_and_unknown_or_partial_state(self):
+        directory = self.root / 'legacy'
+        legacy = pool_module.ResourcePool(directory, self.capacity)
+        with legacy.acquire({'cpu': 1}, .2):
+            with self.assertRaises(BlockingIOError):pool_module.ResourcePool.migrate_stock_intents(directory, self.capacity)
+        waiter=directory/('wait-'+'0'*20+'-'+'a'*32+'.lock')
+        waiter.touch(mode=0o600)
+        with waiter.open('r+b') as stream:
+            fcntl.flock(stream.fileno(),fcntl.LOCK_EX)
+            with self.assertRaises(BlockingIOError):pool_module.ResourcePool.migrate_stock_intents(directory,self.capacity)
+        waiter.unlink()
+        unknown=directory/'unknown';unknown.touch()
+        with self.assertRaises(ValueError):pool_module.ResourcePool.migrate_stock_intents(directory,self.capacity)
+        unknown.unlink()
+        (directory/'protocol-v2.pending').touch()
+        with self.assertRaises(ValueError):pool_module.ResourcePool.migrate_stock_intents(directory,self.capacity)
+        with self.assertRaises(pool_module.StockOrphanPending):pool_module.ResourcePool(directory,self.capacity,protocol=2)
+
+    def test_partial_migration_never_activates_v2_and_retains_failure(self):
+        directory = self.root/'legacy'
+        legacy=pool_module.ResourcePool(directory,self.capacity)
+        with legacy.acquire({'cpu':1},.2):pass
+        original=pool_module.os.replace
+        def refuse_commit(source,destination):
+            if Path(destination).name=='capacity.json':raise OSError('commit refused')
+            return original(source,destination)
+        with mock.patch.object(pool_module.os,'replace',side_effect=refuse_commit):
+            with self.assertRaises(OSError):pool_module.ResourcePool.migrate_stock_intents(directory,self.capacity)
+        self.assertEqual(json.loads((directory/'capacity.json').read_text()),self.capacity)
+        with self.assertRaises(pool_module.StockOrphanPending):pool_module.ResourcePool(directory,self.capacity,protocol=2)
+        with self.assertRaises(ValueError):pool_module.ResourcePool(directory,self.capacity)
+
+    def test_v2_waiter_and_mutex_deadlines_remain_bounded(self):
+        pool=pool_module.ResourcePool(self.root/'pool',self.capacity,protocol=2)
+        with (pool.directory/'admission.lock').open('r+b') as stream:
+            fcntl.flock(stream.fileno(),fcntl.LOCK_EX)
+            started=time.monotonic()
+            with self.assertRaises(TimeoutError):
+                with pool.acquire({'cpu':1},.05):pass
+            self.assertLess(time.monotonic()-started,.5)
+        with pool.acquire({'cpu':2},.2):
+            with self.assertRaises(TimeoutError):
+                with pool.acquire({'cpu':1},.05):pass
+            with pool.acquire({'stock':1},.2):pass
+
+    def test_v2_fifo_waiter_cannot_be_overtaken_by_unrelated_resource(self):
+        pool=pool_module.ResourcePool(self.root/'pool',self.capacity,protocol=2)
+        sentinel=self.root/'head-admitted'
+        script='''import importlib.util,json,sys
+from pathlib import Path
+s=importlib.util.spec_from_file_location('pool',sys.argv[1]);m=importlib.util.module_from_spec(s);s.loader.exec_module(m)
+with m.ResourcePool(sys.argv[2],json.loads(sys.argv[3]),protocol=2).acquire({'cpu':2,'stock':1},2):Path(sys.argv[4]).touch()
+'''
+        process=None
+        with pool.acquire({'cpu':2},.2):
+            process=subprocess.Popen([sys.executable,'-I','-c',script,str(TOOL),str(pool.directory),
+                                      json.dumps(self.capacity),str(sentinel)],stderr=subprocess.PIPE)
+            def cleanup():
+                if process.poll() is None:process.kill()
+                process.communicate(timeout=3)
+            self.addCleanup(cleanup)
+            deadline=time.monotonic()+2
+            while not list(pool.directory.glob('wait-*.lock')):
+                if process.poll() is not None:self.fail(process.communicate()[1].decode())
+                self.assertLess(time.monotonic(),deadline);time.sleep(.01)
+            with self.assertRaises(TimeoutError):
+                with pool.acquire({'stock':1},.05):self.fail('later v2 waiter overtook blocked head')
+        _,error=process.communicate(timeout=3)
+        self.assertEqual(process.returncode,0,error.decode());self.assertTrue(sentinel.exists())
+
+    def test_creation_intent_survives_all_holders_and_blocks_new_command(self):
+        directory = self.root / 'pool'
+        pool = pool_module.ResourcePool(directory, self.capacity, protocol=2)
+        ready = self.root / 'holders.json'
+        script = '''import importlib.util,json,os,sys,time
+from pathlib import Path
+s=importlib.util.spec_from_file_location('pool',sys.argv[1]);m=importlib.util.module_from_spec(s);s.loader.exec_module(m)
+p=m.ResourcePool(sys.argv[2],json.loads(sys.argv[3]),protocol=2)
+with p.acquire({'cpu':1,'stock':1},2) as lease:
+ intent=lease.begin_stock_creation({'container_name':'slrr-parity-'+'a'*32,'image_id':'sha256:'+'b'*64,'configuration_sha256':'c'*64})
+ child=os.fork()
+ if child==0:
+  time.sleep(30);os._exit(0)
+ Path(sys.argv[4]).write_text(json.dumps({'owner':os.getpid(),'backup':child,'intent':intent.identifier}))
+ time.sleep(30)
+'''
+        holder = subprocess.Popen([sys.executable, '-I', '-c', script, str(TOOL),
+                                   str(directory), json.dumps(self.capacity), str(ready)],
+                                  stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+                                  start_new_session=True)
+        def cleanup():
+            if holder.returncode is None:
+                pool_module._signal_owned_group(holder, signal.SIGKILL, {})
+            holder.communicate(timeout=3)
+        self.addCleanup(cleanup)
+        deadline = time.monotonic()+3
+        while not ready.exists():
+            if holder.poll() is not None:self.fail(holder.communicate()[1].decode())
+            self.assertLess(time.monotonic(), deadline)
+            time.sleep(.01)
+        pool_module._signal_owned_group(holder, signal.SIGKILL, {})
+        holder.communicate(timeout=3)
+        # This is an independent kernel-lock observation, not a pool verdict.
+        deadline = time.monotonic()+2
+        permits=sorted((directory / 'permits-v2').glob('*.lock'))
+        self.assertEqual(len(permits),2)
+        for path in permits:
+            with path.open('r+b') as stream:
+                while True:
+                    try:fcntl.flock(stream.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB);break
+                    except BlockingIOError:
+                        self.assertLess(time.monotonic(), deadline);time.sleep(.01)
+        sentinel = self.root / 'incorrectly-admitted'
+        command = '''import importlib.util,json,sys
+from pathlib import Path
+s=importlib.util.spec_from_file_location('pool',sys.argv[1]);m=importlib.util.module_from_spec(s);s.loader.exec_module(m)
+try:
+ with m.ResourcePool(sys.argv[2],json.loads(sys.argv[3]),protocol=2).acquire({'cpu':1},.2):Path(sys.argv[4]).touch()
+except m.StockOrphanPending:sys.exit(7)
+'''
+        result = subprocess.run([sys.executable, '-I', '-c', command, str(TOOL), str(directory),
+                                 json.dumps(self.capacity), str(sentinel)], capture_output=True, timeout=3)
+        self.assertEqual(result.returncode, 7, result.stderr.decode()+f' sentinel_exists={sentinel.exists()}')
+        self.assertFalse(sentinel.exists())
+
+
 if __name__ == '__main__':
     unittest.main()
