@@ -1,0 +1,137 @@
+{
+  "format": 1,
+  "artifacts": {
+    "all": {
+      "path": "local/census/all.c",
+      "sha256": "abc503a2166b4575df41baf338805c6ca7fba477606b05caa9c7817735ad415d",
+      "origin": "unverified",
+      "description": "Saved whole-program decompile; file does not embed executable identity."
+    },
+    "build_number": {
+      "path": "local/census/build-number-decompiled.txt",
+      "sha256": "7060498c10517fabc602f39555fe7794984c68ae762bbfedbad4e22c813499c3",
+      "origin": "self-reported",
+      "description": "Saved handler decompile embeds the reported executable MD5 and address; these declarations are not independent attestation.",
+      "required_text": [
+        "executable MD5: e686099e7233bb7d7c461b1b35c5064c",
+        "entry: 0047c0b0"
+      ]
+    },
+    "vm": {
+      "path": "tests/vm_test.cpp",
+      "sha256": "7953dc334b0448f0c2e52547afacad25633edff88c78a56f406d2137be793712",
+      "origin": "project-source",
+      "description": "VM-dispatch behavioral test source; execution is verified separately by native_audit.py. Current source identity reconciled after passing VM and native-dispatch tests; previous SHA-256 retained separately in previous_sha256. No Native status promotion.",
+      "previous_sha256": "0e7b0bc9f5d6de27d4c69566815ae47a7a7f9abf2df0fe31941852ce04a09b2d"
+    },
+    "dispatch": {
+      "path": "tests/native_vm_dispatch_test.cpp",
+      "sha256": "c7a966fcb21a2026760a00b00bbd5ebb22ff1556b5adb5607f5c8d23d2df6c74",
+      "origin": "project-source",
+      "description": "VM-dispatch behavioral test source; execution is verified separately by native_audit.py. Current identity adds zero-argument System.exit dispatch and normal-return continuation coverage; the earlier source/hash is retained in local/verify/parity-completion-20261102/native-exit/. No Native matched-status promotion.",
+      "previous_sha256": "550d12796f3e3b62b0a075e28e09c965a988fa2bacf6b4a076d75af57ccfe8d1"
+    }
+  },
+  "natives": [
+    {
+      "class": "java.lang.Integer",
+      "method": "toString",
+      "descriptor": "(I)Ljava.lang.String;",
+      "handler": "00481e30",
+      "references": [
+        {
+          "artifact": "all",
+          "anchor": "//// FUNCTION FUN_00481e30 00481e30"
+        },
+        {
+          "artifact": "dispatch",
+          "anchor": "begin(\"java.lang.Integer\", \"toString\", \"(I)Ljava.lang.String;\")"
+        }
+      ]
+    },
+    {
+      "class": "java.lang.String",
+      "method": "append",
+      "descriptor": "(I)Ljava.lang.String;",
+      "handler": "00481f50",
+      "references": [
+        {
+          "artifact": "all",
+          "anchor": "//// FUNCTION FUN_00481f50 00481f50"
+        },
+        {
+          "artifact": "dispatch",
+          "anchor": "begin(\"java.lang.String\", \"append\", \"(I)Ljava.lang.String;\")"
+        }
+      ]
+    },
+    {
+      "class": "java.lang.String",
+      "method": "length",
+      "descriptor": "()I",
+      "handler": "00481fe0",
+      "references": [
+        {
+          "artifact": "all",
+          "anchor": "//// FUNCTION FUN_00481fe0 00481fe0"
+        },
+        {
+          "artifact": "dispatch",
+          "anchor": "begin(\"java.lang.String\", \"length\", \"()I\")"
+        }
+      ]
+    },
+    {
+      "class": "java.lang.String",
+      "method": "token",
+      "descriptor": "(ILjava.lang.String;)Ljava.lang.String;",
+      "handler": "00481cf0",
+      "references": [
+        {
+          "artifact": "all",
+          "anchor": "//// FUNCTION FUN_00481cf0 00481cf0"
+        },
+        {
+          "artifact": "dispatch",
+          "anchor": "begin(\"java.lang.String\", \"token\", \"(ILjava.lang.String;)Ljava.lang.String;\")"
+        }
+      ]
+    },
+    {
+      "class": "java.lang.System",
+      "method": "exit",
+      "descriptor": "(Ljava.lang.String;)V",
+      "handler": "0047be60",
+      "references": [
+        {
+          "artifact": "all",
+          "anchor": "//// FUNCTION FUN_0047be60 0047be60"
+        },
+        {
+          "artifact": "dispatch",
+          "anchor": "begin(\"java.lang.System\", \"exit\", \"(Ljava.lang.String;)V\")"
+        }
+      ]
+    },
+    {
+      "class": "java.lang.System",
+      "method": "buildNumber",
+      "descriptor": "()I",
+      "handler": "0047c0b0",
+      "references": [
+        {
+          "artifact": "all",
+          "anchor": "//// FUNCTION FUN_0047c0b0 0047c0b0"
+        },
+        {
+          "artifact": "vm",
+          "anchor": "buildNumber"
+        },
+        {
+          "artifact": "build_number",
+          "anchor": "undefined4 FUN_0047c0b0(void)"
+        }
+      ]
+    }
+  ]
+}
