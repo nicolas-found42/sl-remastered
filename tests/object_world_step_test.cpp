@@ -20,6 +20,7 @@
 #include "world_model.hpp"
 
 #include <cassert>
+#include <bit>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
@@ -192,6 +193,15 @@ int main() {
       return 1;
     }
     error.clear();
+    if (i == 40) {
+      // Original 0049ec00/00496050, constructor-start full-floor oracle:
+      // the first landing must keep triangle 996's positive-x support corner.
+      // This precedes the independent 900-step settling/sleep assertions.
+      const auto& landing = boxRoot->state[boxRoot->current];
+      assert(std::bit_cast<uint32_t>(landing.pos[0]) == 1075830084u);
+      assert(std::bit_cast<uint32_t>(landing.pos[1]) == 1051456064u);
+      assert(std::bit_cast<uint32_t>(landing.pos[2]) == 990571670u);
+    }
     const auto& stepped = world.steppedObjectPhysics();
     if (stepped.size() == 1) {
       assert(stepped.front()->root() == boxRoot);

@@ -467,16 +467,16 @@ FreeBodyStepResult stepMultiRootWorld(World& world,
           return body;
         };
         std::fill(allowed.begin(), allowed.end(), false);
-        // Smallest separation first (0049b830 param_12 = the core distance
-        // minus radii): a pending contact is displaced only by a smaller one.
-        // Collector order breaks exact ties; stock uses a normal/position dot
-        // test there, which is not ported. A contact is taken only if neither
-        // of its dynamic roots already has one.
+        // 0049b830 param_12 is the new-candidate search's time fraction.
+        // Collectors that have not supplied that priority keep their existing
+        // separation approximation. Ground candidate registration has already
+        // applied the exact-priority world-point/relative-velocity tie test.
         std::vector<size_t> order(contacts.size());
         for (size_t i = 0; i < order.size(); ++i)
           order[i] = i;
         std::stable_sort(order.begin(), order.end(), [&](size_t l, size_t r) {
-          return contacts[l].separation < contacts[r].separation;
+          return contacts[l].pendingPriority.value_or(contacts[l].separation) <
+                 contacts[r].pendingPriority.value_or(contacts[r].separation);
         });
         std::set<const Body*> used;
         for (const size_t i : order) {

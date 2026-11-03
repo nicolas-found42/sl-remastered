@@ -62,25 +62,31 @@ private:
     const physics::Body *body;
     const LinkOwner *leaf;
     size_t face;
+    size_t bodyFeature = static_cast<size_t>(-1);
+    size_t triangleFeature = static_cast<size_t>(-1);
+    uint64_t serial = 0;
     bool operator<(const PairKey &o) const {
-      return std::tie(body, leaf, face) < std::tie(o.body, o.leaf, o.face);
+      return std::tie(body, leaf, face, bodyFeature, triangleFeature, serial) <
+             std::tie(o.body, o.leaf, o.face, o.bodyFeature, o.triangleFeature, o.serial);
     }
   };
   std::map<PairKey, std::unique_ptr<CarGroundFacePair>> pairs_;
-  // Object body/face pairs (cones/barrels/trash cans vs sector ground), same
-  // retention contract as the car pairs: 0049f4d0 records whose impulse
-  // accumulators survive across gathers and frames until the face drops.
+  // 00497280 closest-feature caches and 0049b830 admitted rows have separate
+  // lifetimes. More than one feature pair can be admitted for one triangle.
   struct ObjectGroundFacePair {
-    std::unique_ptr<SpatialGroundFace> face;
+    std::shared_ptr<SpatialGroundFace> face;
     physics::GroundFacePair pair;
     const physics::BodyProto *prototype = nullptr;
     bool correctedOnce = false;
+    uint64_t serial = 0;
     bool valid() const {
       return face && face->valid() && pair.contact.a &&
              pair.contact.a->proto == prototype;
     }
   };
   std::map<PairKey, std::unique_ptr<ObjectGroundFacePair>> objectPairs_;
+  std::map<PairKey, std::unique_ptr<ObjectGroundFacePair>> objectCandidates_;
+  uint64_t nextObjectSerial_ = 0;
   // Retained body/body contact between a stepped object body and another
   // stepped root's body (stock queues these as 0049b830 pending records).
   // Wheel and swept replacement segments use the dynamic narrow phase.
@@ -117,7 +123,6 @@ private:
   std::set<DynamicPairKey> pendingDynamicErase_;
   std::map<PairKey, std::array<float, 5>>
       accumulatorSnapshot_; // normalImpulse, frictionForce, correctedOnce, normalForce, resting
-  std::map<PairKey, std::array<float, 5>> objectAccumulatorSnapshot_;
   std::map<DynamicPairKey, std::array<float, 4>>
       dynamicAccumulatorSnapshot_; // normalImpulse, frictionForce, normalForce, resting
   // One entry per offered contact in collector order: the write-back target

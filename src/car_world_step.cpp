@@ -147,6 +147,7 @@ bool CarWorldStepper::step(float seconds, std::string& error) {
   if (world_.objectPhysicsGeneration() != lastObjectGeneration_) {
     lastObjectGeneration_ = world_.objectPhysicsGeneration();
     objectPairs_.clear();
+    objectCandidates_.clear();
     dynamicPairs_.clear();
   }
   // Stock camera input/zoom callback 004386a0 precedes the force callback
@@ -895,6 +896,116 @@ bool CarWorldStepper::step(float seconds, std::string& error) {
       if (!part.empty())
         objects.push_back({part.front(), &part});
     std::set<PairKey> seenObject;
+    const auto objectRootOf = [](const physics::Body* body) {
+      while (body && body->attachment && body->attachment->parent)
+        body = body->attachment->parent;
+      return body;
+    };
+    // 004a2d10 walks admitted rows in list order. 00497280 caches are not
+    // rows and must neither be updated as contacts nor inherit their forces.
+    std::vector<std::pair<PairKey, ObjectGroundFacePair*>> retainedObjects;
+    for (auto& [key, pair] : objectPairs_)
+      retainedObjects.emplace_back(key, pair.get());
+    std::sort(retainedObjects.begin(), retainedObjects.end(),
+              [](const auto& a, const auto& b) {
+                return a.second->serial < b.second->serial;
+              });
+    for (const auto& [key, owner] : retainedObjects) {
+      auto& pair = *owner;
+      if (!pair.valid()) {
+        objectPairs_.erase(key);
+        continue;
+      }
+      const auto* root = objectRootOf(pair.pair.contact.a);
+      if (root && (root->flags & physics::kBodyAsleep)) {
+        seenObject.insert(key);
+        continue;
+      }
+      physics::Vec3 point{};
+      const auto result = physics::updateGroundFacePair(pair.pair, geometryWorld, point);
+      if (result == physics::ContactGeometryResult::Unsupported) {
+        why = "car step: retained object ground pair update unsupported";
+        return false;
+      }
+      if (result == physics::ContactGeometryResult::Dropped) {
+        objectPairs_.erase(key);
+        continue;
+      }
+      if (!pair.pair.contact.resting)
+        pair.correctedOnce = false;
+      pair.pair.contact.resting = pair.correctedOnce;
+      seenObject.insert(key);
+      contacts.push_back(pair.pair.contact);
+      lastOffers_.push_back(OfferedContact{nullptr, &pair, nullptr});
+    }
+    const auto admitObject = [&](const PairKey& faceKey,
+                                 const ObjectGroundFacePair& candidate) {
+      const auto& proposed = candidate.pair;
+      const auto* root = objectRootOf(proposed.contact.a);
+      std::vector<PairKey> replaced;
+      for (const auto& [key, existing] : objectPairs_) {
+        if (key.body == faceKey.body && key.leaf == faceKey.leaf &&
+            key.face == faceKey.face &&
+            existing->pair.bodyFeature == proposed.bodyFeature &&
+            existing->pair.triangleFeature == proposed.triangleFeature)
+          return; // 0049b830 exact body/triangle/feature identity.
+        const auto& old = existing->pair.contact;
+        if (old.resting || existing->correctedOnce ||
+            objectRootOf(old.a) != root || !old.pendingPriority)
+          continue;
+        const float priority = *proposed.contact.pendingPriority;
+        if (*old.pendingPriority < priority)
+          return;
+        if (*old.pendingPriority == priority) {
+          // 0049b830 equal-priority ground rows use current relative
+          // velocity and world points; collector order alone is insufficient.
+          const auto& a = proposed.contact.a->state[proposed.contact.a->current];
+          const auto& b = proposed.contact.b->state[proposed.contact.b->current];
+          float dot = 0;
+          for (size_t axis = 0; axis < 3; ++axis)
+            dot += (b.vel[axis] - a.vel[axis]) *
+                   (old.pendingPoint[axis] - proposed.contact.pendingPoint[axis]);
+          if (dot > 0)
+            return;
+        }
+        replaced.push_back(key);
+      }
+      for (const auto& key : replaced) {
+        auto* owner = objectPairs_.find(key)->second.get();
+        for (size_t i = lastOffers_.size(); i-- > 0;)
+          if (lastOffers_[i].objectPair == owner) {
+            lastOffers_.erase(lastOffers_.begin() + static_cast<std::ptrdiff_t>(i));
+            contacts.erase(contacts.begin() + static_cast<std::ptrdiff_t>(i));
+          }
+        seenObject.erase(key);
+        objectPairs_.erase(key);
+      }
+      auto row = std::make_unique<ObjectGroundFacePair>(candidate);
+      row->correctedOnce = false;
+      row->serial = ++nextObjectSerial_;
+      PairKey key = faceKey;
+      key.bodyFeature = proposed.bodyFeature.value_or(static_cast<size_t>(-1));
+      key.triangleFeature = proposed.triangleFeature.value_or(static_cast<size_t>(-1));
+      key.serial = row->serial;
+      auto* offered = row.get();
+      objectPairs_.emplace(key, std::move(row));
+      seenObject.insert(key);
+      contacts.push_back(offered->pair.contact);
+      lastOffers_.push_back(OfferedContact{nullptr, offered, nullptr});
+      for (auto* body : {offered->pair.contact.a, offered->pair.contact.b}) {
+        while (body->attachment && body->attachment->parent)
+          body = body->attachment->parent;
+        if (!(body->proto->flags & physics::kProtoStatic))
+          body->state[body->current ^ 1].stepFlags &= ~1u;
+      }
+      geometryWorld.stepReady = 0;
+      auto* channel = runlog::traceChannel("contacttrace");
+      TraceLine line;
+      line.add("{\"kind\":\"object-admission\",\"face\":%zu,\"body_feature\":%zu,\"triangle_feature\":%zu,\"fraction\":%.9g,\"separation\":%.9g}",
+               key.face, key.bodyFeature, key.triangleFeature,
+               *proposed.contact.pendingPriority, proposed.contact.separation);
+      runlog::tracePush(channel, line.text);
+    };
     std::set<DynamicPairKey> seenDynamic;
     std::vector<physics::Body*> carBodies;
     for (const auto& stepCar : stepCars) {
@@ -1023,6 +1134,7 @@ bool CarWorldStepper::step(float seconds, std::string& error) {
           for (const auto& spatial : candidates.candidates) {
             auto& node = *spatial.node;
             const auto& geometry = *spatial.payload->physics;
+            std::vector<std::pair<PairKey, ObjectGroundFacePair*>> pendingCandidates;
             for (size_t faceIndex = 0; faceIndex < geometry.triangles.size();
                  ++faceIndex) {
               if (compound) {
@@ -1037,6 +1149,13 @@ bool CarWorldStepper::step(float seconds, std::string& error) {
                 }
               }
               for (auto* leaf : leaves) {
+                const auto leafMask = queryBodyFace(geometry, faceIndex, *leaf, *node.bounds);
+                if (leafMask == ParentFaceMask::Rejected)
+                  continue;
+                if (leafMask == ParentFaceMask::Unsupported) {
+                  why = "car step: object leaf face filter unsupported";
+                  return false;
+                }
                 if (leaf->current > 1 ||
                     !std::isfinite(leaf->proto->shape.boundRadius) ||
                     leaf->proto->shape.boundRadius < 0) {
@@ -1088,9 +1207,12 @@ bool CarWorldStepper::step(float seconds, std::string& error) {
                 if (!triangles.insert(signature).second)
                   continue;
                 const PairKey key{leaf, face->leafOwner(), faceIndex};
-                auto entry = objectPairs_.find(key);
-                const bool newlyCreated = entry == objectPairs_.end();
-                if (newlyCreated) {
+                auto entry = objectCandidates_.find(key);
+                if (entry != objectCandidates_.end() && !entry->second->valid()) {
+                  objectCandidates_.erase(entry);
+                  entry = objectCandidates_.end();
+                }
+                if (entry == objectCandidates_.end()) {
                   auto ground = face->bodyOwner();
                   if (!ground) {
                     why = "car step: object ground body unavailable";
@@ -1104,60 +1226,32 @@ bool CarWorldStepper::step(float seconds, std::string& error) {
                     }
                     vertices[v] = geometry.vertices[triangle.vertices[v]];
                   }
-                  auto retained = std::make_unique<ObjectGroundFacePair>();
+                  auto candidate = std::make_unique<ObjectGroundFacePair>();
                   if (!physics::createGroundFacePair(*leaf, ground->body,
                                                      vertices, triangle.normal,
-                                                     retained->pair, faceError)) {
-                    why = "car step: object ground pair unsupported: " +
-                          faceError;
+                                                     candidate->pair, faceError)) {
+                    why = "car step: object ground candidate unsupported: " + faceError;
                     return false;
                   }
-                  retained->face = std::move(face);
-                  retained->prototype = leaf->proto;
-                  entry = objectPairs_.emplace(key, std::move(retained)).first;
+                  candidate->face = std::move(face);
+                  candidate->prototype = leaf->proto;
+                  entry = objectCandidates_.emplace(key, std::move(candidate)).first;
                 }
-                ObjectGroundFacePair& pair = *entry->second;
-                if (!pair.valid()) {
-                  pendingObjectErase_.insert(key);
-                  continue;
-                }
-                physics::Vec3 point{};
-                const auto result = physics::updateGroundFacePair(
-                    pair.pair, geometryWorld, point);
-                if (result == physics::ContactGeometryResult::Unsupported) {
-                  why = "car step: object ground pair update unsupported";
-                  return false;
-                }
-                if (result == physics::ContactGeometryResult::Dropped) {
-                  pendingObjectErase_.insert(key);
-                  seenObject.erase(key);
-                  continue;
-                }
-                // Stock 0049b830 admits a NEW ground row only within core
-                // separation 0.02 (constant 005f1070). The wider k::skin
-                // (0.05) band is the retained-row 004a2d10 tolerance, not
-                // the admission band; applying it at creation let the
-                // pending stage manufacture out-of-band impact contacts
-                // Stock would never have admitted (verified against the
-                // stock .bak.exe and the contact-lifecycle investigation).
-                if (newlyCreated && !(pair.pair.contact.separation <= 0.02f)) {
-                  // Immediate erase (not the deferred pendingObjectErase_) so a
-                  // re-encountered key this gather is re-created and re-gated
-                  // rather than treated as a retained pair.
-                  objectPairs_.erase(entry);
-                  pendingObjectErase_.erase(key);
-                  seenObject.erase(key);
-                  continue;
-                }
-                if (!pair.pair.contact.resting)
-                  pair.correctedOnce = false;
-                pair.pair.contact.resting = pair.correctedOnce;
-                pendingObjectErase_.erase(key);
-                seenObject.insert(key);
-                contacts.push_back(pair.pair.contact);
-                lastOffers_.push_back(OfferedContact{nullptr, &pair, nullptr});
+                entry->second->serial = ++nextObjectSerial_;
+                pendingCandidates.emplace_back(key, entry->second.get());
               }
             }
+            std::vector<physics::GroundFacePair*> candidatePairs;
+            for (const auto& pending : pendingCandidates)
+              candidatePairs.push_back(&pending.second->pair);
+            std::optional<size_t> selected;
+            const auto selection = physics::selectGroundFaceCandidate(candidatePairs, geometryWorld, selected);
+            if (selection == physics::ContactGeometryResult::Unsupported) {
+              why = "car step: object new-candidate selector unsupported";
+              return false;
+            }
+            if (selected)
+              admitObject(pendingCandidates[*selected].first, *pendingCandidates[*selected].second);
           }
         }
       } // Sleeping candidates skip static ground, not awake body pairs.
@@ -1188,6 +1282,21 @@ bool CarWorldStepper::step(float seconds, std::string& error) {
               return false;
           }
       }
+    }
+    // 00497910 bounds the independent closest-feature cache at 256. Evict
+    // only after the candidate lists have been drained; admitted rows share
+    // the immutable face owner and do not depend on a cache record's lifetime.
+    for (auto entry = objectCandidates_.begin(); entry != objectCandidates_.end();)
+      if (!entry->second->valid())
+        entry = objectCandidates_.erase(entry);
+      else
+        ++entry;
+    while (objectCandidates_.size() > 256) {
+      auto oldest = std::min_element(objectCandidates_.begin(), objectCandidates_.end(),
+                                     [](const auto& a, const auto& b) {
+                                       return a.second->serial < b.second->serial;
+                                     });
+      objectCandidates_.erase(oldest);
     }
     for (const auto& entry : objectPairs_)
       if (!seenObject.count(entry.first))
@@ -1454,14 +1563,12 @@ bool CarWorldStepper::step(float seconds, std::string& error) {
         entry.second->correctedOnce ? 1.0f : 0.0f,
         entry.second->pair.contact.normalForce,
         entry.second->pair.contact.resting ? 1.0f : 0.0f};
-  objectAccumulatorSnapshot_.clear();
-  for (const auto& entry : objectPairs_)
-    objectAccumulatorSnapshot_[entry.first] = {
-        entry.second->pair.contact.normalImpulse,
-        entry.second->pair.contact.frictionForce,
-        entry.second->correctedOnce ? 1.0f : 0.0f,
-        entry.second->pair.contact.normalForce,
-        entry.second->pair.contact.resting ? 1.0f : 0.0f};
+  std::map<PairKey, ObjectGroundFacePair> objectRowsBefore, objectCachesBefore;
+  for (const auto& [key, row] : objectPairs_)
+    objectRowsBefore.emplace(key, *row);
+  for (const auto& [key, cache] : objectCandidates_)
+    objectCachesBefore.emplace(key, *cache);
+  const auto objectSerialBefore = nextObjectSerial_;
   dynamicAccumulatorSnapshot_.clear();
   for (const auto& entry : dynamicPairs_)
     dynamicAccumulatorSnapshot_[entry.first] = {
@@ -1550,16 +1657,16 @@ bool CarWorldStepper::step(float seconds, std::string& error) {
       found->second->pair.contact.normalForce = snap.second[3];
       found->second->pair.contact.resting = snap.second[4] != 0.0f;
     }
-    for (const auto& snap : objectAccumulatorSnapshot_) {
-      auto found = objectPairs_.find(snap.first);
-      if (found == objectPairs_.end())
-        continue;
-      found->second->pair.contact.normalImpulse = snap.second[0];
-      found->second->pair.contact.frictionForce = snap.second[1];
-      found->second->correctedOnce = snap.second[2] != 0.0f;
-      found->second->pair.contact.normalForce = snap.second[3];
-      found->second->pair.contact.resting = snap.second[4] != 0.0f;
-    }
+    // A failed world step also rolls back cache seeds, admission identity,
+    // replacement/eviction and full contact geometry, not just force scalars.
+    objectPairs_.clear();
+    objectCandidates_.clear();
+    for (auto& [key, row] : objectRowsBefore)
+      objectPairs_.emplace(key, std::make_unique<ObjectGroundFacePair>(std::move(row)));
+    for (auto& [key, cache] : objectCachesBefore)
+      objectCandidates_.emplace(key, std::make_unique<ObjectGroundFacePair>(std::move(cache)));
+    nextObjectSerial_ = objectSerialBefore;
+    lastOffers_.clear();
     for (const auto& snap : dynamicAccumulatorSnapshot_) {
       auto found = dynamicPairs_.find(snap.first);
       if (found == dynamicPairs_.end())
