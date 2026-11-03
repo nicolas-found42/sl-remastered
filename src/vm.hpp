@@ -120,6 +120,8 @@ using VmClassEnsure = std::function<VmResult(const std::string &className)>;
 struct HotkeyState;
 class TimerState;
 class ObjectSoundState;
+// Stored binary32 result, exhausted input, or provider error, respectively.
+using VmCurrentTimeBitsResult = std::variant<uint32_t, std::monostate, std::string>;
 struct VmArena {
   // Stock System.exit() sets the process-loop flag and returns normally. The
   // host observes this latch at frame/substep boundaries, then runs shutdown.
@@ -139,6 +141,10 @@ struct VmArena {
   // Milliseconds since the host's stock-equivalent performance-timer origin.
   // Math.randomize fails explicitly when no clock is provided.
   std::function<double()> performanceMilliseconds;
+  // Optional currentTime-only observation provider. Captured host state must
+  // outlive execution; an installed provider never falls back to the live clock
+  // on error/exhaustion. Does not supply performance operands or thread identity.
+  std::function<VmCurrentTimeBitsResult()> storedCurrentTimeBits;
   VmDisplaySize *displaySize = nullptr;
   // Host-owned world state for GameType.createNativeInstance
   // (src/natives/game_type.hpp).

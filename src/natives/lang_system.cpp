@@ -4,6 +4,7 @@
 #include "resource_world.hpp"
 #include "run_log.hpp"
 #include "timers.hpp"
+#include <bit>
 #include <cmath>
 #include <limits>
 
@@ -121,7 +122,22 @@ NativeResult systemOpenLib(const std::vector<VmValue> &args, const VmObject *,
 NativeResult systemCurrentTime(const std::vector<VmValue> &args,
                                const VmObject *, VmArena *arena,
                                const std::vector<const TufaClass *> *) {
-  if (!args.empty() || !arena || !arena->performanceMilliseconds)
+  if (!args.empty() || !arena)
+    return std::string{"System.currentTime: performance clock unavailable"};
+  if (arena->storedCurrentTimeBits) {
+    const auto stored = arena->storedCurrentTimeBits();
+    if (const auto* error = std::get_if<std::string>(&stored))
+      return "System.currentTime: stored clock provider: " + *error;
+    const auto* bits = std::get_if<uint32_t>(&stored);
+    if (!bits)
+      return std::string{"System.currentTime: stored clock exhausted"};
+    if ((*bits & 0x7f800000u) == 0x7f800000u)
+      return std::string{"System.currentTime: nonfinite stored clock"};
+    // A stored Native result is not a performance-clock operand. Avoid both
+    // arithmetic that changes its bits and backprojection into other clocks.
+    return VmValue{std::bit_cast<float>(*bits)};
+  }
+  if (!arena->performanceMilliseconds)
     return std::string{"System.currentTime: performance clock unavailable"};
   const double milliseconds = arena->performanceMilliseconds();
   if (!std::isfinite(milliseconds))
