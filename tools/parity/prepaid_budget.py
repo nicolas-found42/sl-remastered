@@ -18,11 +18,18 @@ import time
 from urllib.parse import quote
 
 DEFAULT_CHILD_MAX = 1024**3
+MAX_CHILD_SCAN_ATTEMPTS = 3
 _xattr_reader = None
 
 
 class Refused(ValueError):
     pass
+
+
+class _ChildDirectoryChanged(Refused):
+    def __init__(self, relative_path):
+        super().__init__('new child directory changed scanning: '+relative_path)
+        self.relative_path = relative_path
 
 
 def require(condition, message):
@@ -207,23 +214,31 @@ class PrepaidCapture:
                 os.close(fd)
         return record
 
-    def scan(self, *, hashes=False, old_hashes_only=False):
+    def scan(self, *, hashes=False, old_hashes_only=False, attempts=None):
         self.lookup()
         started = time.monotonic()
+        deadline = started+self.scan_seconds
+        if attempts is None:
+            attempts = []
         records = {}
         logical = child_bytes = 0
+        visited = 0
         child_name = self.child.name
         child_prefix = child_name+'/'
         def walk(fd, path, key):
-            nonlocal logical, child_bytes
-            require(len(records) < self.max_entries and time.monotonic()-started < self.scan_seconds,
+            nonlocal logical, child_bytes, visited
+            require(visited < self.max_entries and time.monotonic()-started < self.scan_seconds,
                     'scan entry/deadline bound')
+            visited += 1
             info = os.fstat(fd)
             require(identity(path.lstat()) == identity(info), 'directory replaced')
+            if key == child_name and hasattr(self, 'child_identity'):
+                require(identity(info) == self.child_identity, 'child replaced')
+            directory_metadata = metadata(info)
             records[key] = self._record(path, info, hashes=False)
             with os.scandir(fd) as entries:
                 for entry in entries:
-                    require(len(records) < self.max_entries and time.monotonic()-started < self.scan_seconds,
+                    require(visited < self.max_entries and time.monotonic()-started < self.scan_seconds,
                             'scan entry/deadline bound')
                     name = entry.name if key == '.' else key+'/'+entry.name
                     full = path/entry.name
@@ -236,6 +251,7 @@ class PrepaidCapture:
                         finally:
                             os.close(nested)
                     else:
+                        visited += 1
                         require(stat.S_ISREG(info.st_mode) or stat.S_ISLNK(info.st_mode), 'special artifact refused')
                         require(not stat.S_ISREG(info.st_mode) or info.st_nlink == 1, 'hardlinked artifact refused')
                         logical += info.st_size
@@ -251,22 +267,58 @@ class PrepaidCapture:
                         # and all type/link/cap guards still cover every entry.
                         hash_file = hashes and (not old_hashes_only or name in self.old)
                         records[name] = self._record(full, info, hashes=hash_file,
-                                                     deadline=started+self.scan_seconds)
+                                                     deadline=deadline)
                         require(logical <= self.parent_max, 'parent budget exceeded')
                         require(child_bytes <= self.child_max, 'child budget exceeded')
-            require(metadata(path.lstat()) == metadata(os.fstat(fd)), 'directory changed scanning')
-        walk(self.parent_fd, self.parent, '.')
-        require(time.monotonic()-started < self.scan_seconds, 'final scan deadline bound')
-        return dict(records=records, logical_bytes=logical, child_bytes=child_bytes,
-                    elapsed=time.monotonic()-started)
+            after_path, after_fd = path.lstat(), os.fstat(fd)
+            require(identity(after_path) == identity(after_fd) ==
+                    (directory_metadata['dev'], directory_metadata['ino']), 'directory replaced')
+            after = (metadata(after_path), metadata(after_fd))
+            changed = {field for field in directory_metadata
+                       if any(record[field] != directory_metadata[field] for record in after)}
+            if changed:
+                # Only the exact admitted child's namespace may still be
+                # populated by preparation. Never reuse partial accounting or
+                # retry identity, permissions, old-tree or cap refusals.
+                if (self.old is not None and (key == child_name or key.startswith(child_prefix))
+                        and changed <= {'size', 'mtime_ns', 'ctime_ns', 'nlink'}):
+                    raise _ChildDirectoryChanged(key)
+                raise Refused('directory changed scanning')
+
+        for number in range(1, MAX_CHILD_SCAN_ATTEMPTS+1):
+            attempt = dict(number=number, complete=False)
+            attempts.append(attempt)
+            records = {}
+            logical = child_bytes = 0
+            try:
+                walk(self.parent_fd, self.parent, '.')
+                require(time.monotonic() < deadline, 'final scan deadline bound')
+            except (Refused, OSError) as error:
+                attempt.update(reason=str(error), elapsed=time.monotonic()-started,
+                               entries_scanned=visited)
+                if not isinstance(error, _ChildDirectoryChanged):
+                    raise
+                attempt['relative_path'] = error.relative_path
+                # Every restart shares this scan's original entry/deadline bounds and must
+                # subsequently enumerate the complete parent and recheck old
+                # evidence. Sustained churn remains a retained refusal.
+                require(time.monotonic() < deadline, 'scan entry/deadline bound')
+                require(number < MAX_CHILD_SCAN_ATTEMPTS, 'child directory scan retry bound')
+            else:
+                attempt.update(complete=True, elapsed=time.monotonic()-started,
+                               entries_scanned=visited)
+                return dict(records=records, logical_bytes=logical, child_bytes=child_bytes,
+                            elapsed=time.monotonic()-started)
 
     def check(self, stage='periodic'):
         sample = dict(stage=stage, complete=False, parent=str(self.parent), child=str(self.child),
                       parent_identity=list(self.parent_identity), child_identity=list(self.child_identity),
-                      parent_max=self.parent_max, child_max=self.child_max)
+                      parent_max=self.parent_max, child_max=self.child_max,
+                      scan_seconds=self.scan_seconds, scan_attempts=[])
         self.last_sample = sample
         self.samples.append(sample)
-        current = self.scan(hashes=(stage == 'final'), old_hashes_only=(stage == 'final'))
+        current = self.scan(hashes=(stage == 'final'), old_hashes_only=(stage == 'final'),
+                            attempts=sample['scan_attempts'])
         require(identity(self.child.stat()) == self.child_identity and not self.child.is_symlink(), 'child replaced')
         records = current.pop('records')
         child_prefix = self.child.name
