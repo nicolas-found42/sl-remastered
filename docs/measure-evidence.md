@@ -1,0 +1,5 @@
+# System.setMeasure evidence
+
+The stock registry maps `java.lang.System.setMeasure(F)V` to `0047c4b0`. The program identified in Ghidra has MD5 `e686099e7233bb7d7c461b1b35c5064c`. The handler retrieves one float through `FUN_0045d910`, stores it at `0060e04c`, stores its product with the binary32 constant `0x3991a2b4` at `0063c770`, and stores `10.0 / argument` at `0063c73c`. The disassembly performs the arithmetic in x87 and rounds each result to binary32 on store. No zero or finite guard appears in the handler.
+
+The installed `Config.loadConfig` nodes 422–443 select 1000 or 1600 and call this native. Calculated expected bits for those two inputs are respectively `(447a0000, 3e8e38e4, 3c23d70a)` and `(44c80000, 3ee38e39, 3bcccccd)`. These calculations have not been compared against a running stock game. The host implementation accepts only those two values and updates explicitly supplied host state; it rejects other inputs until the original's x87 and exceptional behavior is checked. Initialization order and the gameplay meanings of the globals remain unverified, so the registry entry remains unread.
