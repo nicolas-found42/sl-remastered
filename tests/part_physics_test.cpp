@@ -3,49 +3,54 @@
 #include <cmath>
 #include <iostream>
 
-static bool near(float a, float b) { return std::abs(a-b) < 0.0001f; }
+static bool near(float a, float b) { return std::abs(a - b) < 0.0001f; }
 int main() {
   CarConfig config;
   config.rootBody = 0;
   config.bodies.resize(2);
   std::string error;
   std::vector<CarGeometryPrototype> geometry(2);
-  for (size_t i=0;i<2;++i) {
-    geometry[i].bodyIndex=i;
-    geometry[i].transform.position={static_cast<float>(i*2+1),0,0};
-    auto proto=physics::createBodyProto(1,1,0.5f,0,0,nullptr,error);
+  for (size_t i = 0; i < 2; ++i) {
+    geometry[i].bodyIndex = i;
+    geometry[i].transform.position = {static_cast<float>(i * 2 + 1), 0, 0};
+    auto proto = physics::createBodyProto(1, 1, 0.5f, 0, 0, nullptr, error);
     assert(proto);
     *geometry[i].body = *proto;
   }
-  auto result=buildPartPhysics(config,geometry,"10,0,0,0,0,0,42",error);
+  auto result = buildPartPhysics(config, geometry, "10,0,0,0,0,0,42", error);
   assert(result && error.empty());
   assert(result->root->proto == &result->rootPrototype);
-  assert(result->children.size()==2 && result->children[0].body->proto == geometry[0].body.get());
-  assert(near(result->rootPrototype.invMass,0.5f));
-  assert(near(result->root->state[0].pos[0],12) && near(result->root->state[1].pos[0],12));
-  assert(near(result->children[0].body->attachment->relative.position[0],-1));
-  assert(near(result->children[1].body->attachment->relative.position[0],1));
+  assert(result->children.size() == 2 && result->children[0].body->proto == geometry[0].body.get());
+  assert(near(result->rootPrototype.invMass, 0.5f));
+  assert(near(result->root->state[0].pos[0], 12) && near(result->root->state[1].pos[0], 12));
+  assert(near(result->children[0].body->attachment->relative.position[0], -1));
+  assert(near(result->children[1].body->attachment->relative.position[0], 1));
+  std::vector<physics::Body*> registeredTree;
+  assert(partPhysicsTree(*result, registeredTree, error));
+  assert(registeredTree.size() == 3 && registeredTree[0] == result->root.get());
+  assert(registeredTree[1] == result->children[1].body.get());
+  assert(registeredTree[2] == result->children[0].body.get());
   auto* originalBody = result->children[0].body.get();
   auto* originalPrototype = originalBody->proto;
-  for (int i=0; i<1024; ++i) result->children.emplace_back();
+  for (int i = 0; i < 1024; ++i) result->children.emplace_back();
   assert(result->children[0].body.get() == originalBody && originalBody->proto == originalPrototype);
   assert(originalBody->attachment->parent == result->root.get());
-  assert(result->argument==42 && result->bounds.vertices.size()==8);
-  assert(near(result->rootPrototype.shape.extent[0],2.0f));
-  geometry[1].bodyFlags=kBodyNoCollision;
-  auto excluded=buildPartPhysics(config,geometry,"0,0,0,0,0,0,0",error);
-  assert(excluded && near(excluded->rootPrototype.invMass,0.5f));
-  assert(near(excluded->rootPrototype.shape.extent[0],2.0f));
+  assert(result->argument == 42 && result->bounds.vertices.size() == 8);
+  assert(near(result->rootPrototype.shape.extent[0], 2.0f));
+  geometry[1].bodyFlags = kBodyNoCollision;
+  auto excluded = buildPartPhysics(config, geometry, "0,0,0,0,0,0,0", error);
+  assert(excluded && near(excluded->rootPrototype.invMass, 0.5f));
+  assert(near(excluded->rootPrototype.shape.extent[0], 2.0f));
   geometry.pop_back();
-  assert(!buildPartPhysics(config,geometry,"0,0,0,0,0,0,0",error));
-  assert(error.find("missing geometry")!=std::string::npos);
+  assert(!buildPartPhysics(config, geometry, "0,0,0,0,0,0,0", error));
+  assert(error.find("missing geometry") != std::string::npos);
   std::unique_ptr<PartPhysics> independent;
   std::weak_ptr<physics::BodyProto> prototypeLifetime;
   {
     std::vector<CarGeometryPrototype> source(2);
     for (size_t i = 0; i < source.size(); ++i) {
       source[i].bodyIndex = i;
-      auto p = physics::createBodyProto(1,1,0.5f,0,0,nullptr,error);
+      auto p = physics::createBodyProto(1, 1, 0.5f, 0, 0, nullptr, error);
       assert(p);
       *source[i].body = *p;
     }
@@ -62,7 +67,7 @@ int main() {
   auto clickProto = physics::createBodyProto(0, 1, 0.5f, 0, 0, nullptr, error);
   assert(clickProto);
   *click.body = *clickProto;
-  click.transform.rotation = {1,0,0,0,1,0,0,0,1};
+  click.transform.rotation = {1, 0, 0, 0, 1, 0, 0, 0, 1};
   auto battery = buildPartPhysics(clickOnly, {}, "1,2,3,0,0,0,7", error, &click, 4);
   assert(battery && battery->root && battery->children.empty());
   assert(battery->root->proto == &battery->rootPrototype && battery->rootPrototype.invMass == 0);

@@ -29,8 +29,25 @@ struct CameraCommandState {
   float zoomCurrent = 0, zoomTarget = 0, zoomSpeed = 3;
 };
 
-std::array<std::string, 3> seatCameraCommands(uint32_t target, const CarDriver &driver,
-                                              const CarCameraSettings &settings);
+std::array<std::string, 3> seatCameraCommands(uint32_t target, const CarDriver& driver,
+                                              const CarCameraSettings& settings);
+
+// Per-frame controller outputs consumed by the camera physics callback.
+// freeCamera is stock camera flag +0x10 bit0, independent of world stepping.
+struct CameraControlState {
+  bool freeCamera = false;
+  std::array<float, 3> localForce{}, localTorque{};
+};
+
+// 2.3.1 0048a573: either manual accumulator crossing its threshold runs both.
+bool cameraControlHasForce(const CameraControlState& control);
+
+// Newer 004897b0 (older 004386a0). Axes are normalized player values;
+// only axes read by the selected Stock branch must be supplied and finite.
+// Refusal leaves command and control state unchanged.
+bool updateCameraControl(CameraCommandState& command, CameraControlState& control,
+                         const std::array<float, 12>& axes, bool hasController,
+                         bool hasLookTarget, float seconds, std::string& error);
 
 struct CameraFollowCommand {
   bool look = false;
@@ -40,8 +57,8 @@ struct CameraFollowCommand {
 };
 
 bool parseCameraFollowCommand(std::string_view text, float currentTorque,
-                              CameraFollowCommand &command);
-void applyCameraFollowCommand(CameraCommandState &state, const CameraFollowCommand &command);
+                              CameraFollowCommand& command);
+void applyCameraFollowCommand(CameraCommandState& state, const CameraFollowCommand& command);
 
-CameraCommandState cameraCommandState(const CameraDeviceConfig &config);
-bool applyCameraCommand(CameraCommandState &state, std::string_view command);
+CameraCommandState cameraCommandState(const CameraDeviceConfig& config);
+bool applyCameraCommand(CameraCommandState& state, std::string_view command);

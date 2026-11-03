@@ -1,6 +1,7 @@
 #include "camera_follow_step.hpp"
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 
 bool stepCameraFollowWorld(physics::World &world, float dt,
                            const std::vector<CameraFollowStep> &callbacks,
@@ -16,23 +17,24 @@ bool stepCameraFollowWorld(physics::World &world, float dt,
   };
   for (size_t i=0; i<world.bodies.size(); ++i) {
     const auto *b = world.bodies[i];
+    const auto current = world.bodies.begin() + static_cast<std::ptrdiff_t>(i);
     if (!b || !b->proto || b->current > 1 || b->attachment ||
         !(b->flags & physics::kBodyActive) ||
         (b->flags & (physics::kBodyChild | physics::kBodyHasChildren | physics::kBodyBit10 |
                      physics::kBodyAsleep)) ||
-        std::find(world.bodies.begin(), world.bodies.begin()+i, b) != world.bodies.begin()+i)
+        std::find(world.bodies.begin(), current, b) != current)
       return fail("camera step: unsupported body");
   }
   const float total=world.pending+dt;
   for (const auto &cb : callbacks) {
-    if (!present(cb.camera) || !present(cb.look) || !present(cb.move) || !cb.smoothing ||
+    if (!present(cb.camera) || (cb.input.hasLookTarget && !present(cb.look)) || (cb.input.hasMoveTarget && !present(cb.move)) || !cb.smoothing ||
         (cb.camera->proto->flags & physics::kProtoStatic) || cb.camera->proto->invMass <= 0 ||
         !cb.input.otherBranchesInactive)
       return fail("camera step: unavailable target or unsupported callback");
     auto input=cb.input;
     input.camera=cb.camera->state[cb.camera->current];
-    input.lookTarget=cb.look->state[cb.look->current];
-    input.moveTarget=cb.move->state[cb.move->current];
+    if (input.hasLookTarget) input.lookTarget=cb.look->state[cb.look->current];
+    if (input.hasMoveTarget) input.moveTarget=cb.move->state[cb.move->current];
     if (!cameraFollowForce(input,*cb.smoothing)) return fail("camera step: unsupported follow");
   }
   if (total < physics::k::minimumStep) { world.pending=total; return true; }
@@ -53,8 +55,8 @@ bool stepCameraFollowWorld(physics::World &world, float dt,
   for (const auto &cb : callbacks) {
     auto input=cb.input;
     input.camera=cb.camera->state[cb.camera->current];
-    input.lookTarget=cb.look->state[cb.look->current];
-    input.moveTarget=cb.move->state[cb.move->current];
+    if (input.hasLookTarget) input.lookTarget=cb.look->state[cb.look->current];
+    if (input.hasMoveTarget) input.moveTarget=cb.move->state[cb.move->current];
     const auto follow=cameraFollowForce(input,*cb.smoothing);
     if (!follow) { rollback(); return fail("camera step: callback failed"); }
     *cb.smoothing=follow->smoothing;

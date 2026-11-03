@@ -33,7 +33,9 @@ primaryEngineTorque(const CarConfig &config, const PrimaryEngineInput &input) {
       !std::isfinite(input.idleAngularSpeed) ||
       !std::isfinite(input.accelerator) || !std::isfinite(input.powerScale) ||
       input.angularSpeed < input.idleAngularSpeed ||
-      input.idleAngularSpeed < 0 || config.torqueCurve.size() < 2)
+      // 004aebf0 installs one zero point when no native engine table exists.
+      // 0043be70 samples that legal curve as zero at every speed.
+      input.idleAngularSpeed < 0 || config.torqueCurve.empty())
     return std::nullopt;
   for (size_t i = 0; i < config.torqueCurve.size(); ++i) {
     if (!std::isfinite(config.torqueCurve[i][0]) ||

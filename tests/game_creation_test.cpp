@@ -191,6 +191,76 @@ int main() {
     CHECK(input.sampleAxis(59) == 0.0f);
   }
   {
+    // FUN_0054d830: a mouse analog axis bypasses digital ramp smoothing and
+    // retains the same sample until the next input frame.
+    PlayerInputState input;
+    float motion = 0.75f;
+    input.sampleInput = [&](int32_t, int32_t) { return std::optional<float>{motion}; };
+    input.inputType = [](int32_t, int32_t) { return std::optional<int32_t>{1}; };
+    input.deviceKind = [](int32_t) { return std::optional<int32_t>{2}; };
+    CHECK(input.add(7, 1, 0, 0, {-1, 1, -1, 1}, 1) == 1);
+    CHECK(input.setSpeed(7, 0.001f));
+    input.beginFrame(0.001f);
+    CHECK(input.sampleAxis(7) == 0.75f);
+    motion = -0.4f;
+    CHECK(input.sampleAxis(7) == 0.75f);
+    input.beginFrame(0.001f);
+    const auto reversed = input.sampleAxis(7);
+    CHECK(reversed && std::fabs(*reversed + 0.4f) < 0.000001f);
+  }
+  {
+    // Original constants at 005f1428/005f1070/005f0c50: non-mouse analog
+    // jumps to within .02 of the target, then blends nearby motion by .3.
+    PlayerInputState input;
+    float stick = 0.6f;
+    input.sampleInput = [&](int32_t, int32_t) { return std::optional<float>{stick}; };
+    input.inputType = [](int32_t, int32_t) { return std::optional<int32_t>{1}; };
+    input.deviceKind = [](int32_t) { return std::optional<int32_t>{3}; };
+    CHECK(input.add(8, 2, 0, 0, {-1, 1, -1, 1}, 1) == 1);
+    input.beginFrame(0.001f);
+    auto value = input.sampleAxis(8);
+    CHECK(value && std::fabs(*value - 0.58f) < 0.000001f);
+    stick = 0.59f;
+    input.beginFrame(0.001f);
+    value = input.sampleAxis(8);
+    CHECK(value && std::fabs(*value - 0.583f) < 0.000001f);
+    stick = -0.6f;
+    input.beginFrame(0.001f);
+    value = input.sampleAxis(8);
+    CHECK(value && std::fabs(*value + 0.58f) < 0.000001f);
+    // A missing physical device class is unknown, rather than a fake zero or
+    // a guessed mouse/joystick response. Refusal preserves the cached value.
+    input.deviceKind = [](int32_t) { return std::optional<int32_t>{}; };
+    input.beginFrame(0.001f);
+    CHECK(!input.sampleAxis(8));
+    CHECK(std::fabs(input.axes()[8].value + 0.58f) < 0.000001f);
+  }
+  {
+    // 0054d8a1: a mapping from a different axis class takes over only after
+    // movement strictly greater than one tenth of its source range.
+    PlayerInputState input;
+    float motion = 0.1f;
+    input.sampleInput = [&](int32_t device, int32_t) {
+      return std::optional<float>{device == 1 ? motion : 1.0f};
+    };
+    input.inputType = [](int32_t device, int32_t) {
+      return std::optional<int32_t>{device == 1 ? 1 : 0};
+    };
+    input.deviceKind = [](int32_t device) {
+      return std::optional<int32_t>{device == 1 ? 2 : 1};
+    };
+    CHECK(input.add(10, 1, 2, 0, {0, 1, -1, 1}, 1) == 1);
+    CHECK(input.add(10, 0, 1, 1, {0, 1, 0, 1}, 0) == 2);
+    input.beginFrame(0.001f);
+    CHECK(input.sampleAxis(10) == 1.0f);
+    CHECK(input.axes()[10].deviceType == 0);
+    motion = 0.2f;
+    input.beginFrame(0.001f);
+    const auto selected = input.sampleAxis(10);
+    CHECK(selected && std::fabs(*selected + 0.6f) < 0.000001f);
+    CHECK(input.axes()[10].deviceType == 1);
+  }
+  {
     GameWorld world;
     auto *root = world.addRoot();
     auto *player =
@@ -221,6 +291,9 @@ int main() {
       player->playerInput->inputType = [](int32_t, int32_t) {
         return std::optional<int32_t>{1};
       };
+      // Force the newly analog mapping to take ownership. Its physical
+      // device class is still unavailable, so sampling must report a Gap.
+      key = 1;
       player->playerInput->beginFrame(0.001f);
       CHECK(!world.playerControlValue(player, 1));
       player->player->scriptedControlOverride = true;

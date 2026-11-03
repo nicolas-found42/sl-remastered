@@ -38,7 +38,8 @@ public:
   bool advanceFrame(float elapsed, float timeScale, float maxDelta,
                     float maxStep, const PhysicsStep &physics,
                     const Delivery &delivery, const Drain &drain,
-                    std::string &error);
+                    std::string &error,
+                    const std::function<bool()> &stopRequested = {});
 
 private:
   float now_ = 0;

@@ -60,6 +60,16 @@ NativeResult systemArraycopy(const std::vector<VmValue> &args, const VmObject *,
   return std::monostate{};
 }
 
+NativeResult systemExitNoArgs(const std::vector<VmValue> &args,
+                              const VmObject *, VmArena *arena,
+                              const std::vector<const TufaClass *> *) {
+  if (!args.empty() || !arena)
+    return std::string{"invalid System.exit() context or arguments"};
+  // FUN_0047be50 writes DAT_0063c520=1; it does not unwind the script call.
+  arena->exitRequested = true;
+  return std::monostate{};
+}
+
 NativeResult systemExitString(const std::vector<VmValue> &args,
                               const VmObject *, VmArena *,
                               const std::vector<const TufaClass *> *) {

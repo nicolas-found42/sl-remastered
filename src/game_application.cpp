@@ -2075,6 +2075,10 @@ static int applicationLoop(int argc, char** argv, const std::string& runDir,
             for (auto* player : world.playerInputs())
               if (player && player->playerInput)
                 player->playerInput->beginFrame(previousFrameSeconds);
+            if (!dispatchCarVariableUpdates(arena, loaded, states, error)) {
+              std::fprintf(stderr, "startup probe: car variables: %s\n", error.c_str());
+              return 1;
+            }
             if (!timers.advanceFrame(
                     previousFrameSeconds, timers.timeScale(), 0.1f, 0.02f,
                     [&](float seconds, std::string& detail) {

@@ -790,6 +790,7 @@ const std::vector<NativeEntry> entries{
      yprFromVector3},
     {"java.lang.System", "arraycopy",
      "(Ljava.lang.Object;ILjava.lang.Object;II)V", "00487660", systemArraycopy},
+    {"java.lang.System", "exit", "()V", "0047be50", systemExitNoArgs},
     {"java.lang.System", "exit", "(Ljava.lang.String;)V", "0047be60",
      systemExitString},
     {"java.lang.System", "log", "(Ljava.lang.String;)V", "0047be80", systemLog},

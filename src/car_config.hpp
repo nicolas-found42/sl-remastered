@@ -293,6 +293,7 @@ struct CarConfig {
   std::array<float, 6> enginePower{200, 10, 0.0001f, 0.03f, 1000, 50};  // +0xd0,+0xe0,+0xf0,+0xf4,+0xe4,+0xe8
   float enginePowerCopy = 300;            // +0xd4 (set equal to number 1 by the directive)
   int32_t gearCount = 4;                  // +0x1c
+  float neutralRatio = 0;                // +0x20; script ratio[0]
   std::array<float, 7> gearRatios{4.0f, 2.7f, 1.5f, 1.0f, 0, 0, -6.0f};  // +0x24..+0x3c
   std::vector<std::array<float, 2>> torqueCurve{{200,0}, {1500,0.8f}, {4000,1}, {5000,0.8f}, {7000,0}};
   std::vector<std::array<float, 2>> secondaryTorqueCurve{{200,0}, {1500,0.8f}, {4000,1}, {5000,0.8f}, {7000,0}};
@@ -324,6 +325,8 @@ struct CarConfig {
   bool notify = false;                    // +0x2e4c |= 2
   std::vector<CarEngineSound> engineUp, engineDown, exhaust;  // max 16 each
   std::optional<std::pair<uint32_t, float>> gearboxForward, gearboxReverse;
+  std::optional<std::pair<uint32_t, float>> ignitionSound;
+  float nitrousCapacity = 0, nitrousConsumption = 0;
   std::optional<uint32_t> wreckSound;
   std::array<std::optional<float>, 4> hornVolume;
   std::optional<std::pair<uint32_t, uint32_t>> gearChangeSounds;

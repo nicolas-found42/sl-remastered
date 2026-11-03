@@ -28,15 +28,17 @@ std::optional<CameraFollowForceResult> cameraFollowForce(
     const CameraFollowForceInput &in, const CameraFollowSmoothing &previous,
     const char **reject) {
   if (reject) *reject = nullptr;
-  const auto fail = [&](const char *code) {
+  const auto fail = [&](const char* code) {
     if (reject) *reject = code;
     return std::optional<CameraFollowForceResult>{};
   };
-  const auto &c = in.command;
+  const auto& c = in.command;
   if (!in.otherBranchesInactive) return fail("foth");
+
+  if (!finite(in.control.localForce) || !finite(in.control.localTorque)) return fail("fctl");
   if (!valid(in.camera)) return fail("fcam");
-  if (!valid(in.lookTarget)) return fail("flok");
-  if (!valid(in.moveTarget)) return fail("fmov");
+  if (in.hasLookTarget && !valid(in.lookTarget)) return fail("flok");
+  if (in.hasMoveTarget && !valid(in.moveTarget)) return fail("fmov");
   if (!finite(in.cameraLookOffset)) return fail("flof");
   if (!finite(c.lookOffset)) return fail("flko");
   if (!finite(c.lookDirection)) return fail("fldi");
@@ -54,6 +56,10 @@ std::optional<CameraFollowForceResult> cameraFollowForce(
   if (!std::isfinite(c.perpendicularDamping)) return fail("fprp");
   if (!std::isfinite(c.moveDistance)) return fail("fdst");
   CameraFollowForceResult out;
+  out.smoothing = previous;
+  Vec3 followTorque{}, followForce{};
+  if (!in.control.freeCamera) {
+  if (!in.hasLookTarget || !in.hasMoveTarget) return fail("ftgt");
   const auto &m = in.lookTarget.rot;
   // 00551c90's gimbal branch uses atan2(-m01,m00); normal branch atan2(m02,m22).
   const float yaw = (m[10] == 0 && m[2] == 0) ? std::atan2(-m[1], m[0]) : std::atan2(m[2], m[10]);
@@ -72,18 +78,19 @@ std::optional<CameraFollowForceResult> cameraFollowForce(
   const Vec3 direction = mul(look, 1.0f / predictedLength);
   const Vec3 forward = physics::matrixTransformRows(in.camera.rot, c.lookDirection);
   const Vec3 torque = mul(cross(forward, direction), c.torque);
-  if (dot(torque, torque) > 1.0e-8f) out.torque = torque;
+  if (dot(torque, torque) > 1.0e-8f) followTorque = torque;
   const Vec3 delta = sub(out.smoothing.move, physics::transformPoint(in.camera.pos, in.camera.rot, c.moveRotation));
   const float squared = dot(delta, delta);
   if (c.moveDistance > 0 && squared > 0.0001f) {
     const float distance = std::sqrt(squared);
     const Vec3 n = mul(delta, 1.0f / distance);
     const Vec3 relativeVelocity = sub(pointVelocity(in.moveTarget, c.moveOffset), pointVelocity(in.camera, c.moveRotation));
-    Vec3 force = mul(n, (distance-c.moveDistance)*c.force + dot(relativeVelocity,n)*c.damping);
-    const float magnitude = std::sqrt(dot(force,force));
-    if (magnitude > in.maxForce) force = mul(force, in.maxForce/magnitude);
-    force = add(force, mul(sub(in.camera.vel, mul(n, dot(in.camera.vel,n))), c.perpendicularDamping));
-    if (dot(force,force) > 0.0001f) out.force = force;
+    Vec3 force = mul(n, (distance - c.moveDistance) * c.force + dot(relativeVelocity, n) * c.damping);
+    const float magnitude = std::sqrt(dot(force, force));
+    if (magnitude > in.maxForce) force = mul(force, in.maxForce / magnitude);
+    force = add(force, mul(sub(in.camera.vel, mul(n, dot(in.camera.vel, n))), c.perpendicularDamping));
+    if (dot(force,force) > 0.0001f) followForce = force;
+  }
   }
   // The rest of 00438b60's body-state terms, all added to the same
   // accumulators (FUN_004a6e10 takes a camera-local torque, FUN_004a6600 a
@@ -109,16 +116,33 @@ std::optional<CameraFollowForceResult> cameraFollowForce(
   const float rollTorque = (rollRate * 0.03f + (roll - c.roll)) * -0.3f;
   if (rollTorque * rollTorque > 9.999999974752427e-07f)
     localTorque({0, 0, rollTorque});
+  // 2.3.1 0048a573 -> 00504e70/00505090. Stock applies both local
+  // accumulators when either threshold passes, after roll and before height.
+  if (cameraControlHasForce(in.control)) {
+    out.force = add(out.force, physics::matrixTransformRows(in.camera.rot, in.control.localForce));
+    localTorque(in.control.localTorque);
+  }
   // Height spring toward the move target's y plus the commanded height.
   if (c.height != 0.0f) {
-    const float dy = in.moveTarget.pos[1] + c.height - in.camera.pos[1];
+    const float dy = (in.hasLookTarget ? in.lookTarget.pos[1] : 0.0f) + c.height - in.camera.pos[1];
     if (std::fabs(dy) > 0.0010000000474774f)
       out.force = add(out.force, Vec3{0, dy * 30.0f - 2.0f * in.camera.vel[1], 0});
+  }
+  // Follow torque and radial force are accumulated after the body-state terms
+  // above (older FUN_00438b60).
+  out.torque = add(out.torque, followTorque);
+  out.force = add(out.force, followForce);
+  // Newer 0048a73d selects free mode after roll/manual/height. Its
+  // 0048a747..0048a7e1 applies -velocity only above squared speed .001,
+  // then jumps past automatic target and pitch work to 0048bb39.
+  if (in.control.freeCamera) {
+    if (dot(in.camera.vel, in.camera.vel) > 0.0010000000474774513f)
+      out.force = add(out.force, mul(in.camera.vel, -1.0f));
   }
   // Pitch limit: predicted pitch (angle + 0.1 * local x rate) against maxPitch.
   const float pitchRate = r[0] * w[0] + r[4] * w[1] + r[8] * w[2];
   const float predicted = pitchRate * 0.1f + pitch;
-  if (c.maxPitch < std::fabs(predicted)) {
+  if (!in.control.freeCamera && c.maxPitch < std::fabs(predicted)) {
     const float limit = predicted >= 0.0f ? c.maxPitch : -c.maxPitch;
     localTorque({(predicted - limit) * -0.1f, 0, 0});
   }

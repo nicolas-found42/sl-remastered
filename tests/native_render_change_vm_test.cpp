@@ -108,6 +108,28 @@ int main() {
   CHECK(result.ok && result.voidReturn);
   CHECK(material && material->textureId(0) == newId && refreshed == 1);
   CHECK(resources.setSceneMaterialRefresh(nodeRef.node, {}));
+  // The shipped running-gear suspension resources request writable mesh data (flag
+  // 8). Loading and scaling one resource must preserve another load's bytes.
+  for (const uint32_t local : {0x12fu, 0x6du}) {
+    uint32_t suspensionId = 0;
+    CHECK(packs.resolveLiteral("parts.rpk", local,
+                               suspensionId, error));
+    ScxModel suspension, independent;
+    const bool suspensionLoaded = sceneLoadMesh(
+        resources, suspensionId, packs.root(), suspension, error);
+    if (!suspensionLoaded)
+      std::fprintf(stderr, "suspension mesh 0x%x: %s\n", suspensionId, error.c_str());
+    CHECK(suspensionLoaded);
+    CHECK(sceneLoadMesh(resources, suspensionId, packs.root(), independent,
+                         error));
+    CHECK(!suspension.meshes.empty() && !independent.meshes.empty());
+    if (suspension.meshes.empty() || independent.meshes.empty())
+      return 1;
+    const auto originalPositions = independent.meshes.front().positions;
+    CHECK(sceneScaleMesh(suspension, 2, 3, 4));
+    CHECK(independent.meshes.front().positions == originalPositions);
+    CHECK(suspension.meshes.front().positions != originalPositions);
+  }
   uint32_t meshId = 0;
   CHECK(packs.resolveLiteral("frontend.rpk", 0xd9, meshId, error));
   const VmObject *meshSource = object(&resourceClass.c);

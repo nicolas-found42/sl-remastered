@@ -6,6 +6,7 @@
 #include "world_model.hpp"
 #include <SDL3/SDL.h>
 #include <cstdio>
+#include <cmath>
 
 int main() {
   GameWorld world;
@@ -137,10 +138,56 @@ int main() {
     auto& device = *zoomHost->cameraDevice;
     if (!applyCameraCommand(device.commands, "zoom 100"))
       return 24;
-    world.advanceCameraZoom(0.02f);
+    if (!world.advanceCameraControls(0.02f, error))
+      return 29;
     if (device.fieldOfView != 57.7f ||
         device.cameraNode()->camera->fieldOfView != 57.7f)
       return 25;
+    auto* player = world.addChild(*root, "camera input controller", 0x21);
+    if (!player)
+      return 26;
+    world.markLoaded(*player);
+    player->nativeDevice = "player";
+    player->player = std::make_unique<PlayerInstance>();
+    player->playerInput = std::make_unique<PlayerInputState>();
+    auto& input = *player->playerInput;
+    const std::array<float, 12> axes{0, 0, 0, 0, 0, 0, 0, 0.025f, 0.025f, 0, 0.5f, 0};
+    input.sampleInput = [](int32_t, int32_t) { return std::optional<float>{1}; };
+    input.inputType = [](int32_t, int32_t) { return std::optional<int32_t>{0}; };
+    for (int32_t axis : {7, 8, 10})
+      if (!input.add(axis, 0, axis, 0, {0, 1, 0, axes[static_cast<size_t>(axis)]}, 0))
+        return 27;
+    input.beginFrame(0.02f);
+    setLinkOwner(device.controller, player);
+    device.commands.moveDistance = 4;
+    device.commands.zoomCurrent = 55;
+    if (!world.advanceCameraControls(0.02f, error))
+      return 29;
+    if (device.commands.moveDistance != 8 ||
+        std::fabs(device.control.localForce[0] + 7.071068f) > 0.00001f ||
+        std::fabs(device.control.localForce[1] - 7.071068f) > 0.00001f)
+      return 28;
+    const float heldZoom = device.commands.zoomCurrent;
+    const auto heldForce = device.control.localForce;
+    input.sampleInput = {};
+    if (world.advanceCameraControls(0.02f, error) || error.find("axis 7") == std::string::npos ||
+        device.commands.zoomCurrent != heldZoom || device.control.localForce != heldForce)
+      return 30;
+    setLinkOwner(device.controller, nullptr);
+    device.control.freeCamera = true;
+    device.control.localForce = {2, 0, 0};
+    device.control.localTorque = {};
+    const auto freeBody = world.dynamicBody(*device.physicsNode()).lock();
+    if (!freeBody || device.lookTarget.owner || device.moveTarget.owner ||
+        !world.directCameraFollowReady(device))
+      return 31;
+    const auto beforeFree = freeBody->state[freeBody->current].vel[0];
+    if (!world.stepArmedCameraFollow(0.02f, error) ||
+        world.dynamicBody(*device.physicsNode()).expired() ||
+        freeBody->state[freeBody->current].vel[0] <= beforeFree) {
+      std::fprintf(stderr, "free camera world step: %s, vx=%g before=%g\n", error.c_str(), double(freeBody->state[freeBody->current].vel[0]), double(beforeFree));
+      return 32;
+    }
   }
   std::puts("camera_device_factory_test: ok");
 }

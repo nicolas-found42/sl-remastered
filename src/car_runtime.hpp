@@ -8,6 +8,7 @@
 #include "car_sfx_table.hpp"
 #include "car_wheel_geometry.hpp"
 #include "owner_links.hpp"
+#include "wheel.hpp"
 #include "resource_id.hpp"
 #include <map>
 #include <optional>
@@ -22,6 +23,7 @@ class ResourceWorld;
 class GameWorld;
 struct ScriptNode;
 struct VmObject;
+class DynoModel;
 
 struct CarResourceBinding {
   CarResourceRequest request;
@@ -71,18 +73,18 @@ struct RuntimeSlotState {
 };
 
 struct CarWheelExtraState {
+  CarWheelExtraState();
   float drive = 0.0f;
   float steer = 0.0f;
   float radius = 0.3f;
-  float friction = 1.0f;
-  float frictionX = 1.0f;
-  float sliction = 1.0f;
-  float stiffness = 10.0f;
+  // The indexed and named WheelRef setters share the same seventeen values.
+  // Friction side fields remain distinct from coefficient2, as in Stock.
+  Wheel tire;
+  float frictionWearRate = 0.0f; // wheel +0x160; wear is tire.frictionScale
+  float variableDamage16c = 0.0f;
+  float variableDamageRate170 = 0.0f;
   float rollResistance = 0.015f;
   float bearing = 0.0f;
-  float maxLoad = 8000.0f;
-  float loadSmooth = 0.5f;
-  std::array<float, 16> pacejka{};
   float springForce = 20000.0f;
   float dampingBump = 2000.0f;
   float dampingRebound = 2000.0f;
@@ -154,7 +156,7 @@ struct CarControlStepContext {
   float displayedEngineSpeed = 0;  // +0x1e1c, radians/second
   bool automatic = false;          // stock flag 0x10
   bool semiautomatic = false;      // stock flag 0x20
-  bool automaticClutch = false;   // stock flag 0x40, transmission bit 1 clear
+  bool automaticClutch = false;    // stock flag 0x40, transmission bit 1 clear
   bool engineRunning = false;      // stock flag 0x4000
   bool automaticInhibited = false; // stock flags 0x40004
   bool positiveMass = true;
@@ -243,9 +245,20 @@ struct CarRuntimeInstance {
   std::array<float, 3> angularVelocity{0.0f, 0.0f, 0.0f};
   std::vector<std::unique_ptr<RuntimeSlotState>> slots;
   std::vector<std::unique_ptr<OwnerLink>> attachedParts;
-  std::unique_ptr<PartPhysics> partPhysics;
+  std::shared_ptr<PartPhysics> partPhysics;
   std::shared_ptr<CarPhysics> carPhysics;
   int32_t suspendUpdate = 0;
+  // Native updatevariables command sets +0x70 bit0x800000; consumed at frame start.
+  bool variablesDirty = false;
+  // 00448430/newer004aebf0 makes the shared prototype configuration private
+  // before the first variable refresh. Installed parts tune this Car only.
+  std::optional<CarConfig> variableConfig;
+  // Non-owning native cfg+c30 binding. DynoData's VM resource owns the model.
+  std::weak_ptr<DynoModel> engineDyno;
+  OwnerLink installedEngine;
+  const CarConfig& effectiveConfig(const CarConfig& prototype) const {
+    return variableConfig ? *variableConfig : prototype;
+  }
   float mileage = 0.0f;
   float smoothedSpeed = 0.0f; // stock car +0x1f74
   std::array<float, 2> torqueScale{1.0f, 1.0f};
@@ -263,10 +276,10 @@ struct CarRuntimeInstance {
   float throttleState = 0.0f;
   float clutchState = 0.0f;
   int32_t currentGear = 0;
-  float currentGearRatio = 0; // car +0x1dd8, updated by 00454500
-  float previousAutomaticClutch = 0; // stock +0x1f44; reset by transmission command
+  float currentGearRatio = 0;          // car +0x1dd8, updated by 00454500
+  float previousAutomaticClutch = 0;   // stock +0x1f44; reset by transmission command
   float previousClutchEngineSpeed = 0; // stock +0x1f48
-  float clutchRpm = 5000; // 00446180 prototype +0x10
+  float clutchRpm = 5000;              // 00446180 prototype +0x10
   CarShiftState shiftState;
   float engineAngularSpeed = 0;   // stock +0x1e18
   float displayedEngineSpeed = 0; // stock +0x1e1c
@@ -341,3 +354,8 @@ bool loadCarPrototype(ResourceWorld& world, ScriptNode& source,
 // dynodata. No installed system is distinct from an installed empty system.
 CarHudOptionalValues carHudOptionalValues(GameWorld& world,
                                           const CarRuntimeInstance& car);
+
+// The pre-script block of 00448430/newer004aebf0. Call only after the
+// suspend_update guard, before the script's updatevariables callback.
+bool resetCarWheelVariables(CarRuntimeInstance& car, const CarConfig& config,
+                             std::string& error);

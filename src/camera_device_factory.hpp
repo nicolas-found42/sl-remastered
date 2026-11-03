@@ -39,6 +39,7 @@ public:
   bool applySeatFollow(WorldNode &car, const CarDriver &driver,
                        const CarCameraSettings &settings);
   CameraCommandState commands{};
+  CameraControlState control{};
   CameraFollowSmoothing followSmoothing{};
   float fieldOfView = 0;
   float maxForce = 1;

@@ -8,12 +8,14 @@
 #include "ground_runtime.hpp"
 #include "hotkeys.hpp"
 #include "natives/game_type.hpp"
+#include "natives/lang_system.hpp"
 #include "natives/registry.hpp"
 #include "object_physics.hpp"
 #include "pack_registry.hpp"
 #include "physics_compound.hpp"
 #include "render2d.hpp"
 #include "resource_world.hpp"
+#include "scene_2d.hpp"
 #include "timers.hpp"
 #include "vm.hpp"
 #include "vm_test_harness.hpp"
@@ -194,7 +196,7 @@ int main() {
     CHECK(std::holds_alternative<std::string>(
         inputGetAxis({int32_t{0}, int32_t{8}}, nullptr, &inputArena, &loaded)));
     CHECK(std::get<float>(std::get<VmValue>(inputGetAxis(
-              {int32_t{1}, int32_t{7}}, nullptr, &inputArena, &loaded))) ==
+              {int32_t{1}, int32_t{10}}, nullptr, &inputArena, &loaded))) ==
           0.0f);
     CHECK(std::holds_alternative<std::string>(
         inputGetAxis({int32_t{2}, int32_t{7}}, nullptr, &inputArena, &loaded)));
@@ -217,6 +219,28 @@ int main() {
     const auto *missingNameValue = std::get_if<VmValue>(&missingName);
     CHECK(missingNameValue && std::get<const VmObject *>(*missingNameValue) &&
           inputArena.strings.back().first.empty());
+    // Input.getAxis returns the physical normalized mouse sample, not a
+    // constant zero; unavailable samples remain explicit errors.
+    inputWorld.setInputReaders(
+        [](int32_t device, int32_t axis) -> std::optional<float> {
+          if (device == 1 && axis == 0) return -0.25f;
+          if (device == 1 && axis == 2) return 0.5f;
+          return std::nullopt;
+        },
+        [](int32_t, int32_t) { return std::optional<int32_t>{1}; });
+    CHECK(std::get<float>(std::get<VmValue>(inputGetAxis(
+              {int32_t{1}, int32_t{0}}, nullptr, &inputArena, &loaded))) == -0.25f);
+    CHECK(std::get<float>(std::get<VmValue>(inputGetAxis(
+              {int32_t{1}, int32_t{2}}, nullptr, &inputArena, &loaded))) == 0.5f);
+    CHECK(std::get<float>(std::get<VmValue>(inputGetAxis(
+              {int32_t{1}, int32_t{7}}, nullptr, &inputArena, &loaded))) == 0.0f);
+    CHECK(std::holds_alternative<std::string>(
+        inputGetAxis({int32_t{1}, int32_t{1}}, nullptr, &inputArena, &loaded)));
+    inputWorld.setInputReaders(
+        [](int32_t, int32_t) { return std::optional<float>{std::nanf("")}; },
+        [](int32_t, int32_t) { return std::optional<int32_t>{1}; });
+    CHECK(std::holds_alternative<std::string>(
+        inputGetAxis({int32_t{1}, int32_t{0}}, nullptr, &inputArena, &loaded)));
     // activeAxis promotes exactly one axis past +/-0.25, else -1.
     inputWorld.setInputReaders(
         [](int32_t device, int32_t axis) -> std::optional<float> {
@@ -577,7 +601,57 @@ int main() {
         CHECK(std::holds_alternative<std::monostate>(
             command(0x10, "torque 0.1")));
         CHECK(std::holds_alternative<std::monostate>(command(0x10, "roll 0")));
-        auto *followTarget =
+        {
+          // 2.3.1 camera command at 0048c0c6 calls the OwnerLink unlink
+          // helper 00488080 on +0x20; zoom continues after deactivation.
+          auto* controller = world.addChild(*root, "camera controller", 0x21);
+          CHECK(controller);
+          if (controller) {
+            world.markLoaded(*controller);
+            controller->nativeDevice = "player";
+            controller->player = std::make_unique<PlayerInstance>();
+            controller->playerInput = std::make_unique<PlayerInputState>();
+            controller->playerInput->sampleInput = [](int32_t, int32_t) { return std::optional<float>{0}; };
+            controller->playerInput->inputType = [](int32_t, int32_t) { return std::optional<int32_t>{0}; };
+            controller->playerInput->beginFrame(0.02f);
+            OwnerLink survivingLink;
+            setLinkOwner(survivingLink, controller);
+            const auto* survivingNext = survivingLink.next;
+            const std::string control = "control " +
+                                        std::to_string(static_cast<int32_t>(controller->instanceId));
+            CHECK(std::holds_alternative<std::monostate>(command(0x10, control.c_str())));
+            CHECK(cameraNode->cameraDevice->controller.owner == controller);
+            CHECK(std::holds_alternative<std::monostate>(command(0x10, "zoom 100")));
+            CHECK(world.advanceCameraControls(0.02f, cameraError));
+            CHECK(std::fabs(state.zoomCurrent - 57.7f) < 0.0001f);
+            const std::string activate = "activate " +
+                std::to_string(static_cast<int32_t>(controller->instanceId));
+            auto cameraBody = world.dynamicBody(*cameraNode->cameraDevice->physicsNode()).lock();
+            CHECK(cameraBody);
+            const auto beforeActivate = cameraBody->state[cameraBody->current].pos;
+            CHECK(std::holds_alternative<std::monostate>(command(0x10, activate.c_str())));
+            CHECK(cameraNode->cameraDevice->control.freeCamera);
+            CHECK(cameraNode->cameraDevice->controller.owner == controller);
+            CHECK(!cameraNode->cameraDevice->lookTarget.owner && !cameraNode->cameraDevice->moveTarget.owner);
+            CHECK(cameraBody->state[cameraBody->current].pos == beforeActivate);
+            CHECK(std::holds_alternative<std::monostate>(command(0x10, "deactivate")));
+            CHECK(!cameraNode->cameraDevice->controller.owner);
+            CHECK(!cameraNode->cameraDevice->control.freeCamera);
+            CHECK(controller->head == &survivingLink && !survivingLink.previous && survivingLink.next == survivingNext);
+            CHECK(world.advanceCameraControls(0.02f, cameraError));
+            CHECK(std::fabs(state.zoomCurrent - 60.238f) < 0.0001f);
+            CHECK(std::holds_alternative<std::monostate>(command(0x10, "deactivate")));
+            CHECK(controller->head == &survivingLink);
+            // Rebinding after a repeated deactivate retains normal ownership.
+            CHECK(std::holds_alternative<std::monostate>(command(0x10, control.c_str())));
+            CHECK(cameraNode->cameraDevice->controller.owner == controller);
+            CHECK(std::holds_alternative<std::monostate>(command(0x10, "deactivate")));
+            CHECK(!cameraNode->cameraDevice->controller.owner);
+            setLinkOwner(survivingLink, nullptr);
+            CHECK(world.destroy(*controller));
+          }
+        }
+        auto* followTarget =
             world.addTypedChild(*root, 2, "camera follow target", 0);
         CHECK(followTarget);
         if (followTarget) {
@@ -2342,11 +2416,175 @@ int main() {
       bool foundClick = false;
       for (const auto &value : vm.arena.strings)
         if (value.first == "5 -65420 -65500 -0.049 -0.020 0.001" &&
-            std::get<const VmObject *>(
+            std::get<const VmObject*>(
                 vm_test::fieldOf(handler, "payload")->value) == value.second)
           foundClick = true;
       CHECK(foundClick);
-      auto *doomed = eventWorld.addChild(*root, "doomed cursor", 0x21);
+      {
+        // US16: actual per-frame picking must reach a registered, rotated Part
+        // body, not just the static boxes used by menu gadgets.
+        ResourceWorld resources(eventWorld, packs);
+        eventGame.resources = &resources;
+        eventGame.mouseHelp = 0;
+        auto surface = std::unique_ptr<SDL_Surface, decltype(&SDL_DestroySurface)>(
+            SDL_CreateSurface(64, 64, SDL_PIXELFORMAT_RGBA32), SDL_DestroySurface);
+        auto renderer = surface ? Render2D::forSurface(surface.get(), error) : nullptr;
+        CHECK(renderer);
+        eventGame.renderer = renderer.get();
+        auto* sector = eventWorld.addChild(*root, "Part picking sector", 0x10);
+        auto* part = eventWorld.addChild(*sector, "Part", 0x201);
+        auto* bodyNode = eventWorld.addTypedChild(*part, 2, "click", 0x201);
+        auto* controller = eventWorld.addChild(*root, "cursor player", 0x201);
+        auto* cameraType = eventWorld.addTypedChild(*root, 12, "pick camera type", 0);
+        auto* cameraNode = eventWorld.addTypedChild(*sector, 3, "pick camera", 0x201);
+        auto* viewport = eventWorld.addTypedChild(*root, 18, "pick viewport", 0);
+        CHECK(sector && part && bodyNode && controller && cameraType && cameraNode && viewport);
+        if (renderer && sector && part && bodyNode && controller && cameraType && cameraNode && viewport) {
+          for (auto* entry : {sector, part, bodyNode, controller, cameraType, cameraNode, viewport})
+            eventWorld.markLoaded(*entry);
+          part->nativeDevice = "part";
+          part->scriptReceiver = handler;
+          part->eventSubscriptionsKnownEmpty = true;
+          part->eventMask = 0x10;
+          auto prototype = std::make_shared<physics::BodyProto>();
+          prototype->shape.type = physics::ShapeType::Box;
+          prototype->shape.boundRadius = 1;
+          prototype->shape.dim[0] = 0.6f;
+          prototype->shape.dim[1] = 0.2f;
+          prototype->shape.dim[2] = 0.1f;
+          auto body = std::make_shared<physics::Body>(physics::createBody(*prototype, {0, 0, -2}));
+          body->state[0].rot = {0, 0, 1, 0, 0, 1, 0, 0, -1, 0, 0, 0};
+          body->state[1] = body->state[0];
+          CHECK(eventWorld.registerDynamicBody(*bodyNode, body, prototype));
+          cameraType->camera = makeCameraResource(1, 90, 0.1f, 10, 0, 1, 0, 0);
+          auto scene = std::make_shared<SceneRenderInstance>(cameraType);
+          CHECK(resources.bindSceneRenderInstance(resources.resolve(cameraNode), scene));
+          auto attachments = std::make_shared<ViewportRenderAttachments>();
+          attachments->prepare(*cameraNode, 0);
+          CHECK(attachments->activate(*cameraNode, -1));
+          viewport->viewport = ViewportInstance{0, 0, 0, 1, 1, ViewportList::Active, attachments};
+          eventWorld.registerViewport(*viewport, 0);
+          CHECK(eventWorld.activateViewport(*viewport));
+          controller->playerInput = std::make_unique<PlayerInputState>();
+          float down = 0;
+          controller->playerInput->sampleInput = [&](int32_t, int32_t) { return std::optional<float>{down}; };
+          controller->playerInput->inputType = [](int32_t, int32_t) { return std::optional<int32_t>{0}; };
+          CHECK(controller->playerInput->add(45, 0, 0, 0, {0, 1, 0, 1}, 0) == 1);
+          eventWorld.setCursorConfiguration(1, 1);
+          eventWorld.setCursorInput([] { return std::optional<std::array<float, 3>>{{0, 0, 0}}; });
+          source->nativeDevice = "cursor";
+          source->cursor = std::make_unique<CursorInstance>();
+          setLinkOwner(source->cursor->controller, controller);
+          CHECK(eventWorld.registerHook(GameHook::Kind1c, *source));
+          const auto frame = [&](float button) {
+            down = button;
+            controller->playerInput->beginFrame(0.016f);
+            const bool ok = runAnimationTest(vm.arena, 0.016f, vm.runtime->classes(), vm.runtime->staticFields(), error);
+            if (!ok) std::fprintf(stderr, "Part cursor frame: %s\n", error.c_str());
+            return ok;
+          };
+          CHECK(frame(0));
+          CHECK(source->cursor->hoveredBox.owner == bodyNode);
+          CHECK(frame(1));
+          CHECK(source->cursor->pressedBox.owner == bodyNode);
+          CHECK(frame(0));
+          const auto* receivedSource = std::get<const VmObject*>(vm_test::fieldOf(handler, "source")->value);
+          const auto* receivedState = nativeResourceState(receivedSource, &vm.arena);
+          CHECK(receivedState && receivedState->words[2] == part->instanceId);
+          const auto* receivedText = std::get<const VmObject*>(vm_test::fieldOf(handler, "payload")->value);
+          bool partClick = false;
+          for (const auto& [text, object] : vm.arena.strings)
+            if (object == receivedText && text.starts_with("5 ")) partClick = true;
+          CHECK(partClick);
+          CHECK(eventWorld.destroy(*part));
+          CHECK(!source->cursor->hoveredBox.owner && !source->cursor->pressedBox.owner);
+          CHECK(frame(0));
+
+          // Actual Garage boxes can belong to a mounted resource, as does
+          // aknafedel in the retained Career reload. Its real owner remains
+          // selectable and routes notifications without a WorldNode parent.
+          uint16_t citySlot = 0;
+          CHECK(packs.registerPackName("maps\\city.rpk", citySlot, error));
+          const auto city = resources.lookup((uint32_t(citySlot) << 16) | 1, 1);
+          auto* packedParent = city.node.packNode ? city.node.packNode->parent : nullptr;
+          CHECK(packedParent);
+          if (packedParent) {
+            eventWorld.markLoaded(*root);
+            CHECK(resources.loadEmptyGameParent(*packedParent, error));
+            auto* packedCamera = eventWorld.addTypedChildUnderExternal(
+                packedParent->handle, *packedParent, 1, packedParent->sectorLink.owner,
+                3, "external parent pick camera", 0x201);
+            CHECK(packedCamera);
+            if (packedCamera) {
+              eventWorld.markLoaded(*packedCamera);
+              CHECK(resources.bindSceneRenderInstance(resources.resolve(packedCamera),
+                                                      std::make_shared<SceneRenderInstance>(cameraType)));
+              attachments->prepare(*packedCamera, 0);
+              CHECK(attachments->activate(*packedCamera, -1));
+            }
+            auto* packedBox = eventWorld.addTypedChildUnderExternal(
+                packedParent->handle, *packedParent, 1, packedParent->sectorLink.owner,
+                2, "external static cursor box", 0x201);
+            auto* behind = eventWorld.addChildUnderExternal(
+                packedParent->handle, *packedParent, 1, packedParent->sectorLink.owner,
+                "behind external cursor box", 0x201);
+            auto* behindBox = behind ? eventWorld.addTypedChild(*behind, 2, "behind box", 0x201) : nullptr;
+            CHECK(packedBox && behind && behindBox);
+            if (packedBox && behind && behindBox) {
+              eventWorld.markLoaded(*packedBox);
+              eventWorld.markLoaded(*behind);
+              eventWorld.markLoaded(*behindBox);
+              CHECK(eventWorld.registerStaticBox(*packedBox, {0.5f, 0.5f, 0.5f}));
+              CHECK(eventWorld.registerStaticBox(*behindBox, {0.5f, 0.5f, 0.5f}));
+              packedBox->physicsBox->position = {{{0, 0, -2}, {0, 0, -2}}};
+              behindBox->physicsBox->position = {{{0, 0, -4}, {0, 0, -4}}};
+              CHECK(!eventWorld.parent(*packedBox));
+              CHECK(eventWorld.parentOwner(packedBox->handle) == packedParent);
+              auto subscription = std::make_unique<EventSubscription>();
+              subscription->mask = 0x10000;
+              setLinkOwner(subscription->target, target);
+              packedParent->eventSubscriptions.push_back(std::move(subscription));
+              auto cursorSubscriptions = std::move(source->eventSubscriptions);
+              CHECK(frame(0));
+              CHECK(source->cursor->hoveredBox.owner == packedBox);
+              CHECK(frame(1));
+              CHECK(source->cursor->pressedBox.owner == packedBox);
+              CHECK(frame(0));
+              const auto* packedSource = std::get<const VmObject*>(vm_test::fieldOf(handler, "source")->value);
+              const auto* packedState = nativeResourceState(packedSource, &vm.arena);
+              CHECK(packedState && packedState->words[2] == packedParent->value);
+              const auto* packedText = std::get<const VmObject*>(vm_test::fieldOf(handler, "payload")->value);
+              const auto parentClick = "5 " + std::to_string(static_cast<int32_t>(source->value)) +
+                                       " " + std::to_string(static_cast<int32_t>(packedBox->value)) + " ";
+              bool deliveredToPackedSubscriber = false;
+              for (const auto& [text, object] : vm.arena.strings)
+                if (object == packedText && text.starts_with(parentClick)) deliveredToPackedSubscriber = true;
+              CHECK(deliveredToPackedSubscriber);
+              source->eventSubscriptions = std::move(cursorSubscriptions);
+              packedParent->eventSubscriptions.clear();
+              CHECK(frame(1));
+              CHECK(frame(0));
+              const auto* cursorSource = std::get<const VmObject*>(vm_test::fieldOf(handler, "source")->value);
+              const auto* cursorState = nativeResourceState(cursorSource, &vm.arena);
+              CHECK(cursorState && cursorState->words[2] == packedParent->value);
+              CHECK(eventWorld.destroy(*packedBox));
+              CHECK(!source->cursor->hoveredBox.owner && !source->cursor->pressedBox.owner);
+              CHECK(eventWorld.destroy(*behind));
+            }
+            if (packedCamera) {
+              attachments->remove(*packedCamera);
+              CHECK(eventWorld.destroy(*packedCamera));
+            }
+          }
+          eventWorld.unregisterHook(GameHook::Kind1c, source);
+          setLinkOwner(source->cursor->controller, nullptr);
+          source->cursor.reset();
+          source->nativeDevice.clear();
+        }
+        eventGame.renderer = nullptr;
+        eventGame.resources = nullptr;
+      }
+      auto* doomed = eventWorld.addChild(*root, "doomed cursor", 0x21);
       CHECK(doomed != nullptr);
       if (doomed) {
         eventWorld.markLoaded(*doomed);
@@ -2355,7 +2593,7 @@ int main() {
         setLinkOwner(doomedEntry->target, target);
         doomed->eventSubscriptions.push_back(std::move(doomedEntry));
         auto savedEnsure = vm.arena.ensureClass;
-        vm.arena.ensureClass = [&](const std::string &name) {
+        vm.arena.ensureClass = [&](const std::string& name) {
           if (name == "java.lang.String" && doomed) {
             eventWorld.destroy(*doomed);
             doomed = nullptr;
@@ -2546,6 +2784,39 @@ int main() {
   CHECK(simulation.advanceFrame(0, 1, 1, 0.1f, physics, event, drain,
                                 timerError));
   CHECK(stepOrder == "d");
+  {
+    // An exit native returns normally from the timer callback. Other due
+    // callbacks and deferred destruction complete, but no later substep runs.
+    TimerState clock;
+    VmArena exitArena;
+    CHECK(clock.add(&timerOwner, 0.05f, 1, timerError));
+    CHECK(clock.add(&timerOwner, 0.05f, 2, timerError));
+    std::string order;
+    int delivered = 0;
+    auto step = [&](float, std::string &) { order += 'p'; return true; };
+    auto requestExit = [&](LinkOwner &, int32_t id, uint32_t, int32_t, std::string &) {
+      if (id == 1) {
+        CHECK(std::holds_alternative<std::monostate>(
+            systemExitNoArgs({}, nullptr, &exitArena, nullptr)));
+        order += 'e';
+      } else {
+        CHECK(exitArena.exitRequested);
+        order += 'c';
+      }
+      ++delivered;
+      return true;
+    };
+    auto finishSlice = [&](std::string &) { order += 'd'; return true; };
+    auto stopping = [&]() { return exitArena.exitRequested; };
+    CHECK(clock.advanceFrame(0.25f, 1, 1, 0.1f, step, requestExit,
+                             finishSlice, timerError, stopping));
+    CHECK(timerError.empty() && delivered == 2 && clock.size() == 0);
+    CHECK(clock.now() == 0.1f && order == "pecd");
+    order.clear();
+    CHECK(clock.advanceFrame(0.25f, 1, 1, 0.1f, step, requestExit,
+                             finishSlice, timerError, stopping));
+    CHECK(clock.now() == 0.1f && order == "d");
+  }
   {
     GameWorld emptyWorld;
     CHECK(emptyWorld.addRoot());

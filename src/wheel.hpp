@@ -33,6 +33,12 @@ inline constexpr std::array<float, 11> kStockSignedWheelCurve{
 std::optional<float> evaluateWheelCurve(const std::array<float, 11>& coefficients,
                                         float slip, float load, WheelCurveMode mode);
 
+// Newer prototype table005da8b0 (older0060e068). Config wheelpars overwrites
+// indices0,2,4,11..16; the remaining coefficients retain these exact defaults.
+inline constexpr std::array<float, 17> kStockWheelParameters{
+    1.4f, 0, 1.49f, 0, 15.2f, 0, -0.0f, 0, -1, 0, 0,
+    8000, 1, .015f, .4f, 0, 0};
+
 // Partial wheel state established by the stock setter handlers. Names for the
 // friction fields describe their role in those handlers, not the full physics.
 struct Wheel {

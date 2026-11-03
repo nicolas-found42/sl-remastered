@@ -16,6 +16,20 @@
 struct SDL_Window;
 struct SDL_Cursor;
 
+// Stock mouse axis state (00543f70 / 00544dd8), independent of device discovery.
+// PlatformInput serializes access with its mouse mutex.
+class MouseAxisState {
+public:
+  void beginFrame(std::array<float, 3> delta, float milliseconds);
+  float sample(int32_t axis) const;
+
+private:
+  std::array<float, 3> raw_{};
+  mutable std::array<float, 3> accumulated_{};
+  mutable float sensitivity_ = 0.5f;
+  float milliseconds_ = 0.0f;
+};
+
 class PlatformInput {
 public:
   // Reports stock system aliases only for devices SDL actually detects.
@@ -24,8 +38,12 @@ public:
   PlatformInput(const PlatformInput&) = delete;
   PlatformInput& operator=(const PlatformInput&) = delete;
   const std::vector<std::string>& names() const { return names_; }
+  // Mouse indices -101..-1 set sensitivity and reset accumulated axes
+  // (00543f70); other indices sample the current frame/device state.
   std::optional<float> sample(int32_t device, int32_t axis) const;
   std::optional<int32_t> type(int32_t device, int32_t axis) const;
+  // FUN_00558130 physical class, independent of an axis's digital/analog type.
+  std::optional<int32_t> deviceKind(int32_t device) const;
   // Stock FUN_005579f0 names: the 256-entry keyboard table for the keyboard
   // device, per-device axis strings for mouse/joystick. Null when the
   // device or axis index is out of range (stock leaves the buffer empty).
@@ -82,8 +100,7 @@ private:
   uint32_t syntheticButtons_ = 0;
   std::set<uint32_t> syntheticKeys_;
   float pendingMouse_[3]{};
-  float frameMouse_[3]{};
-  float frameMilliseconds_ = 0.0f;
+  MouseAxisState mouseAxes_;
   uint64_t lastFrame_ = 0;
   bool watching_ = false;
   std::array<SDL_Cursor*, 10> stockCursors_{};

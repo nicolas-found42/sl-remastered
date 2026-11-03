@@ -11,11 +11,13 @@
 #include "pack_registry.hpp"
 #include "physics_body.hpp"
 #include "physics_compound.hpp"
+#include "physics_compound_step.hpp"
 #include "resource_world.hpp"
 #include "world_model.hpp"
 
 #include <cassert>
 #include <cmath>
+#include <cstdio>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -28,10 +30,10 @@ int main() {
       ".scratch/2005-extract/Program Files/Street Legal Racing - Redline");
   GameWorld world;
   assert(world.addRoot());
-  world.setClassResolver([](const std::string &) { return true; });
+  world.setClassResolver([](const std::string&) { return true; });
   ResourceWorld resources(world, packs);
   std::string error;
-  auto resolveId = [&](const char *pack, uint32_t entry) {
+  auto resolveId = [&](const char* pack, uint32_t entry) {
     uint32_t id = 0;
     assert(packs.resolveLiteral(pack, entry, id, error));
     return id;
@@ -53,7 +55,7 @@ int main() {
   const uint32_t cityId = resolveId("maps\\city.rpk", 1);
   const auto city = resources.lookup(cityId, 1);
   assert(city.status == LookupStatus::Found && city.node.packNode);
-  ResourceNode *sectorNode = city.node.packNode;
+  ResourceNode* sectorNode = city.node.packNode;
   if (sectorNode->parent && !sectorNode->parent->loaded())
     assert(resources.loadEmptyGameParent(*sectorNode->parent, error));
 
@@ -63,7 +65,7 @@ int main() {
   // triangles: city ground faces are small, and the parent-face filter rejects
   // a body deep inside one large face.
   std::shared_ptr<GroundRuntime> ground;
-  WorldNode *groundBodyNode = nullptr;
+  WorldNode* groundBodyNode = nullptr;
   auto establishGround = [&]() {
     sectorNode->stateWord = (sectorNode->stateWord & ~uint32_t{0x50}) | 0x21;
     sectorNode->bounds = ResourceBounds{};
@@ -151,9 +153,60 @@ int main() {
   };
   establishGround();
 
+  // A detached Part is a real registered root even before a car exists.
+  // It sleeps at construction, wakes/falls onto actual ground geometry,
+  // and releases every selectable resource before its owner can disappear.
+  {
+    CarConfig config;
+    config.rootBody = 0;
+    config.bodies.resize(1);
+    std::vector<CarGeometryPrototype> geometry(1);
+    geometry[0].bodyIndex = 0;
+    auto box = physics::createBodyProto(1, 5, 0.2f, 0.2f, 0.2f, nullptr, error);
+    assert(box);
+    *geometry[0].body = *box;
+    std::shared_ptr<PartPhysics> part =
+        buildPartPhysics(config, geometry, "3,1.5,0,0,0,0,0", error);
+    assert(part && error.empty());
+    std::vector<physics::Body*> tree;
+    assert(partPhysicsTree(*part, tree, error));
+    assert(physics::sleepDetachedCompound(tree));
+    auto* node = world.addTypedChild(*world.defaultParent(), 1, "loose_part", 0);
+    assert(node);
+    auto* bodyResource = world.registerPartPhysics(*node, part, error);
+    assert(bodyResource && error.empty());
+    std::weak_ptr<PartPhysics> lifetime = part;
+    auto body = world.dynamicBody(*bodyResource).lock();
+    assert(body && body.get() == part->root.get());
+    CarWorldStepper stepper(world, resources);
+    assert(stepper.step(0.01f, error));
+    assert(part->root->state[part->root->current].pos[1] == 1.5f);
+    assert(physics::wakeDetachedCompound(tree));
+    for (unsigned frame = 0; frame < 150; ++frame) {
+      const bool advanced = stepper.step(0.01f, error);
+      if (!advanced)
+        std::fprintf(stderr, "Part frame %u: %s\n", frame, error.c_str());
+      assert(advanced);
+    }
+    const float height = part->root->state[part->root->current].pos[1];
+    assert(height < 1.4f && height > -0.3f);
+    assert(stepper.debugObjectPairCount() != 0);
+    body.reset();
+    part.reset();
+    assert(!lifetime.expired());
+    assert(world.destroy(*node));
+    assert(lifetime.expired());
+    assert(world.dynamicBodyCount() == 0);
+    const bool afterDestroy = stepper.step(0.01f, error);
+    if (!afterDestroy)
+      std::fprintf(stderr, "Part teardown step: %s\n", error.c_str());
+    assert(afterDestroy);
+    assert(stepper.debugObjectPairCount() == 0);
+  }
+
   // --- Car -----------------------------------------------------------------
   const uint32_t carScriptId = resolveId("cars\\racers\\Nonus.rpk", 6);
-  auto *script =
+  auto* script =
       world.addScript(carScriptId, "java.game.cars.Emer_Nonus_Street_GT");
   assert(script);
   assert(loadCarScriptPrototype(resources, *script,
@@ -164,7 +217,7 @@ int main() {
   auto car = buildDetachedCarPhysics(*script->car, "0,0,0,0,0,0,0", 0,
                                      {0, physics::k::gravityY, 0}, error);
   assert(car && error.empty());
-  auto *carNode = world.addTypedChild(*world.defaultParent(), 1, "car", 0);
+  auto* carNode = world.addTypedChild(*world.defaultParent(), 1, "car", 0);
   assert(carNode);
   carNode->nativeDevice = "car";
   carNode->carInstance = std::make_unique<CarRuntimeInstance>();
@@ -181,7 +234,7 @@ int main() {
   // wheel witnesses alone leave the pair collector empty, but a leaf body
   // (chassis) touching the ground builds retained body/ground-face pairs and
   // runs the corrector that mutates their accumulators in place.
-  auto &root = *carNode->carInstance->carPhysics->root;
+  auto& root = *carNode->carInstance->carPhysics->root;
   root.state[0].pos = {0, 2.5f, 0};
   root.state[1] = root.state[0];
 
@@ -236,7 +289,7 @@ int main() {
     auto rebuilt = buildDetachedCarPhysics(*script->car, "0,0,0,0,0,0,0", 0,
                                            {0, physics::k::gravityY, 0}, error);
     assert(rebuilt && error.empty());
-    auto *newCarNode =
+    auto* newCarNode =
         world.addTypedChild(*world.defaultParent(), 1, "car2", 0);
     assert(newCarNode);
     newCarNode->nativeDevice = "car";
@@ -249,7 +302,7 @@ int main() {
     world.markLoaded(*newCarNode);
     assert(world.registerCarPhysics(
         *newCarNode, newCarNode->carInstance->carPhysics, error));
-    auto &newRoot = *newCarNode->carInstance->carPhysics->root;
+    auto& newRoot = *newCarNode->carInstance->carPhysics->root;
     newRoot.state[0].pos = {0, 2.0f, 0};
     newRoot.state[1] = newRoot.state[0];
     for (int i = 0; i < 300; ++i)

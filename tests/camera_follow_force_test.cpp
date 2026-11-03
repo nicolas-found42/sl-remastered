@@ -107,5 +107,35 @@ int main() {
   body.camera.pos = {0, 5, 5};
   const auto heightDown = cameraFollowForce(body, {});
   if (!heightDown || !close(heightDown->force, {0, -90, 0})) return 15;
+  body.camera.pos = {0, 0, 5};
+  body.camera.vel = {};
+  body.camera.omega = {};
+  body.command.height = 0;
+  body.control.localForce = {2, -3, 4};
+  body.control.localTorque = {0.2f, 0.3f, 0.4f};
+  const auto manual = cameraFollowForce(body, {});
+  if (!manual || !close(manual->force, {2, -3, 4}) ||
+      !close(manual->torque, {0.2f, 0.3f, 0.4f}))
+    return 16;
+  // 2.3.1 00504e70/00505090 rotate manual forces and torques from camera
+  // local axes. The target stays aligned with the turned camera's forward.
+  body.camera.rot = {0, 0, 1, 0, 0, 1, 0, 0, -1, 0, 0, 0};
+  body.lookTarget.pos = {-5, 0, 5};
+  const auto turned = cameraFollowForce(body, {});
+  if (!turned || !close(turned->force, {4, -3, -2}) ||
+      !close(turned->torque, {0.4f, 0.3f, -0.2f}))
+    return 17;
+  body.control.freeCamera = true;
+  body.hasLookTarget = false;
+  body.hasMoveTarget = false;
+  body.camera.rot = physics::State{}.rot;
+  body.camera.vel = {1, 2, 3};
+  body.camera.omega = {};
+  body.command.maxPitch = 0;
+  const auto free = cameraFollowForce(body, {});
+  if (!free || !close(free->force, {1, -5, 1}) ||
+      !close(free->torque, {0.2f, 0.3f, 0.4f}) ||
+      !free->smoothing.initializeLook || !free->smoothing.initializeMove)
+    return 18;
   return 0;
 }

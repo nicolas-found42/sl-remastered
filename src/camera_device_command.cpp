@@ -111,3 +111,95 @@ bool applyCameraCommand(CameraCommandState &state, std::string_view command) {
   if (word == "height") state.maxPitch = state.height == 0.0f ? 1.3f : 0.3f;
   return true;
 }
+
+// 2.3.1 004897b0: preserve the SSE single-precision operation grouping.
+bool updateCameraControl(CameraCommandState& command, CameraControlState& control,
+                         const std::array<float, 12>& axes, bool hasController,
+                         bool hasLookTarget, float seconds, std::string& error) {
+  error.clear();
+  if (!std::isfinite(seconds) || seconds <= 0 ||
+      !std::isfinite(command.zoomCurrent) || !std::isfinite(command.zoomTarget) ||
+      !std::isfinite(command.zoomSpeed) || !std::isfinite(command.moveDistance) ||
+      !std::isfinite(command.minDistance) || !std::isfinite(command.maxDistance) ||
+      !std::isfinite(command.torque) || command.minDistance > command.maxDistance) {
+    error = "camera control: invalid frame or command";
+    return false;
+  }
+  auto next = command;
+  auto sampled = control;
+  sampled.localForce = {};
+  sampled.localTorque = {};
+  if (control.freeCamera) {
+    if (!hasController) {
+      error = "camera control: free camera controller unavailable";
+      return false;
+    }
+    for (const size_t axis : {size_t{1}, size_t{2}, size_t{3}, size_t{4}, size_t{5},
+                              size_t{6}, size_t{7}, size_t{8}, size_t{10}, size_t{11}})
+      if (!std::isfinite(axes[axis])) {
+        error = "camera control: invalid controller axis";
+        return false;
+      }
+    sampled.localForce = {axes[4] * -2.0f, axes[5] * 2.0f,
+                          axes[6] * -2.0f};
+    sampled.localTorque = {axes[2] * 0.5f, axes[1] * 0.5f,
+                           axes[3] * 0.5f};
+    sampled.localTorque[0] -= axes[8] * 20.0f;
+    sampled.localTorque[1] -= axes[7] * 20.0f;
+    sampled.localForce[2] = axes[10] * 1000.0f + sampled.localForce[2];
+    next.zoomTarget = (std::clamp(axes[11] * 0.5f, -0.1f, 0.1f) + 1.0f) * next.zoomTarget;
+    next.zoomTarget = std::clamp(next.zoomTarget, 1.0f, 120.0f);
+    for (auto& value : sampled.localForce)
+      value *= 3.0f;
+    const float angularScale = 0.001f / seconds;
+    for (auto& value : sampled.localTorque)
+      value *= angularScale;
+  } else if (hasController) {
+    if (!std::isfinite(axes[7]) || !std::isfinite(axes[8]) || !std::isfinite(axes[10])) {
+      error = "camera control: invalid controller axis";
+      return false;
+    }
+    const float horizontal = axes[7] * -400.0f;
+    const float vertical = axes[8] * 400.0f;
+    sampled.localForce = {horizontal, vertical, 0};
+    const float squared = horizontal * horizontal + vertical * vertical;
+    if (squared > 100.0f) {
+      const float factor = 10.0f / std::sqrt(squared);
+      for (auto& value : sampled.localForce)
+        value *= factor;
+    }
+    if (hasLookTarget) {
+      sampled.localTorque[0] = (vertical * -0.01f) * command.torque;
+      sampled.localTorque[1] = (horizontal * 0.01f) * command.torque;
+    }
+    next.moveDistance = ((axes[10] * 100.0f) * seconds + 1.0f) * command.moveDistance;
+    if (next.moveDistance < command.minDistance)
+      next.moveDistance = command.minDistance;
+    else if (next.moveDistance > command.maxDistance)
+      next.moveDistance = command.maxDistance;
+  }
+  // All control branches converge here, including a detached controller.
+  next.zoomCurrent = (next.zoomTarget - next.zoomCurrent) * next.zoomSpeed * seconds + next.zoomCurrent;
+  const float fovScale = next.zoomCurrent * 0.011111111380159855f;
+  for (auto& value : sampled.localTorque)
+    value *= fovScale;
+  const auto finite = [](const auto& values) {
+    return std::all_of(values.begin(), values.end(), [](float value) { return std::isfinite(value); });
+  };
+  if (!std::isfinite(next.moveDistance) || !std::isfinite(next.zoomCurrent) ||
+      !finite(sampled.localForce) || !finite(sampled.localTorque)) {
+    error = "camera control: nonfinite callback result";
+    return false;
+  }
+  command = next;
+  control = sampled;
+  return true;
+}
+
+bool cameraControlHasForce(const CameraControlState& control) {
+  const auto squared = [](const std::array<float, 3>& value) {
+    return value[0] * value[0] + value[1] * value[1] + value[2] * value[2];
+  };
+  return squared(control.localForce) > 1.0000001111620804e-06f ||
+         squared(control.localTorque) > 9.999999439624929e-11f;
+}

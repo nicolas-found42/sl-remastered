@@ -7,6 +7,8 @@ NativeResult systemSetLdPriority(const std::vector<VmValue>& args, const VmObjec
 
 NativeResult systemArraycopy(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
                              const std::vector<const TufaClass*>* classes);
+NativeResult systemExitNoArgs(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
+                              const std::vector<const TufaClass*>* classes);
 NativeResult systemExitString(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
                               const std::vector<const TufaClass*>* classes);
 NativeResult systemLog(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,

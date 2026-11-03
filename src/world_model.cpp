@@ -605,34 +605,43 @@ std::optional<float> PlayerInputState::sampleAxis(int32_t axis) {
                                 : "invalid frame time";
     return std::nullopt;
   }
-  auto &state = axes_[static_cast<size_t>(axis)];
-  if (state.remaining[1] || state.remaining[2] || state.deviceType != 0) {
-    lastBlock_ = state.remaining[1] || state.remaining[2]
-                     ? "axis remaining counters"
-                     : "axis deviceType != 0";
-    return std::nullopt;
-  }
+  auto& state = axes_[static_cast<size_t>(axis)];
   if (state.stamp == inputFrame_)
     return axisResponseCurve(state.value, state.factors[4]);
+  // Host-reader failures have no Stock equivalent. Keep the cached axis and
+  // mapping history intact unless the complete sample can be evaluated.
+  PlayerAxis updated = state;
+  auto mappings = mappings_;
+  std::optional<int32_t> lastDeviceKind;
   float sum = 0.0f;
-  for (auto &mapping : mappings_) {
+  for (auto& mapping : mappings) {
     if (mapping.axis != axis)
       continue;
     const auto sample = sampleInput(mapping.device, mapping.physicalAxis);
     const auto kind = inputType(mapping.device, mapping.physicalAxis);
-    if (!sample || !std::isfinite(*sample) || !kind || *kind != 0) {
+    if (!sample || !std::isfinite(*sample) || !kind || (*kind != 0 && *kind != 1)) {
       lastBlock_ = !sample ? "device sample unavailable"
                    : !kind ? "device type unavailable"
-                           : "mapping is not a digital/keyboard axis";
+                           : "invalid physical axis sample or type";
       return std::nullopt;
     }
     const float lo = mapping.range[0], hi = mapping.range[1];
     if (!std::all_of(mapping.range.begin(), mapping.range.end(),
-                     [](float value) { return std::isfinite(value); }) ||
+                    [](float value) { return std::isfinite(value); }) ||
         lo == hi) {
       lastBlock_ = "invalid mapping range";
       return std::nullopt;
     }
+    // 0054d89d..0054d8d0: digital and analog mappings sharing a virtual axis
+    // switch ownership only after movement strictly above one tenth of the
+    // source range (newer 00565bfe uses 005935d4).
+    if (*kind != updated.deviceType) {
+      if (std::fabs(*sample - mapping.sample) > std::fabs(hi - lo) * 0.1f)
+        updated.deviceType = *kind;
+      if (*kind != updated.deviceType)
+        continue;
+    }
+    lastDeviceKind = deviceKind ? deviceKind(mapping.device) : std::nullopt;
     if ((lo <= *sample && *sample <= hi) || (hi <= *sample && *sample <= lo))
       sum +=
           (*sample - lo) * (mapping.range[3] - mapping.range[2]) / (hi - lo) +
@@ -640,20 +649,45 @@ std::optional<float> PlayerInputState::sampleAxis(int32_t axis) {
     mapping.sample = *sample;
   }
   sum = std::clamp(sum, -1.0f, 1.0f);
-  float step = state.factors[3] * deltaMilliseconds_;
-  if (state.threshold <= sum || sum <= -state.threshold)
-    step *= sum * state.value >= 0.0f ? state.factors[2] : state.factors[1];
-  else
-    step *= state.factors[0];
-  if (!std::isfinite(step) || step < 0.0f) {
-    lastBlock_ = "invalid smoothing step";
+  if (updated.deviceType == 0) {
+    if (updated.remaining[1] || updated.remaining[2]) {
+      lastBlock_ = "axis force smoothing unsupported";
+      return std::nullopt;
+    }
+    float step = updated.factors[3] * deltaMilliseconds_;
+    if (updated.threshold <= sum || sum <= -updated.threshold)
+      step *= sum * updated.value >= 0.0f ? updated.factors[2] : updated.factors[1];
+    else
+      step *= updated.factors[0];
+    if (!std::isfinite(step) || step < 0.0f) {
+      lastBlock_ = "invalid smoothing step";
+      return std::nullopt;
+    }
+    step = std::min(step, 1.0f);
+    const float difference = sum - updated.value;
+    updated.value += std::clamp(difference, -step, step);
+  } else if (updated.deviceType == 1) {
+    if (!lastDeviceKind || (*lastDeviceKind != 2 && *lastDeviceKind != 3)) {
+      lastBlock_ = "analog physical device class unavailable";
+      return std::nullopt;
+    }
+    // 0054da71: mouse class 2 applies the normalized mapping directly.
+    if (*lastDeviceKind == 2)
+      updated.value = sum;
+    // 0054da7e..0054dac1, constants 005f1428/005f1070/005f3a9c/005f0c50.
+    else if (std::fabs(updated.value - sum) > 0.021f)
+      updated.value = sum - (updated.value < sum ? 0.02f : -0.02f);
+    else
+      updated.value = (sum - updated.value) * 0.3f + updated.value;
+  } else {
+    lastBlock_ = "invalid virtual axis class";
     return std::nullopt;
   }
-  step = std::min(step, 1.0f);
-  const float difference = sum - state.value;
-  state.value = std::clamp(state.value + std::clamp(difference, -step, step),
-                           -1.0f, 1.0f);
-  state.stamp = inputFrame_;
+  updated.value = std::clamp(updated.value, -1.0f, 1.0f);
+  updated.stamp = inputFrame_;
+  state = updated;
+  mappings_ = mappings;
+  lastBlock_ = "";
   return axisResponseCurve(state.value, state.factors[4]);
 }
 
@@ -676,6 +710,8 @@ GameWorld::~GameWorld() {
   objectPhysics_.clear();
   carChildBodies_.clear();
   carBodies_.clear();
+  partChildBodies_.clear();
+  partBodies_.clear();
   dynamicBodies_.clear();
   for (auto &link : deferredDestroy_)
     setLinkOwner(*link, nullptr);
@@ -1271,15 +1307,113 @@ WorldNode *GameWorld::registerCarPhysics(WorldNode &node,
   return root;
 }
 
-bool GameWorld::unregisterDynamicBody(WorldNode &node) {
+WorldNode *GameWorld::registerPartPhysics(WorldNode &node,
+                                        std::shared_ptr<PartPhysics> part,
+                                        std::string &error) {
+  error.clear();
+  if (nodeFor(&node) != &node || node.type != 1 || !part || !part->root ||
+      part->root->proto != &part->rootPrototype || part->root->attachment ||
+      std::find(physicsWorld_.bodies.begin(), physicsWorld_.bodies.end(),
+                part->root.get()) != physicsWorld_.bodies.end()) {
+    error = "part physics: invalid or already registered root";
+    return nullptr;
+  }
+  std::vector<WorldNode *> created;
+  auto makeNode = [&](physics::Body *body, const char *name, bool root) -> WorldNode * {
+    if (!body || !body->proto || body->current > 1 ||
+        !std::isfinite(body->proto->shape.boundRadius) ||
+        body->proto->shape.boundRadius < 0)
+      return nullptr;
+    const auto &position = body->state[body->current].pos;
+    if (!std::all_of(position.begin(), position.end(),
+                     [](float value) { return std::isfinite(value); }))
+      return nullptr;
+    auto *resource = addTypedChild(node, 2, name, 0x201);
+    if (!resource)
+      return nullptr;
+    created.push_back(resource);
+    const float radius = body->proto->shape.boundRadius;
+    resource->bounds.mode = 0;
+    resource->bounds.values = {position[0], position[1], position[2], radius, radius, radius};
+    auto owner = std::shared_ptr<physics::Body>(part, body);
+    if (root) {
+      auto prototype = std::shared_ptr<const physics::BodyProto>(part, &part->rootPrototype);
+      if (!registerDynamicBody(*resource, std::move(owner), std::move(prototype)))
+        return nullptr;
+      partBodies_.emplace(resource, part);
+    } else {
+      partChildBodies_.emplace(resource, std::move(owner));
+    }
+    noteInstanceCreated(*resource);
+    markLoaded(*resource);
+    resource->loadPriority = 1.0f;
+    return resource;
+  };
+  auto fail = [&]() -> WorldNode * {
+    for (auto it = created.rbegin(); it != created.rend(); ++it)
+      destroy(**it);
+    error = "part physics: body resource creation failed";
+    return nullptr;
+  };
+  // 0046eae0 creates the compound resource before the selected geometry
+  // resources. A click-only Part uses its click body as the root instead.
+  auto *root = makeNode(part->root.get(), part->rootBodyIndex < 0 ? "click" : "part_comp", true);
+  if (!root)
+    return fail();
+  for (auto &child : part->children) {
+    if (static_cast<int>(child.bodyIndex) == part->rootBodyIndex &&
+        !makeNode(child.body.get(), "bbone", false))
+      return fail();
+    if (static_cast<int>(child.bodyIndex) == part->steeringBodyIndex &&
+        !makeNode(child.body.get(), "steer", false))
+      return fail();
+  }
+  if (part->clickBody &&
+      !makeNode(part->clickBody, part->argument == 0 ? "cbone" : "click", false))
+    return fail();
+  ++objectPhysicsGeneration_;
+  runlog::event(runlog::EventKind::Note,
+                "part physics registered: instance=%u root=%u resources=%zu "
+                "rootBody=%d steeringBody=%d click=%d asleep=%d",
+                node.instanceId, root->instanceId, created.size(),
+                part->rootBodyIndex, part->steeringBodyIndex,
+                part->clickBody ? 1 : 0,
+                (part->root->flags & physics::kBodyAsleep) ? 1 : 0);
+  return root;
+}
+
+bool GameWorld::placePart(PartPhysics& part, const physics::Vec3& position,
+                          const physics::Mat34& rotation, std::string& error) {
+  std::vector<physics::Body*> affected;
+  if (!placePartPhysics(part, position, rotation, affected, error))
+    return false;
+  auto refresh = [&](WorldNode& node, const physics::Body* body) {
+    if (std::find(affected.begin(), affected.end(), body) == affected.end())
+      return;
+    const auto& point = body->state[body->current].pos;
+    for (size_t axis = 0; axis < 3; ++axis)
+      node.bounds.values[axis] = point[axis];
+  };
+  for (const auto& entry : dynamicBodies_)
+    refresh(*entry.first, entry.second->body.get());
+  for (const auto& entry : carChildBodies_)
+    refresh(*entry.first, entry.second.get());
+  for (const auto& entry : partChildBodies_)
+    refresh(*entry.first, entry.second.get());
+  return true;
+}
+
+bool GameWorld::unregisterDynamicBody(WorldNode& node) {
   const auto found = dynamicBodies_.find(&node);
   if (found == dynamicBodies_.end())
     return false;
-  auto *body = found->second->body.get();
+  auto* body = found->second->body.get();
   physicsWorld_.bodies.erase(std::remove(physicsWorld_.bodies.begin(),
                                          physicsWorld_.bodies.end(), body),
                              physicsWorld_.bodies.end());
   carBodies_.erase(&node);
+  if (partBodies_.erase(&node))
+    ++objectPhysicsGeneration_;
   dynamicBodies_.erase(found);
   return true;
 }
@@ -1292,6 +1426,9 @@ std::weak_ptr<physics::Body> GameWorld::dynamicBody(WorldNode &node) const {
   const auto child = carChildBodies_.find(&node);
   if (child != carChildBodies_.end())
     return child->second;
+  const auto part = partChildBodies_.find(&node);
+  if (part != partChildBodies_.end())
+    return part->second;
   return {};
 }
 
@@ -1379,9 +1516,9 @@ bool bindDirectCameraFollow(GameWorld &world,
   };
   if (block)
     *block = nullptr;
-  if (!device.lookTarget.owner)
+  if (!device.control.freeCamera && !device.lookTarget.owner)
     return fail("look");
-  if (!device.moveTarget.owner)
+  if (!device.control.freeCamera && !device.moveTarget.owner)
     return fail("move");
   auto *physicsNode = device.physicsNode();
   if (!physicsNode)
@@ -1418,16 +1555,16 @@ bool bindDirectCameraFollow(GameWorld &world,
     return false;
   };
   std::shared_ptr<physics::Body> look, move;
-  if (!targetBody(device.lookTarget.owner, look))
+  if (device.lookTarget.owner && !targetBody(device.lookTarget.owner, look))
     return fail("lnod");
-  if (!targetBody(device.moveTarget.owner, move))
+  if (device.moveTarget.owner && !targetBody(device.moveTarget.owner, move))
     return fail("mnod");
   auto camera = world.dynamicBody(*physicsNode).lock();
   if (!camera)
     return fail("cbod");
-  if (!look)
+  if (!device.control.freeCamera && !look)
     return fail("lbod");
-  if (!move)
+  if (!device.control.freeCamera && !move)
     return fail("mbod");
   if (!camera->proto)
     return fail("prot");
@@ -1450,11 +1587,14 @@ bool bindDirectCameraFollow(GameWorld &world,
   CameraFollowForceInput input;
   input.otherBranchesInactive = true;
   input.command = device.commands;
+  input.control = device.control;
   input.fieldOfView = device.fieldOfView;
   input.maxForce = device.maxForce;
   input.camera = camera->state[camera->current];
-  input.lookTarget = look->state[look->current];
-  input.moveTarget = move->state[move->current];
+  input.hasLookTarget = bool(look);
+  input.hasMoveTarget = bool(move);
+  if (look) input.lookTarget = look->state[look->current];
+  if (move) input.moveTarget = move->state[move->current];
   const char *forceBlock = nullptr;
   if (!cameraFollowForce(input, device.followSmoothing, &forceBlock))
     return fail(forceBlock ? forceBlock : "fout");
@@ -1468,18 +1608,21 @@ bool bindDirectCameraFollow(GameWorld &world,
 // to apply a follow force. This port wakes it when the force or torque the
 // follow would apply is nonzero, before the step validates its roots.
 void wakeFollowCameraIfForced(const CameraDeviceResources &device,
-                              physics::Body &camera, const physics::Body &look,
-                              const physics::Body &move) {
+                              physics::Body &camera, const physics::Body *look,
+                              const physics::Body *move) {
   if (!(camera.flags & physics::kBodyAsleep) || camera.current > 1)
     return;
   CameraFollowForceInput input;
   input.otherBranchesInactive = true;
   input.command = device.commands;
+  input.control = device.control;
   input.fieldOfView = device.fieldOfView;
   input.maxForce = device.maxForce;
   input.camera = camera.state[camera.current];
-  input.lookTarget = look.state[look.current];
-  input.moveTarget = move.state[move.current];
+  input.hasLookTarget = look != nullptr;
+  input.hasMoveTarget = move != nullptr;
+  if (look) input.lookTarget = look->state[look->current];
+  if (move) input.moveTarget = move->state[move->current];
   CameraFollowSmoothing smoothing = device.followSmoothing;
   const auto applied = cameraFollowForce(input, smoothing);
   if (!applied)
@@ -1488,7 +1631,7 @@ void wakeFollowCameraIfForced(const CameraDeviceResources &device,
   for (size_t i = 0; i < 3; ++i)
     magnitude += applied->force[i] * applied->force[i] +
                  applied->torque[i] * applied->torque[i];
-  if (magnitude > 1e-8f)
+  if (cameraControlHasForce(device.control) || magnitude > 1e-8f)
     physics::wakeDetachedCompound({&camera});
 }
 } // namespace
@@ -1503,7 +1646,7 @@ bool GameWorld::armedCameraFollowCount(int &ready, std::string &error) {
   ready = 0;
   for (const auto &entry : nodes_) {
     const auto *device = entry.second->cameraDevice.get();
-    if (!device || !device->lookTarget.owner || !device->moveTarget.owner)
+    if (!device || (!device->control.freeCamera && (!device->lookTarget.owner || !device->moveTarget.owner)))
       continue;
     if (!directCameraFollowReady(*device)) {
       error = "empty physics: camera follow is unsupported";
@@ -1520,7 +1663,7 @@ bool GameWorld::integrateArmedCameraFollows(float seconds, bool &otherDynamic,
   unsigned devicesWithTargets = 0;
   for (const auto &entry : nodes_) {
     auto *device = entry.second->cameraDevice.get();
-    if (!device || !device->lookTarget.owner || !device->moveTarget.owner)
+    if (!device || (!device->control.freeCamera && (!device->lookTarget.owner || !device->moveTarget.owner)))
       continue;
     ++devicesWithTargets;
     DirectCameraFollow follow;
@@ -1551,8 +1694,8 @@ bool GameWorld::integrateArmedCameraFollows(float seconds, bool &otherDynamic,
     }
   }
   for (const auto &follow : follows)
-    wakeFollowCameraIfForced(*follow.device, *follow.camera, *follow.look,
-                             *follow.move);
+    wakeFollowCameraIfForced(*follow.device, *follow.camera, follow.look.get(),
+                             follow.move.get());
   {
     static double lastCamLog = -1e9;
     const double now = runlog::monotonicSeconds();
@@ -1561,6 +1704,7 @@ bool GameWorld::integrateArmedCameraFollows(float seconds, bool &otherDynamic,
       for (const auto &fp : follows) {
       const auto &f = fp;
       const auto &cp = f.camera->state[f.camera->current].pos;
+      if (!f.look || !f.move) continue;
       const auto &mp = f.move->state[f.move->current].pos;
       const auto &lp = f.look->state[f.look->current].pos;
       const auto &c = f.device->commands;
@@ -1637,11 +1781,14 @@ bool GameWorld::integrateArmedCameraFollows(float seconds, bool &otherDynamic,
     CameraFollowForceInput input;
     input.otherBranchesInactive = true;
     input.command = follow.device->commands;
+    input.control = follow.device->control;
     input.fieldOfView = follow.device->fieldOfView;
     input.maxForce = follow.device->maxForce;
     input.camera = follow.camera->state[follow.camera->current];
-    input.lookTarget = follow.look->state[follow.look->current];
-    input.moveTarget = follow.move->state[follow.move->current];
+    input.hasLookTarget = bool(follow.look);
+    input.hasMoveTarget = bool(follow.move);
+    if (follow.look) input.lookTarget = follow.look->state[follow.look->current];
+    if (follow.move) input.moveTarget = follow.move->state[follow.move->current];
     const char *forceBlock = nullptr;
     const auto applied =
         cameraFollowForce(input, follow.device->followSmoothing, &forceBlock);
@@ -1739,6 +1886,7 @@ bool GameWorld::stepRegisteredCars(float seconds, const LiveCarStepHooks &hooks,
   // 004a4ed0. Sleeping dynamic trees remain collision candidates so an
   // actual corrected contact wakes them in the same world solve pass.
   steppedObjects_.clear();
+  steppedParts_.clear();
   std::unordered_map<physics::Body*, object::InstanceHandle*> dynamicObjects;
   for (auto& entry : objectPhysics_) {
     auto *objectRoot = entry.second.root();
@@ -1752,7 +1900,7 @@ bool GameWorld::stepRegisteredCars(float seconds, const LiveCarStepHooks &hooks,
   std::vector<DirectCameraFollow> follows;
   for (const auto &entry : nodes_) {
     auto *device = entry.second->cameraDevice.get();
-    if (!device || !device->lookTarget.owner || !device->moveTarget.owner)
+    if (!device || (!device->control.freeCamera && (!device->lookTarget.owner || !device->moveTarget.owner)))
       continue;
     DirectCameraFollow follow;
     const char *block = nullptr;
@@ -1764,8 +1912,8 @@ bool GameWorld::stepRegisteredCars(float seconds, const LiveCarStepHooks &hooks,
     follows.push_back(std::move(follow));
   }
   for (const auto &follow : follows)
-    wakeFollowCameraIfForced(*follow.device, *follow.camera, *follow.look,
-                             *follow.move);
+    wakeFollowCameraIfForced(*follow.device, *follow.camera, follow.look.get(),
+                             follow.move.get());
   // Roots in registration order, as stock keeps them: a car is its body tree
   // (root first, every child after its parent), a camera is a lone body with
   // its follow callback.
@@ -1794,6 +1942,26 @@ bool GameWorld::stepRegisteredCars(float seconds, const LiveCarStepHooks &hooks,
       roots.push_back(std::move(tree));
       continue;
     }
+    bool isPart = false;
+    for (const auto &entry : partBodies_)
+      if (entry.second && entry.second->root.get() == body) {
+        isPart = true;
+        // Installed compounds are children of the target's root and must
+        // never be predicted a second time through their resource registry.
+        if (body->attachment)
+          break;
+        physics::BodyTree tree;
+        if (!partPhysicsTree(*entry.second, tree, error))
+          return false;
+        if (!(body->proto->flags & physics::kProtoStatic) &&
+            (body->flags & physics::kBodyActive)) {
+          steppedParts_.push_back(tree);
+          roots.push_back(std::move(tree));
+        }
+        break;
+      }
+    if (isPart)
+      continue;
     std::shared_ptr<CarPhysics> car;
     for (const auto &entry : carBodies_)
       if (entry.second && entry.second->root.get() == body) {
@@ -1876,16 +2044,21 @@ bool GameWorld::stepRegisteredCars(float seconds, const LiveCarStepHooks &hooks,
     callback.camera = follow->camera.get();
     callback.look = follow->look.get();
     callback.move = follow->move.get();
+    callback.input.hasLookTarget = bool(follow->look);
+    callback.input.hasMoveTarget = bool(follow->move);
     callback.input.otherBranchesInactive = true;
     callback.input.command = follow->device->commands;
+    callback.input.control = follow->device->control;
     callback.input.fieldOfView = follow->device->fieldOfView;
     callback.input.maxForce = follow->device->maxForce;
     callback.smoothing = &follow->device->followSmoothing;
     work.cameraCallbacks.push_back(callback);
   }
   const bool awakeSceneObject = std::any_of(steppedObjects_.begin(), steppedObjects_.end(),
-      [](const auto* instance) { return !(instance->root()->flags & physics::kBodyAsleep); });
-  if (carAsleep && awakeCars == 0 && !awakeSceneObject) {
+                                            [](const auto* instance) { return !(instance->root()->flags & physics::kBodyAsleep); });
+  const bool awakePart = std::any_of(steppedParts_.begin(), steppedParts_.end(),
+                                    [](const auto &tree) { return !(tree.front()->flags & physics::kBodyAsleep); });
+  if (carAsleep && awakeCars == 0 && !awakeSceneObject && !awakePart) {
     // Only camera follows advance: the sleeping cars' wheel and contact work
     // is not run, and a follow that targets a car reads its resting pose.
     // Awake scene objects fall through to the full step below.
@@ -1901,8 +2074,8 @@ bool GameWorld::stepRegisteredCars(float seconds, const LiveCarStepHooks &hooks,
   }
   // Stock registers wheel constraints per awake body only: sleeping cars'
   // suspensions are left out when awake cars share the step.
-  std::vector<physics::SuspensionUpdate *> awakeSuspensions;
-  for (auto *suspension : hooks.suspensions)
+  std::vector<physics::SuspensionUpdate*> awakeSuspensions;
+  for (auto* suspension : hooks.suspensions)
     if (!(suspension->wheelBody &&
           (suspension->wheelBody->flags & physics::kBodyAsleep)))
       awakeSuspensions.push_back(suspension);
@@ -1917,7 +2090,7 @@ bool GameWorld::stepRegisteredCars(float seconds, const LiveCarStepHooks &hooks,
   // also holds the static object bodies.
   physics::World stepWorld = physicsWorld_;
   stepWorld.bodies.clear();
-  for (const auto &tree : roots)
+  for (const auto& tree : roots)
     stepWorld.bodies.push_back(tree[0]);
   const auto result =
       physics::stepMultiRootWorld(stepWorld, roots, seconds, work, error);
@@ -1933,12 +2106,22 @@ bool GameWorld::stepRegisteredCars(float seconds, const LiveCarStepHooks &hooks,
   if (result == physics::FreeBodyStepResult::Advanced) {
     // The car body resource nodes carry sphere bounds at the body position
     // (registerCarPhysics); keep them on the committed pose.
-    for (const auto &entry : carBodies_)
+    for (const auto& entry : carBodies_)
       if (entry.second && entry.second->root && entry.second->root->current < 2)
         for (size_t axis = 0; axis < 3; ++axis)
           entry.first->bounds.values[axis] =
               entry.second->root->state[entry.second->root->current].pos[axis];
-    for (const auto &entry : carChildBodies_)
+    for (const auto& entry : carChildBodies_)
+      if (entry.second && entry.second->current < 2)
+        for (size_t axis = 0; axis < 3; ++axis)
+          entry.first->bounds.values[axis] =
+              entry.second->state[entry.second->current].pos[axis];
+    for (const auto& entry : partBodies_)
+      if (entry.second && entry.second->root && entry.second->root->current < 2)
+        for (size_t axis = 0; axis < 3; ++axis)
+          entry.first->bounds.values[axis] =
+              entry.second->root->state[entry.second->root->current].pos[axis];
+    for (const auto& entry : partChildBodies_)
       if (entry.second && entry.second->current < 2)
         for (size_t axis = 0; axis < 3; ++axis)
           entry.first->bounds.values[axis] =
@@ -1948,34 +2131,73 @@ bool GameWorld::stepRegisteredCars(float seconds, const LiveCarStepHooks &hooks,
   return true;
 }
 
-void GameWorld::advanceCameraZoom(float seconds) {
-  if (!std::isfinite(seconds) || seconds <= 0)
-    return;
+bool GameWorld::advanceCameraControls(float seconds, std::string& error) {
+  error.clear();
+  if (!std::isfinite(seconds) || seconds <= 0) {
+    error = "camera control: invalid frame time";
+    return false;
+  }
+  struct Update {
+    CameraDeviceResources* device;
+    CameraCommandState commands;
+    CameraControlState control;
+    uint32_t id;
+  };
+  std::vector<Update> pending;
   for (const auto& entry : nodes_) {
     auto* device = entry.second->cameraDevice.get();
     if (!device)
       continue;
-    auto& command = device->commands;
-    // FUN_004386a0: keep stock's float grouping and do not
-    // clamp the interpolation factor. FUN_00438b60 publishes +0x180 to
-    // the render camera's FOV even when no follow target is armed.
-    command.zoomCurrent = (command.zoomTarget - command.zoomCurrent) *
-                              command.zoomSpeed * seconds +
-                          command.zoomCurrent;
-    device->fieldOfView = command.zoomCurrent;
-    if (auto* camera = device->cameraNode(); camera && camera->camera)
-      camera->camera->fieldOfView = command.zoomCurrent;
+    std::array<float, 12> axes{};
+    const bool hasController = device->controller.owner != nullptr;
+    if (hasController) {
+      for (int32_t axis = 1; axis < 12; ++axis) {
+        if (axis == 9 || (!device->control.freeCamera && axis != 7 && axis != 8 && axis != 10))
+          continue;
+        const auto value = playerControlValue(device->controller.owner, axis);
+        if (!value) {
+          const auto* controller = nodeFor(device->controller.owner);
+          const auto* detail = controller && controller->playerInput
+                                   ? controller->playerInput->lastBlock()
+                                   : "controller is not a loaded player input device";
+          if (!detail)
+            detail = "controller axis unavailable";
+          error = "camera control: axis " + std::to_string(axis) + " unavailable: " + detail;
+          return false;
+        }
+        axes[static_cast<size_t>(axis)] = *value;
+      }
+    }
+    Update update{device, device->commands, device->control, entry.second->instanceId};
+    if (!updateCameraControl(update.commands, update.control, axes, hasController,
+                             device->lookTarget.owner != nullptr, seconds, error))
+      return false;
+    pending.push_back(std::move(update));
+  }
+  // Qualify every sampled device before publishing any camera frame state.
+  for (auto& update : pending) {
+    auto& device = *update.device;
+    device.commands = update.commands;
+    device.control = update.control;
+    device.fieldOfView = device.commands.zoomCurrent;
+    if (auto* camera = device.cameraNode(); camera && camera->camera)
+      camera->camera->fieldOfView = device.fieldOfView;
     auto* channel = runlog::traceChannel("cameratrace");
     if (channel && std::getenv("SLRR_CAR_TRACE"))
       channel->stream.store(true, std::memory_order_relaxed);
-    char line[200];
+    char line[384];
     std::snprintf(line, sizeof line,
                   "{\"f\":%u,\"camera\":%u,\"dt\":%.4f,\"fov\":%.4f,"
-                  "\"target\":%.4f,\"speed\":%.4f}",
-                  runlog::g_frame.load(std::memory_order_relaxed), entry.second->instanceId,
-                  seconds, command.zoomCurrent, command.zoomTarget, command.zoomSpeed);
+                  "\"target\":%.4f,\"speed\":%.4f,\"free\":%u,"
+                  "\"force\":[%.5f,%.5f,%.5f],\"torque\":[%.5f,%.5f,%.5f]}",
+                  runlog::g_frame.load(std::memory_order_relaxed), update.id,
+                  seconds, device.commands.zoomCurrent, device.commands.zoomTarget,
+                  device.commands.zoomSpeed, device.control.freeCamera ? 1u : 0u,
+                  device.control.localForce[0], device.control.localForce[1], device.control.localForce[2],
+                  device.control.localTorque[0], device.control.localTorque[1], device.control.localTorque[2]);
     runlog::tracePush(channel, line);
   }
+  return true;
 }
 
 bool GameWorld::stepEmptyPhysics(float seconds, std::string &error) {
@@ -2144,7 +2366,7 @@ bool GameWorld::stepEmptyPhysics(float seconds, std::string &error) {
     bool isFollowCamera = false;
     for (const auto &candidate : nodes_) {
       const auto *device = candidate.second->cameraDevice.get();
-      if (!device || !device->lookTarget.owner || !device->moveTarget.owner)
+      if (!device || (!device->control.freeCamera && (!device->lookTarget.owner || !device->moveTarget.owner)))
         continue;
       DirectCameraFollow follow;
       if (bindDirectCameraFollow(*this, *device, follow) &&
@@ -2259,6 +2481,7 @@ void GameWorld::uncountInstance(bool &counted) {
 void GameWorld::release(WorldNode &node) {
   unregisterDynamicBody(node);
   carChildBodies_.erase(&node);
+  partChildBodies_.erase(&node);
   boxGeometries_.erase(
       std::remove(boxGeometries_.begin(), boxGeometries_.end(), &node),
       boxGeometries_.end());

@@ -54,6 +54,17 @@ int main() {
 	CHECK(std::get<const VmObject*>(refsOut->arrayElements[0]) == word);
 	CHECK(std::get<const VmObject*>(refsOut->arrayElements[1]) == nullptr);
 
+	CHECK(!arena.exitRequested);
+	CHECK(isError(systemExitNoArgs({int32_t{1}}, nullptr, &arena, nullptr)));
+	CHECK(!arena.exitRequested);
+	CHECK(isError(systemExitNoArgs({}, nullptr, nullptr, nullptr)));
+	CHECK(std::holds_alternative<std::monostate>(systemExitNoArgs({}, nullptr, &arena, nullptr)));
+	CHECK(arena.exitRequested);
+	CHECK(std::holds_alternative<std::monostate>(systemExitNoArgs({}, nullptr, &arena, nullptr)));
+	VmArena independentArena;
+	CHECK(!independentArena.exitRequested);
+	CHECK(std::holds_alternative<std::monostate>(systemExitString({word}, nullptr, &independentArena, nullptr)));
+	CHECK(!independentArena.exitRequested);
 	CHECK(std::holds_alternative<std::monostate>(systemExitString({word}, nullptr, &arena, nullptr)));
 	CHECK(std::holds_alternative<std::monostate>(systemExitString({static_cast<const VmObject*>(nullptr)}, nullptr, &arena, nullptr)));
 	CHECK(isError(systemExitString({}, nullptr, &arena, nullptr)));

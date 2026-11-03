@@ -145,6 +145,9 @@ public:
   // Platform readers for FUN_00557430 and FUN_00557990, respectively.
   std::function<std::optional<float>(int32_t, int32_t)> sampleInput;
   std::function<std::optional<int32_t>(int32_t, int32_t)> inputType;
+  // FUN_00558130: physical device class (1 keyboard, 2 mouse, 3 joystick),
+  // distinct from inputType's digital/analog axis classification.
+  std::function<std::optional<int32_t>(int32_t)> deviceKind;
   // FUN_0054d650: returns a one-based slot, 0 when full, -1 for a negative
   // physical device or axis. A null result means the virtual axis is outside
   // the host's safe range (stock indexes it without checking).
@@ -158,8 +161,8 @@ public:
   bool setSpeed(int32_t axis, float value);
   bool setForce(int32_t axis, float first, float second);
   void reset();
-  // Stock input frame counter and keyboard/button sampling; unsupported analog
-  // or advanced smoothing paths return nullopt.
+  // Stock input frame counter and digital/analog axis sampling. Unavailable
+  // device classes and advanced force smoothing return nullopt.
   void beginFrame(float deltaSeconds);
   std::optional<float> sampleAxis(int32_t axis);
   // Why the latest sampleAxis returned nullopt (diagnostics only).
@@ -553,9 +556,11 @@ public:
   }
   void setInputReaders(
       std::function<std::optional<float>(int32_t, int32_t)> sample,
-      std::function<std::optional<int32_t>(int32_t, int32_t)> type) {
+      std::function<std::optional<int32_t>(int32_t, int32_t)> type,
+      std::function<std::optional<int32_t>(int32_t)> kind = {}) {
     inputSample_ = std::move(sample);
     inputType_ = std::move(type);
+    inputDeviceKind_ = std::move(kind);
   }
   // Stock FUN_005579f0 (axis display names) and FUN_00557aa0 (activeAxis)
   // need per-device axis names and axis counts; null readers report unknown.
@@ -573,6 +578,7 @@ public:
   void configurePlayerInput(PlayerInputState &input) const {
     input.sampleInput = inputSample_;
     input.inputType = inputType_;
+    input.deviceKind = inputDeviceKind_;
   }
   // ResourceWorld removes its own observer before it is destroyed.
   uint64_t addNodeDestroyObserver(std::function<void(LinkOwner &)> observer);
@@ -624,7 +630,7 @@ public:
   // the call before the camera or world clock changes.
   bool stepEmptyPhysics(float seconds, std::string &error);
   // Camera device callback 004386a0, before the world force/prediction pass.
-  void advanceCameraZoom(float seconds);
+  bool advanceCameraControls(float seconds, std::string& error);
   // Applies cameraFollowForce while other dynamic bodies stay registered.
   // Does not solve collision, joints, or wheel contacts.
   bool stepArmedCameraFollow(float seconds, std::string &error);
@@ -642,6 +648,12 @@ public:
   const std::vector<object::InstanceHandle *> &steppedObjectPhysics() const {
     return steppedObjects_;
   }
+  const std::vector<physics::BodyTree> &steppedPartPhysics() const {
+    return steppedParts_;
+  }
+  bool hasRegisteredParts() const { return !partBodies_.empty(); }
+  bool hasRegisteredObjects() const { return !objectPhysics_.empty(); }
+  void notePartPhysicsChanged() { ++objectPhysicsGeneration_; }
   // Bumped on every register/unregisterObjectPhysics: lets long-lived
   // steppers drop retained per-body contact state before it can dangle.
   uint64_t objectPhysicsGeneration() const { return objectPhysicsGeneration_; }
@@ -672,7 +684,14 @@ public:
   WorldNode *registerCarPhysics(WorldNode &node,
                                 std::shared_ptr<CarPhysics> car,
                                 std::string &error);
-  std::weak_ptr<physics::Body> dynamicBody(WorldNode &node) const;
+  // 0046eae0: resources retain the actual Part owner; only its detached
+  // compound root enters the world solve. Installed roots stay selectable.
+  WorldNode* registerPartPhysics(WorldNode& node,
+                                 std::shared_ptr<PartPhysics> part,
+                                 std::string& error);
+  bool placePart(PartPhysics& part, const physics::Vec3& position,
+                 const physics::Mat34& rotation, std::string& error);
+  std::weak_ptr<physics::Body> dynamicBody(WorldNode& node) const;
   // 00424fe0/004250b0: two ordered audio camera slots. Duplicate
   // registration is ignored and removal fills the gap with the last slot.
   void registerAudioListener(WorldNode &physicsNode);
@@ -723,8 +742,11 @@ private:
   std::map<WorldNode *, std::shared_ptr<DynamicBodyOwnership>> dynamicBodies_;
   std::map<WorldNode *, std::shared_ptr<CarPhysics>> carBodies_;
   std::map<WorldNode *, std::shared_ptr<physics::Body>> carChildBodies_;
+  std::map<WorldNode *, std::shared_ptr<PartPhysics>> partBodies_;
+  std::map<WorldNode *, std::shared_ptr<physics::Body>> partChildBodies_;
   std::map<LinkOwner *, object::InstanceHandle> objectPhysics_;
   std::vector<object::InstanceHandle *> steppedObjects_;
+  std::vector<physics::BodyTree> steppedParts_;
   uint64_t objectPhysicsGeneration_ = 0;
   physics::World physicsWorld_;
   std::map<uint32_t, std::vector<LinkOwner *>> recentlyUsed_;
@@ -744,6 +766,7 @@ private:
   std::optional<std::vector<std::string>> inputDevices_;
   std::function<std::optional<float>(int32_t, int32_t)> inputSample_;
   std::function<std::optional<int32_t>(int32_t, int32_t)> inputType_;
+  std::function<std::optional<int32_t>(int32_t)> inputDeviceKind_;
   InputAxisName inputAxisName_;
   InputAxisCount inputAxisCount_;
   std::map<uint64_t, std::function<void(LinkOwner &)>> nodeDestroyObservers_;

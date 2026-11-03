@@ -51,5 +51,61 @@ int main() {
       commands[2] != "zoom 150.000000") return 14;
   const float current = state.zoomCurrent;
   if (!applyCameraCommand(state, commands[2]) || state.zoomTarget != 120 || state.zoomCurrent != current) return 15;
+  {
+    // 2.3.1 004897b0: follow-mode controller axes7/8 are scaled before
+    // normalization; the torque uses the original scaled values.
+    auto command = cameraCommandState(CameraDeviceConfig{55, 0.02f, 2, 1, -0.7f,
+                                                          0.2f, 200, 20, true});
+    command.moveDistance = 4;
+    command.zoomTarget = 100;
+    CameraControlState control;
+    std::array<float, 12> axes{};
+    axes[7] = 0.025f;
+    axes[8] = 0.025f;
+    axes[10] = 0.5f;
+    std::string error;
+    if (!updateCameraControl(command, control, axes, true, true, 0.02f, error) ||
+        std::fabs(control.localForce[0] + 7.071068f) > 0.00001f ||
+        std::fabs(control.localForce[1] - 7.071068f) > 0.00001f ||
+        control.localForce[2] != 0 || command.moveDistance != 8 ||
+        std::fabs(command.zoomCurrent - 57.7f) > 0.00001f ||
+        std::fabs(control.localTorque[0] + 0.0012822223f) > 0.000001f ||
+        std::fabs(control.localTorque[1] + 0.0012822223f) > 0.000001f)
+      return 19;
+    // Detached control clears the manual outputs while zoom continues.
+    if (!updateCameraControl(command, control, {}, false, true, 0.02f, error) ||
+        control.localForce != std::array<float, 3>{} ||
+        control.localTorque != std::array<float, 3>{} ||
+        command.moveDistance != 8 ||
+        std::fabs(command.zoomCurrent - 60.238f) > 0.00001f)
+      return 20;
+  }
+  {
+    auto command = cameraCommandState(CameraDeviceConfig{55, 0.02f, 2, 1, -0.7f,
+                                                          0.2f, 200, 20, true});
+    command.zoomTarget = 100;
+    CameraControlState control;
+    control.freeCamera = true;
+    std::array<float, 12> axes{};
+    axes[1] = 0.4f;
+    axes[2] = 0.2f;
+    axes[3] = 0.6f;
+    axes[4] = 0.5f;
+    axes[5] = -0.5f;
+    axes[6] = -0.25f;
+    axes[7] = 0.01f;
+    axes[8] = -0.02f;
+    axes[10] = 0.003f;
+    axes[11] = 1;
+    std::string error;
+    if (!updateCameraControl(command, control, axes, true, false, 0.02f, error) ||
+        command.zoomTarget != 110 ||
+        std::fabs(command.zoomCurrent - 58.3f) > 0.00001f ||
+        control.localForce != std::array<float, 3>{-3, -3, 10.5f} ||
+        std::fabs(control.localTorque[0] - 0.016194445f) > 0.000001f ||
+        std::fabs(control.localTorque[1]) > 0.000001f ||
+        std::fabs(control.localTorque[2] - 0.009716667f) > 0.000001f)
+      return 21;
+  }
   return 0;
 }

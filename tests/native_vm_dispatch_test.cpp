@@ -118,7 +118,8 @@ void begin(const char* className, const char* method, const char* descriptor) {
 // Appends a method reference for `method` to a copy of the declaring class and runs a caller tree
 // that pushes the arguments and calls it. An instance native gets `receiver` as the current `this`.
 VmResult call(const std::string& shortName, const std::string& method, const std::string& descriptor,
-              const VmObject* receiver, const std::vector<VmValue>& args) {
+              const VmObject* receiver, const std::vector<VmValue>& args,
+              bool continueAfterVoid = false) {
 	TufaClass& host = const_cast<TufaClass&>(lib.cls(shortName));
 	uint32_t name = 0, signature = 0, flags = 0;
 	for (const auto& list : host.methods) for (const auto& entry : list)
@@ -158,7 +159,8 @@ VmResult call(const std::string& shortName, const std::string& method, const std
 	tree.push_back({0x27, 0, true, static_cast<uint32_t>(args.size())});
 	tree.push_back({0x24, 0, false, 0});
 	tree.push_back({0x1a, 0, true, ref});
-	tree.push_back(descriptor.back() == 'V' ? TufaNode{0x2a, 0, false, 0} : TufaNode{0x2b, 0, false, 0});
+	if (continueAfterVoid) tree.push_back(literal(99));
+	tree.push_back(descriptor.back() == 'V' && !continueAfterVoid ? TufaNode{0x2a, 0, false, 0} : TufaNode{0x2b, 0, false, 0});
 	const auto result = vmExecute(host, tree, locals, &nativeRegistry(), &lib.list, nullptr, &lib.arena);
 	if (current && result.ok) ++current->calls;
 	if (!result.ok && std::getenv("DBG")) std::printf("  err[%s]: %s\n", method.c_str(), result.error.c_str());
@@ -383,6 +385,12 @@ void systemArraycopy() {
 }
 
 void systemExit() {
+	begin("java.lang.System", "exit", "()V");
+	CHECK(!lib.arena.exitRequested);
+	CHECK(isVoid(call("System", "exit", "()V", kNull, {})));
+	CHECK(lib.arena.exitRequested);
+	CHECK(isVoid(call("System", "exit", "()V", kNull, {})));
+	CHECK(isInt(call("System", "exit", "()V", kNull, {}, true), 99));
 	begin("java.lang.System", "exit", "(Ljava.lang.String;)V");
 	const std::string d = "(Ljava.lang.String;)V";
 	CHECK(isVoid(call("System", "exit", d, kNull, {lib.str("bye")})));

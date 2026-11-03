@@ -4,6 +4,7 @@
 
 #include "resource_world.hpp"
 #include "vm.hpp"
+#include "natives/game_type.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -129,7 +130,9 @@ bool CameraFrame::draw(WorldNode& cameraInstance, const ViewportInstance& viewpo
 		return false;
 	}
 	return materials_.draw(state->view, state->projection, viewport, error, requireCached,
-	                       camera.fog ? &*camera.fog : nullptr);
+	                       camera.fog ? &*camera.fog : nullptr,
+	                       arena && arena->gameState
+	                           ? arena->gameState->globalEnvmap.cachedValue : 0);
 }
 
 bool renderActiveViewport(GameWorld& world, WorldNode& viewportNode, float worldScale,

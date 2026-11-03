@@ -17,9 +17,9 @@
 #include <limits>
 #include <utility>
 
-bool readNativeDataFile(PackRegistry &packs, const std::string &rawPath,
-                        size_t maximumBytes, std::string &contents,
-                        std::string &error) {
+bool readNativeDataFile(PackRegistry& packs, const std::string& rawPath,
+                        size_t maximumBytes, std::string& contents,
+                        std::string& error) {
   std::string path = rawPath;
   std::replace(path.begin(), path.end(), '\\', '/');
   const std::filesystem::path relative(path);
@@ -28,7 +28,7 @@ bool readNativeDataFile(PackRegistry &packs, const std::string &rawPath,
     error = "unsafe native config path";
     return false;
   }
-  for (const auto &component : relative)
+  for (const auto& component : relative)
     if (component == "." || component == ".." || component.empty()) {
       error = "unsafe native config path";
       return false;
@@ -70,14 +70,14 @@ bool readNativeDataFile(PackRegistry &packs, const std::string &rawPath,
   return true;
 }
 
-bool readNativeConfig(PackRegistry &packs, const std::string &rawPath,
-                      std::string &contents, std::string &error) {
+bool readNativeConfig(PackRegistry& packs, const std::string& rawPath,
+                      std::string& contents, std::string& error) {
   return readNativeDataFile(packs, rawPath, 1024 * 1024, contents, error);
 }
 
-bool loadCarScriptPrototype(ResourceWorld &resources, ScriptNode &source,
-                            const std::string &configPath, std::string &error,
-                            const CarCameraSettings *cameraSettings) {
+bool loadCarScriptPrototype(ResourceWorld& resources, ScriptNode& source,
+                            const std::string& configPath, std::string& error,
+                            const CarCameraSettings* cameraSettings) {
   if (source.car) {
     if (source.car->configPath == configPath &&
         source.car->stage == CarPrototypeStage::PhysicsGeometryReady) {
@@ -117,12 +117,12 @@ bool loadCarScriptPrototype(ResourceWorld &resources, ScriptNode &source,
 }
 
 namespace {
-bool equalsIgnoreCase(const std::string &a, const char *b);
+bool equalsIgnoreCase(const std::string& a, const char* b);
 }
 
-bool loadButtonScriptPrototype(ResourceWorld &resources, ScriptNode &source,
-                               const std::string &configPath,
-                               std::string &error) {
+bool loadButtonScriptPrototype(ResourceWorld& resources, ScriptNode& source,
+                               const std::string& configPath,
+                               std::string& error) {
   if (source.button) {
     if (source.button->configPath == configPath) {
       error.clear();
@@ -153,7 +153,7 @@ bool loadButtonScriptPrototype(ResourceWorld &resources, ScriptNode &source,
       view.dependencies};
   auto proto = std::make_unique<ButtonPrototype>();
   proto->configPath = configPath;
-  for (const auto &line : lines) {
+  for (const auto& line : lines) {
     if (equalsIgnoreCase(line.key, "render")) {
       // FUN_00437250: "%d %f %f %f %f %f %f"; the id is remapped by
       // FUN_00544590 and the trailing floats stay zero when absent.
@@ -183,9 +183,9 @@ bool loadButtonScriptPrototype(ResourceWorld &resources, ScriptNode &source,
   return true;
 }
 
-bool loadPartScriptPrototype(ResourceWorld &resources, ScriptNode &source,
-                             const std::string &configPath,
-                             std::string &error) {
+bool loadPartScriptPrototype(ResourceWorld& resources, ScriptNode& source,
+                             const std::string& configPath,
+                             std::string& error) {
   if (source.car) {
     if (source.car->configPath == configPath &&
         source.car->stage == CarPrototypeStage::PhysicsGeometryReady) {
@@ -225,7 +225,7 @@ bool loadPartScriptPrototype(ResourceWorld &resources, ScriptNode &source,
 }
 
 std::optional<NativePayloadDirective>
-parseNativePayloadDirective(const std::string &text) {
+parseNativePayloadDirective(const std::string& text) {
   if (text.find('\0') != std::string::npos)
     return std::nullopt;
   const auto start = text.find_first_not_of(" \t\r\n");
@@ -244,8 +244,8 @@ parseNativePayloadDirective(const std::string &text) {
 }
 
 std::optional<NativePayloadDirective>
-readNativeOnlyGameType(PackRegistry &registry, uint32_t scriptResourceId,
-                       std::string &error) {
+readNativeOnlyGameType(PackRegistry& registry, uint32_t scriptResourceId,
+                       std::string& error) {
   PackResource resource;
   if (!registry.lookup(scriptResourceId, resource, error))
     return std::nullopt;
@@ -277,7 +277,7 @@ readNativeOnlyGameType(PackRegistry &registry, uint32_t scriptResourceId,
 }
 
 GameInstanceDescriptor
-prepareGameInstanceDescriptor(const GameCreationRequest &request) {
+prepareGameInstanceDescriptor(const GameCreationRequest& request) {
   const auto nul = request.name.find('\0');
   return {1, 0x21, request.name.substr(0, nul < 30 ? nul : 30)};
 }
@@ -288,8 +288,8 @@ namespace {
 // FUN_00410430 loads the class file from the root and requires the pair to
 // match the class's own package, so root suffix and package agree.
 struct ScriptRoot {
-  const char *directory;
-  const char *packageName;
+  const char* directory;
+  const char* packageName;
 };
 const ScriptRoot kScriptRoots[] = {
     {"system\\scripts\\lang", "java.lang"},
@@ -300,7 +300,7 @@ const ScriptRoot kScriptRoots[] = {
     {"sl\\scripts\\game", "java.game"},
 };
 
-bool equalsIgnoreCase(const std::string &a, const char *b) {
+bool equalsIgnoreCase(const std::string& a, const char* b) {
   size_t length = std::strlen(b);
   if (a.size() != length)
     return false;
@@ -320,7 +320,7 @@ bool equalsIgnoreCase(const std::string &a, const char *b) {
 // directly. An unknown root has no table mapping; stock instead reads the
 // class file's own header name (FUN_00410430), which the port does not
 // implement.
-std::optional<std::string> classNameFromScriptPath(const std::string &raw) {
+std::optional<std::string> classNameFromScriptPath(const std::string& raw) {
   const std::string suffix = ".class";
   if (raw.size() < suffix.size() ||
       raw.compare(raw.size() - suffix.size(), suffix.size(), suffix) != 0)
@@ -331,7 +331,7 @@ std::optional<std::string> classNameFromScriptPath(const std::string &raw) {
   const std::string root = raw.substr(0, slash);
   const std::string leaf =
       raw.substr(slash + 1, raw.size() - slash - 1 - suffix.size());
-  for (const auto &entry : kScriptRoots)
+  for (const auto& entry : kScriptRoots)
     if (equalsIgnoreCase(root, entry.directory))
       return std::string(entry.packageName) + "." + leaf;
   return {};
@@ -339,12 +339,12 @@ std::optional<std::string> classNameFromScriptPath(const std::string &raw) {
 } // namespace
 
 GameCreationResult
-prepareGameCreation(PackRegistry &registry, uint32_t scriptResourceId,
+prepareGameCreation(PackRegistry& registry, uint32_t scriptResourceId,
                     std::optional<uint32_t> parentResourceId,
                     std::optional<std::string> constructorArgument,
                     std::optional<std::string> name,
                     const std::function<std::optional<std::string>(
-                        const std::string &, std::string &)> &pathResolver) {
+                        const std::string&, std::string&)>& pathResolver) {
   if (!scriptResourceId)
     return {{}, "zero script resource needs unsupported class fallback"};
   if (!name)
@@ -361,12 +361,13 @@ prepareGameCreation(PackRegistry &registry, uint32_t scriptResourceId,
                 ")"};
   if (resource.entry.resType != 8 || !resource.packBytes)
     return {{}, "expected type-8 script resource"};
-  const auto &bytes = *resource.packBytes;
+  const auto& bytes = *resource.packBytes;
   const size_t offset = resource.entry.payloadOffset,
                size = resource.entry.payloadSize;
   if (offset > bytes.size() || size > bytes.size() - offset || size > 65536)
     return {{}, "invalid script payload bounds"};
-  std::string payload(bytes.begin() + offset, bytes.begin() + offset + size);
+  const auto payloadBegin = bytes.begin() + static_cast<std::ptrdiff_t>(offset);
+  std::string payload(payloadBegin, payloadBegin + static_cast<std::ptrdiff_t>(size));
   if (payload.find('\0') != std::string::npos)
     return {{}, "invalid script payload"};
   // FUN_005461a0 walks the payload as text lines: `script <path>` names the
@@ -420,16 +421,16 @@ prepareGameCreation(PackRegistry &registry, uint32_t scriptResourceId,
   if (parentResourceId && !*parentResourceId)
     parentResourceId.reset();
   GameCreationRequest request{
-      scriptResourceId,           std::move(scriptClass),
-      parentResourceId,           std::move(constructorArgument),
-      std::move(*name),           std::move(nativeDevice),
+      scriptResourceId, std::move(scriptClass),
+      parentResourceId, std::move(constructorArgument),
+      std::move(*name), std::move(nativeDevice),
       std::move(nativeConfigPath)};
   return {std::move(request), {}};
 }
 
 namespace {
 CreationResult fail(CreationStatus status, CreationIssue issue,
-                    const char *detail) {
+                    const char* detail) {
   CreationResult result;
   result.status = status;
   result.issue = issue;
@@ -438,12 +439,12 @@ CreationResult fail(CreationStatus status, CreationIssue issue,
 }
 } // namespace
 
-CreationResult createNativeInstance(GameWorld &world,
-                                    const GameCreationRequest &request,
-                                    ReceiverBinding *receiver,
-                                    ResourceWorld *resources,
-                                    const PlayerFactorySetup *player,
-                                    const CarCameraSettings *cameraSettings) {
+CreationResult createNativeInstance(GameWorld& world,
+                                    const GameCreationRequest& request,
+                                    ReceiverBinding* receiver,
+                                    ResourceWorld* resources,
+                                    const PlayerFactorySetup* player,
+                                    const CarCameraSettings* cameraSettings) {
   // FUN_0042ab50 on the receiver's field; a null record reaches the "Mighty
   // ERROR" branch.
   if (!receiver)
@@ -457,7 +458,7 @@ CreationResult createNativeInstance(GameWorld &world,
   // FUN_00546070 resolves the id as a type-8 node; loading it parses the text
   // directives (`script <path>`, `native <device>`) in FUN_005461a0 and looks
   // the class up (FUN_00410890, or FUN_00410430 for a ".class" path).
-  ScriptNode *script = world.findScript(request.scriptResourceId);
+  ScriptNode* script = world.findScript(request.scriptResourceId);
   // A script node that a pack mount made has no class yet: stock reads "script
   // <class>" only when it loads the node.
   if (script && !script->className.empty() &&
@@ -477,10 +478,10 @@ CreationResult createNativeInstance(GameWorld &world,
   // FUN_00536a10: a null/empty parent record means the world default parent,
   // otherwise the parent id is looked up as a type-1 node (FUN_00537000 with
   // type 1).
-  WorldNode *parent = request.parentResourceId
+  WorldNode* parent = request.parentResourceId
                           ? world.findInstance(*request.parentResourceId)
                           : world.defaultParent();
-  ResourceNode *packParent = nullptr;
+  ResourceNode* packParent = nullptr;
   if (!parent && request.parentResourceId && resources) {
     const auto lookup = resources->lookup(*request.parentResourceId, 1);
     if (lookup.status == LookupStatus::MountRefused)
@@ -509,7 +510,7 @@ CreationResult createNativeInstance(GameWorld &world,
                   request.scriptResourceId, request.scriptClass.c_str(),
                   request.nativeConfigPath ? request.nativeConfigPath->c_str()
                                            : "<missing>");
-    const char *trace = std::getenv("SLRR_TRACE_CAR_CREATION");
+    const char* trace = std::getenv("SLRR_TRACE_CAR_CREATION");
     // The event ring has a fixed text limit; the captured stderr line retains
     // the complete configuration path for later diagnosis. Print it only when
     // explicitly asked (every play.sh run has runlog active, and a mirrored
@@ -539,7 +540,7 @@ CreationResult createNativeInstance(GameWorld &world,
          script->car->configPath != *request.nativeConfigPath))
       return fail(CreationStatus::Unsupported,
                   CreationIssue::NativeDeviceUnsupported, error.c_str());
-    auto &car = *script->car;
+    auto& car = *script->car;
     builtCarPhysics = buildDetachedCarPhysics(
         car, request.constructorArgument.value_or(""), world.physicsTime(),
         {0, physics::k::gravityY, 0}, error);
@@ -567,7 +568,7 @@ CreationResult createNativeInstance(GameWorld &world,
                                  error))
       return fail(CreationStatus::Unsupported,
                   CreationIssue::NativeDeviceUnsupported, error.c_str());
-    auto &partProto = *script->car;
+    auto& partProto = *script->car;
     if (partProto.config.rootBody >= 0 || partProto.clickGeometry) {
       builtPartPhysics = buildPartPhysics(
           partProto.config, partProto.geometry,
@@ -597,9 +598,9 @@ CreationResult createNativeInstance(GameWorld &world,
   int32_t playerArgs[3]{};
   if (player && request.nativeDevice == "player" &&
       request.constructorArgument) {
-    const char *cursor = request.constructorArgument->c_str();
-    for (auto &value : playerArgs) {
-      char *end = nullptr;
+    const char* cursor = request.constructorArgument->c_str();
+    for (auto& value : playerArgs) {
+      char* end = nullptr;
       errno = 0;
       const long parsed = std::strtol(cursor, &end, 10);
       if (end == cursor)
@@ -635,7 +636,7 @@ CreationResult createNativeInstance(GameWorld &world,
     resources->noteScriptLoaded(script->resourceId);
 
   const auto descriptor = prepareGameInstanceDescriptor(request);
-  WorldNode *node =
+  WorldNode* node =
       packParent ? resources->addGameChild(*packParent, descriptor.name,
                                            descriptor.flags)
                  : world.addChild(*parent, descriptor.name, descriptor.flags);
@@ -676,7 +677,7 @@ CreationResult createNativeInstance(GameWorld &world,
     const bool isCar = request.nativeDevice == "car";
     node->nativeDevice = request.nativeDevice;
     node->carInstance = std::make_unique<CarRuntimeInstance>();
-    auto &inst = *node->carInstance;
+    auto& inst = *node->carInstance;
     inst.isCar = isCar;
     setLinkOwner(inst.prototypeSource, script);
     if (isCar) {
@@ -708,13 +709,13 @@ CreationResult createNativeInstance(GameWorld &world,
       inst.rotation = initial.rotation;
     }
     if (script->car) {
-      const auto &proto = *script->car;
+      const auto& proto = *script->car;
       if (isCar)
         for (size_t i = 0; i < proto.config.drivers.size(); ++i)
           inst.seats.push_back(std::make_unique<CarSeat>());
       inst.slots.reserve(proto.config.slots.size());
       for (size_t i = 0; i < proto.config.slots.size(); ++i) {
-        const auto &srcSlot = proto.config.slots[i];
+        const auto& srcSlot = proto.config.slots[i];
         auto dstSlot = std::make_unique<RuntimeSlotState>();
         dstSlot->id = srcSlot.state.id;
         dstSlot->transform = srcSlot.state;
@@ -724,7 +725,7 @@ CreationResult createNativeInstance(GameWorld &world,
         dstSlot->deform = srcSlot.deform;
         inst.slots.push_back(std::move(dstSlot));
       }
-      for (const auto &res : proto.resources) {
+      for (const auto& res : proto.resources) {
         if (res->request.directive == "mesh" && !inst.meshId)
           inst.meshId = res->id;
         if (res->request.directive == "texture" && !inst.textureId)
@@ -732,7 +733,7 @@ CreationResult createNativeInstance(GameWorld &world,
         if (res->request.directive == "texture" && !inst.defaultTextureId)
           inst.defaultTextureId = res->id;
       }
-      for (const auto &body : proto.config.bodies) {
+      for (const auto& body : proto.config.bodies) {
         if (body.kind == CarBodyRecord::Render && body.renderResource) {
           PackView view;
           std::string mapErr;
@@ -753,21 +754,21 @@ CreationResult createNativeInstance(GameWorld &world,
              i < proto.config.wheels.size() && i < inst.wheelStates.size(); ++i)
           inst.wheelStates[i] = proto.config.wheels[i];
         for (size_t i = 0; i < proto.engineUp.size(); ++i)
-          if (const auto *item = proto.engineUp.item(i))
+          if (const auto* item = proto.engineUp.item(i))
             inst.sfxEngineUp.addItem(
                 item->sound.owner,
                 item->inversePitch > 0.0f ? 1.0f / item->inversePitch : 0.0f,
                 item->pitchMin, item->pitchMax, item->volumeMin,
                 item->volumeMax);
         for (size_t i = 0; i < proto.engineDown.size(); ++i)
-          if (const auto *item = proto.engineDown.item(i))
+          if (const auto* item = proto.engineDown.item(i))
             inst.sfxEngineDown.addItem(
                 item->sound.owner,
                 item->inversePitch > 0.0f ? 1.0f / item->inversePitch : 0.0f,
                 item->pitchMin, item->pitchMax, item->volumeMin,
                 item->volumeMax);
         for (size_t i = 0; i < proto.exhaust.size(); ++i)
-          if (const auto *item = proto.exhaust.item(i))
+          if (const auto* item = proto.exhaust.item(i))
             inst.sfxExhaust.addItem(
                 item->sound.owner,
                 item->inversePitch > 0.0f ? 1.0f / item->inversePitch : 0.0f,
@@ -784,8 +785,30 @@ CreationResult createNativeInstance(GameWorld &world,
       // before returning it to Scripts for assembly and placement.
       suspendCar(*inst.carPhysics);
       std::string registrationError;
-      auto *root =
+      auto* root =
           world.registerCarPhysics(*node, inst.carPhysics, registrationError);
+      if (!root) {
+        world.destroy(*node);
+        return fail(CreationStatus::Unsupported,
+                    CreationIssue::NativeDeviceUnsupported,
+                    registrationError.c_str());
+      }
+      setLinkOwner(inst.physicsRoot, root);
+    } else {
+      std::string registrationError;
+      std::vector<physics::Body*> tree;
+      // 0046eae0 sleeps its root before 0049b230 constructs children.
+      // 0049b0b0/0049a840 do not inherit that sleep flag: preserve the
+      // resulting root-only sleep instead of sleeping the completed tree.
+      if (!inst.partPhysics ||
+          !partPhysicsTree(*inst.partPhysics, tree, registrationError)) {
+        world.destroy(*node);
+        return fail(CreationStatus::Unsupported,
+                    CreationIssue::NativeDeviceUnsupported,
+                    registrationError.empty() ? "part sleep failed" : registrationError.c_str());
+      }
+      physics::sleepBodyState(*inst.partPhysics->root);
+      auto* root = world.registerPartPhysics(*node, inst.partPhysics, registrationError);
       if (!root) {
         world.destroy(*node);
         return fail(CreationStatus::Unsupported,

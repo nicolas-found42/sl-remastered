@@ -22,6 +22,30 @@ bool SDLCALL watchInput(void* userdata, SDL_Event* event) {
 }
 } // namespace
 
+void MouseAxisState::beginFrame(std::array<float, 3> delta, float milliseconds) {
+  raw_ = delta;
+  milliseconds_ = milliseconds;
+  for (size_t i = 0; i < raw_.size(); ++i) {
+    // Newer 00544e40/00544e44: scale raw delta before sensitivity.
+    accumulated_[i] = std::clamp(accumulated_[i] +
+        (raw_[i] * (1.0f / 64.0f)) * sensitivity_, -1.0f, 1.0f);
+  }
+}
+
+float MouseAxisState::sample(int32_t axis) const {
+  // 00543f70 commands reset accumulated axes, preserving current raw motion.
+  if (axis >= -101 && axis <= -1) {
+    sensitivity_ = static_cast<float>(-1 - axis) * 0.01f;
+    accumulated_.fill(0.0f);
+    return 0.0f;
+  }
+  if (axis >= 7 && axis <= 9)
+    return accumulated_[static_cast<size_t>(axis - 7)];
+  if (axis >= 0 && axis <= 2 && milliseconds_ > 0.0f)
+    return std::clamp(raw_[static_cast<size_t>(axis)] / milliseconds_ * 0.005f, -1.0f, 1.0f);
+  return 0.0f;
+}
+
 std::unique_ptr<PlatformInput> PlatformInput::create(std::string& error) {
   if (!SDL_InitSubSystem(SDL_INIT_VIDEO | SDL_INIT_JOYSTICK)) {
     error = SDL_GetError();
@@ -147,12 +171,10 @@ void PlatformInput::beginFrame(bool advanceMouseButtons) {
   const uint64_t now = SDL_GetTicksNS();
   {
     std::lock_guard<std::mutex> lock(mouseMutex_);
-    frameMilliseconds_ = static_cast<float>(static_cast<double>(now - lastFrame_) / 1000000.0);
+    const float milliseconds = static_cast<float>(static_cast<double>(now - lastFrame_) / 1000000.0);
     lastFrame_ = now;
-    for (size_t i = 0; i < 3; ++i) {
-      frameMouse_[i] = pendingMouse_[i];
-      pendingMouse_[i] = 0.0f;
-    }
+    mouseAxes_.beginFrame({pendingMouse_[0], pendingMouse_[1], pendingMouse_[2]}, milliseconds);
+    std::fill(std::begin(pendingMouse_), std::end(pendingMouse_), 0.0f);
     if (advanceMouseButtons) {
       frameButtonPosition_.reset();
       while (!mouseButtonTransitions_.empty()) {
@@ -505,10 +527,9 @@ std::optional<uint32_t> PlatformInput::nextKey() {
 std::optional<float> PlatformInput::sample(int32_t device, int32_t axis) const {
   if (device < 0 || static_cast<size_t>(device) >= kinds_.size()) return std::nullopt;
   const auto kind = kinds_[static_cast<size_t>(device)];
-  if (kind == Kind::Mouse && axis >= 0 && axis <= 2) {
+  if (kind == Kind::Mouse && (axis < 3 || axis >= 7)) {
     std::lock_guard<std::mutex> lock(mouseMutex_);
-    if (frameMilliseconds_ <= 0.0f) return 0.0f;
-    return std::clamp(frameMouse_[axis] / frameMilliseconds_ * 0.005f, -1.0f, 1.0f);
+    return mouseAxes_.sample(axis);
   }
   if (kind == Kind::Mouse && axis >= 3 && axis <= 6) {
     const uint8_t buttons[] = {SDL_BUTTON_LEFT, SDL_BUTTON_RIGHT, SDL_BUTTON_MIDDLE, SDL_BUTTON_X1};
@@ -561,8 +582,22 @@ bool PlatformInput::keyHeld(uint32_t scancode) const {
 std::optional<int32_t> PlatformInput::type(int32_t device, int32_t axis) const {
   if (device < 0 || static_cast<size_t>(device) >= kinds_.size() || axis < 0) return std::nullopt;
   if (kinds_[static_cast<size_t>(device)] == Kind::Keyboard) return 0;
-  if (kinds_[static_cast<size_t>(device)] == Kind::Mouse && axis >= 0 && axis <= 2) return 1;
+  if (kinds_[static_cast<size_t>(device)] == Kind::Mouse && (axis <= 2 || (axis >= 7 && axis <= 9))) return 1;
   if (kinds_[static_cast<size_t>(device)] == Kind::Mouse && axis >= 3 && axis <= 6) return 0;
+  return std::nullopt;
+}
+
+std::optional<int32_t> PlatformInput::deviceKind(int32_t device) const {
+  if (device < 0 || static_cast<size_t>(device) >= kinds_.size())
+    return std::nullopt;
+  switch (kinds_[static_cast<size_t>(device)]) {
+  case Kind::Keyboard:
+    return 1;
+  case Kind::Mouse:
+    return 2;
+  case Kind::Joystick:
+    return 3;
+  }
   return std::nullopt;
 }
 
@@ -579,8 +614,9 @@ std::optional<std::string> PlatformInput::axisName(int32_t device, int32_t axis)
   if (kind == Kind::Mouse) {
     static const char* const kMouseAxisNames[] = {
         "Mouse X", "Mouse Y", "Mouse Z",
-        "M.Button 1", "M.Button 2", "M.Button 3", "M.Button 4"};
-    if (axis >= 7) return std::nullopt;
+        "M.Button 1", "M.Button 2", "M.Button 3", "M.Button 4",
+        "Mouse X", "Mouse Y", "Mouse Z"};
+    if (axis >= 10) return std::nullopt;
     return std::string(kMouseAxisNames[axis]);
   }
   return std::nullopt;
@@ -592,7 +628,7 @@ int32_t PlatformInput::axisCount(int32_t device) const {
   case Kind::Keyboard:
     return 256;
   case Kind::Mouse:
-    return 7;
+    return 10;
   case Kind::Joystick:
     return 0;
   }

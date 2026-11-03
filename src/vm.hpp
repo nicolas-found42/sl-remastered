@@ -18,6 +18,7 @@
 struct VmObject;
 struct NativeEntry;
 class FileState;
+class DynoModel;
 using VmResourceResolver =
     std::function<std::optional<uint32_t>(std::string_view, uint32_t)>;
 // Float literals preserve binary32 bits; general arithmetic and x87 rounding
@@ -53,6 +54,9 @@ struct VmResourceState {
   const VmObject *owner;
   uint32_t words[4]{};
   std::shared_ptr<VmResourceAttachment> attachment{};
+  // Native DynoData owns its model for the lifetime of this handle. Shared
+  // ownership keeps it stable when the resource-state vector grows in a call.
+  std::shared_ptr<DynoModel> dyno{};
 };
 struct VmMeasurementState {
   // 0060e04c; FUN_0043b6e0/0043b700 initialize the derived globals.
@@ -117,6 +121,9 @@ struct HotkeyState;
 class TimerState;
 class ObjectSoundState;
 struct VmArena {
+  // Stock System.exit() sets the process-loop flag and returns normally. The
+  // host observes this latch at frame/substep boundaries, then runs shutdown.
+  bool exitRequested = false;
   TimerState *timers = nullptr;
   HotkeyState *hotkeys = nullptr;
   // Optional host-owned file state must outlive the arena's execution.

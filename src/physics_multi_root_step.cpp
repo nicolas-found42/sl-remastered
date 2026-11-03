@@ -302,13 +302,33 @@ FreeBodyStepResult stepMultiRootWorld(World& world,
   // follow may therefore target an asleep body that is not a root -- e.g.
   // the chase camera of a sleeping car beside awake scene objects.
   const auto followTargetUsable = [&](const Body* body) {
-    return isRoot(body) || (body && (body->flags & kBodyAsleep) != 0);
+    if (!body || !body->proto || body->current > 1)
+      return false;
+    // 0048a430 reads a linked target's pose; it need not be a stepped root.
+    // The garage script links its map resource: the ground factory owns an
+    // immutable static body, intentionally omitted from dynamic root passes.
+    return isRoot(body) || (body->flags & kBodyAsleep) != 0 ||
+           ((body->proto->flags & kProtoStatic) && !body->attachment &&
+            !(body->flags & kBodyChild));
   };
   for (const auto& cb : work.cameraCallbacks) {
-    if (!isRoot(cb.camera) || !followTargetUsable(cb.look) ||
-        !followTargetUsable(cb.move) || !cb.smoothing ||
-        !cb.input.otherBranchesInactive)
-      return fail("multi-root: unsupported camera callback");
+    if (!isRoot(cb.camera) || (cb.input.hasLookTarget && !followTargetUsable(cb.look)) ||
+        (cb.input.hasMoveTarget && !followTargetUsable(cb.move)) || !cb.smoothing ||
+        !cb.input.otherBranchesInactive) {
+      char reason[256];
+      std::snprintf(reason, sizeof reason,
+                    "multi-root: unsupported camera callback (camera_root=%d "
+                    "look_required=%d look_flags=0x%x look_proto=0x%x "
+                    "move_required=%d move_flags=0x%x move_proto=0x%x "
+                    "smoothing=%d represented=%d)",
+                    isRoot(cb.camera), cb.input.hasLookTarget,
+                    cb.look ? cb.look->flags : 0,
+                    cb.look && cb.look->proto ? cb.look->proto->flags : 0,
+                    cb.input.hasMoveTarget, cb.move ? cb.move->flags : 0,
+                    cb.move && cb.move->proto ? cb.move->proto->flags : 0,
+                    cb.smoothing != nullptr, cb.input.otherBranchesInactive);
+      return fail(reason);
+    }
   }
   const float total = dt + world.pending;
   if (total < k::minimumStep) {
@@ -354,8 +374,8 @@ FreeBodyStepResult stepMultiRootWorld(World& world,
   for (const auto& cb : work.cameraCallbacks) {
     auto input = cb.input;
     input.camera = cb.camera->state[cb.camera->current];
-    input.lookTarget = cb.look->state[cb.look->current];
-    input.moveTarget = cb.move->state[cb.move->current];
+    if (input.hasLookTarget) input.lookTarget = cb.look->state[cb.look->current];
+    if (input.hasMoveTarget) input.moveTarget = cb.move->state[cb.move->current];
     const auto follow = cameraFollowForce(input, *cb.smoothing);
     if (!follow) {
       rollback();

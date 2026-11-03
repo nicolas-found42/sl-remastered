@@ -293,6 +293,12 @@ bool carPartInstall(WorldNode &partNode, WorldNode *explicitTarget,
 bool carPartRemove(WorldNode &partNode, int32_t slotId, VmArena &arena,
                    std::string &error);
 void carPartUpdateMass(WorldNode &node, GameWorld &world);
+// Consume coalesced native Car refresh requests before its frame work. The
+// script's suspend_update field suppresses this callback while assembling parts.
+bool dispatchCarVariableUpdates(VmArena &arena,
+                                const std::vector<const TufaClass *> &classes,
+                                const std::vector<VmStaticFields> &states,
+                                std::string &error);
 NativeResult allocateVector3(VmArena *arena,
                              const std::vector<const TufaClass *> *classes,
                              float x, float y, float z);

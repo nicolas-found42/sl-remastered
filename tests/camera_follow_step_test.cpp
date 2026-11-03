@@ -34,6 +34,27 @@ int main() {
   cb.input.command.damping = 1;
   cb.input.command.perpendicularDamping = -0.5f;
   cb.input.command.moveDistance = 2;
+  // An activated free camera has neither target link, but remains a live
+  // registered body whose manual callback is executed by the real world step.
+  {
+    auto freeBody = physics::createBody(*prototype, {0, 0, 0});
+    physics::World freeWorld;
+    freeWorld.params.gravityEnabled = false;
+    freeWorld.bodies = {&freeBody};
+    CameraFollowSmoothing freeSmooth;
+    CameraFollowStep freeCallback;
+    freeCallback.camera = &freeBody;
+    freeCallback.smoothing = &freeSmooth;
+    freeCallback.input.otherBranchesInactive = true;
+    freeCallback.input.hasLookTarget = false;
+    freeCallback.input.hasMoveTarget = false;
+    freeCallback.input.control.freeCamera = true;
+    freeCallback.input.control.localForce = {2, 0, 0};
+    if (!stepCameraFollowWorld(freeWorld, 0.02f, {freeCallback}, true, error) ||
+        freeWorld.bodies.size() != 1 || freeBody.state[freeBody.current].vel[0] <= 0 ||
+        !freeSmooth.initializeLook || !freeSmooth.initializeMove)
+      return 40;
+  }
   const auto original = camera.state[0];
   if (stepCameraFollowWorld(world, 0.02f, {cb}, false, error) ||
       world.time != 0 || camera.state[0].pos != original.pos ||

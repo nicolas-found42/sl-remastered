@@ -28,6 +28,19 @@ int main() {
   assert(carEngineTorque(config, 1500, 0, {200, 300}) == 150);
   config.secondaryTorqueCurve.clear();
   assert(carEngineTorque(config, 1500, 1, {200, 300}) == 0);
+  {
+    CarConfig noEngine;
+    noEngine.torqueCurve = {{0, 0}};
+    PrimaryEngineInput spinning;
+    spinning.engineRunning = true;
+    spinning.angularSpeed = 100;
+    spinning.previousRpm = 100 * 9.549296379089355f;
+    spinning.rpmLimit = 7000;
+    spinning.accelerator = 1;
+    spinning.powerScale = 1;
+    const auto emptyTorque = primaryEngineTorque(noEngine, spinning);
+    assert(emptyTorque && emptyTorque->torque == 0);
+  }
   config.torqueCurve = {{1000, 0.5f}, {2000, 1.0f}, {4000, 0.5f}};
   PrimaryEngineInput input;
   input.engineRunning = true;

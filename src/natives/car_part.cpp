@@ -1,6 +1,8 @@
 #include "natives/car_part.hpp"
 
 #include "car_runtime.hpp"
+#include "car_variable_refresh.hpp"
+#include "dyno_model.hpp"
 #include "natives/game_type.hpp"
 #include "natives/lang_string.hpp"
 #include "natives/resource_ref.hpp"
@@ -693,157 +695,152 @@ NativeResult partInstallOk(const std::vector<VmValue>& args, const VmObject* rec
 
 // --- java.game.parts.DynoData ---
 
-// 0046a960: java.game.parts.DynoData.newNative ()V
+// Newer 004cba80 owns the same 0x1ec native model as older 0046aa20.
 NativeResult dynoDataNewNative(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
                                const std::vector<const TufaClass*>*) {
-	if (!args.empty() || !receiver || !arena) return std::string{"invalid DynoData.newNative"};
-	for (auto& field : receiver->fields) {
-		if (field.name == "ptr" && field.descriptor == "I") {
-			if (const auto* h = std::get_if<int32_t>(&field.value); h && *h == 0) {
-				arena->resourceStates.push_back({receiver, {}});
-				field.value = static_cast<int32_t>(arena->resourceStates.size());
-			}
-			break;
-		}
-	}
-	return std::monostate{};
+  if (!args.empty() || !receiver || !arena)
+    return std::string{"invalid DynoData.newNative"};
+  if (auto* state = nativeResourceState(receiver, arena)) {
+    if (!state->dyno)
+      return std::string{"DynoData.newNative: handle names another native resource"};
+    return std::monostate{};
+  }
+  for (auto& field : receiver->fields) {
+    if (field.name != "ptr" || field.descriptor != "I")
+      continue;
+    const auto* handle = std::get_if<int32_t>(&field.value);
+    if (!handle || *handle != 0 || arena->resourceStates.size() >= static_cast<size_t>(std::numeric_limits<int32_t>::max()))
+      return std::string{"DynoData.newNative: invalid or exhausted handle"};
+    arena->resourceStates.push_back({receiver, {}});
+    arena->resourceStates.back().dyno = std::make_shared<DynoModel>();
+    field.value = static_cast<int32_t>(arena->resourceStates.size());
+    return std::monostate{};
+  }
+  return std::string{"DynoData.newNative: missing native handle field"};
 }
 
-// 0046a9c0: java.game.parts.DynoData.deleteNative ()V
 NativeResult dynoDataDeleteNative(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
                                   const std::vector<const TufaClass*>*) {
-	if (!args.empty() || !receiver || !arena) return std::string{"invalid DynoData.deleteNative"};
-	for (auto& field : receiver->fields) {
-		if (field.name == "ptr" && field.descriptor == "I") {
-			field.value = int32_t{0};
-			break;
-		}
-	}
-	return std::monostate{};
+  if (!args.empty() || !receiver || !arena)
+    return std::string{"invalid DynoData.deleteNative"};
+  if (auto* state = nativeResourceState(receiver, arena))
+    state->dyno.reset();
+  for (auto& field : receiver->fields)
+    if (field.name == "ptr" && field.descriptor == "I")
+      field.value = int32_t{0};
+  return std::monostate{};
 }
 
-// 0046aa20: java.game.parts.DynoData.calcDyno (F)F
-NativeResult dynoDataCalcDyno(const std::vector<VmValue>& args, const VmObject* receiver, VmArena*,
+// Newer FUN_004cba80; older FUN_0046aa20. The temporary-model branch copies
+// legacy Java arrays, whereas Native-backed objects retain their own tables.
+NativeResult dynoDataCalcDyno(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
                               const std::vector<const TufaClass*>*) {
-	if (args.size() != 1 || !std::holds_alternative<float>(args[0]) || !receiver)
-		return std::string{"invalid DynoData.calcDyno arguments"};
-	const float steps = std::max(1.0f, std::get<float>(args[0]));
-	const float cylinders = std::max(1.0f, getFloatField(receiver, "cylinders", 4.0f));
-	const float boreMm = getFloatField(receiver, "bore", 86.0f);
-	const float strokeMm = getFloatField(receiver, "stroke", 86.0f);
-	const float boreM = boreMm * 0.001f;
-	const float strokeM = strokeMm * 0.001f;
-	const float displacement = cylinders * 0.78539816339f * boreM * boreM * strokeM;
-	const float vMin = std::max(1e-6f, getFloatField(receiver, "v_min", displacement / cylinders * 0.1f));
-	const float compression = std::clamp((displacement / cylinders + vMin) / vMin, 7.0f, 15.0f);
-	const float rpmLimit = std::max(1000.0f, getFloatField(receiver, "RPM_limit", 7000.0f));
-	float maxRpm = getFloatField(receiver, "maxRPM", 0.0f);
-	if (maxRpm <= 0.0f) {
-		maxRpm = rpmLimit * 1.15f;
-		setFloatField(receiver, "maxRPM", maxRpm);
-	}
-	float stepSize = maxRpm / steps;
-	if (stepSize <= 1.0f) stepSize = 1.0f;
-	setFloatField(receiver, "table_stepsize", stepSize);
-	setFloatField(receiver, "torque", 1.0f);
-
-	const float turboMax = std::max(0.0f, getFloatField(receiver, "P_turbo_max", 0.0f));
-	const float turboWaste = std::max(0.0f, getFloatField(receiver, "P_turbo_waste", turboMax));
-	const float boostFactor = 1.0f + 0.5f * std::min(turboMax, turboWaste > 0.0f ? turboWaste : turboMax);
-	const float displacementLiters = std::max(0.5f, displacement * 1000.0f);
-	const float peakTorque = displacementLiters * 105.0f * boostFactor;
-	const float rpmPeakTorque = rpmLimit * 0.62f;
-	const float rpmPeakHp = rpmLimit * 0.85f;
-
-	float maxTorqueVal = 0.0f;
-	float maxTorqueRpm = rpmPeakTorque;
-	float maxHpVal = 0.0f;
-	float maxHpRpm = rpmPeakHp;
-
-	const auto* torqueTable = getObjectField(receiver, "torquetable");
-	const auto* hpTable = getObjectField(receiver, "HPtable");
-	const size_t nTorque = torqueTable ? torqueTable->arrayElements.size() : 0;
-	const size_t nHp = hpTable ? hpTable->arrayElements.size() : 0;
-	const size_t count = std::max({static_cast<size_t>(steps), nTorque, nHp, size_t{2}});
-
-	for (size_t i = 0; i < count; ++i) {
-		const float rpm = static_cast<float>(i) * stepSize;
-		float tq = 0.0f;
-		if (rpm > 100.0f && rpm <= maxRpm) {
-			const float norm = (rpm - rpmPeakTorque) / std::max(500.0f, rpmLimit * 0.5f);
-			tq = std::max(10.0f, peakTorque * (1.0f - 0.35f * norm * norm));
-			if (rpm > rpmLimit) tq *= std::max(0.0f, 1.0f - (rpm - rpmLimit) / (maxRpm - rpmLimit + 1.0f));
-		}
-		const float hp = tq * rpm / 7127.0f;
-		if (tq > maxTorqueVal) {
-			maxTorqueVal = tq;
-			maxTorqueRpm = rpm;
-		}
-		if (hp > maxHpVal) {
-			maxHpVal = hp;
-			maxHpRpm = rpm;
-		}
-		if (torqueTable && i < torqueTable->arrayElements.size())
-			torqueTable->arrayElements[i] = VmValue{tq};
-		if (hpTable && i < hpTable->arrayElements.size())
-			hpTable->arrayElements[i] = VmValue{hp};
-	}
-
-	setFloatField(receiver, "Displacement", displacement);
-	setFloatField(receiver, "Compression", compression);
-	setFloatField(receiver, "maxTorque", maxTorqueVal);
-	setFloatField(receiver, "RPM_maxTorque", maxTorqueRpm);
-	setFloatField(receiver, "maxHP", maxHpVal);
-	setFloatField(receiver, "RPM_maxHP", maxHpRpm);
-	return VmValue{0.0f};
+  if (args.size() != 1 || !std::holds_alternative<float>(args[0]) || !receiver)
+    return std::string{"invalid DynoData.calcDyno arguments"};
+  DynoParameters p;
+  p.cylinders = getFloatField(receiver, "cylinders");
+  p.bore = getFloatField(receiver, "bore");
+  p.stroke = getFloatField(receiver, "stroke");
+  p.minimumVolume = getFloatField(receiver, "Vmin");
+  p.intakeMinimum = getFloatField(receiver, "in_min");
+  p.intakeMaximum = getFloatField(receiver, "in_max");
+  p.exhaustMinimum = getFloatField(receiver, "out_min");
+  p.exhaustMaximum = getFloatField(receiver, "out_max");
+  p.intakeOpen = getFloatField(receiver, "time_in_open");
+  p.intakeClose = getFloatField(receiver, "time_in_close");
+  p.exhaustOpen = getFloatField(receiver, "time_out_open");
+  p.exhaustClose = getFloatField(receiver, "time_out_close");
+  p.sparkMinimum = getFloatField(receiver, "time_spark_min");
+  p.sparkIncrement = getFloatField(receiver, "time_spark_inc");
+  p.sparkRpm0 = getFloatField(receiver, "time_spark_RPM0");
+  p.sparkRpm1 = getFloatField(receiver, "time_spark_RPM1");
+  p.burnTime = getFloatField(receiver, "time_burn");
+  p.rpmLimit = getFloatField(receiver, "RPM_limit");
+  p.maximumRpm = getFloatField(receiver, "maxRPM");
+  p.turboMultiplier = getFloatField(receiver, "rpm_turbo_mul");
+  p.turboOptimum = getFloatField(receiver, "rpm_turbo_opt");
+  p.turboRange = getFloatField(receiver, "rpm_turbo_range");
+  p.turboPressure = getFloatField(receiver, "P_turbo_max");
+  p.wastePressure = getFloatField(receiver, "P_turbo_waste", p.turboPressure);
+  p.intercooling = getFloatField(receiver, "intercooling", 1);
+  p.mixtureHeat = getFloatField(receiver, "mixture_H");
+  p.mixtureRatio = getFloatField(receiver, "mixture_ratio");
+  p.maximumFuelConsumption = getFloatField(receiver, "max_fuel_consumption");
+  p.maximumAirConsumption = getFloatField(receiver, "max_air_consumption");
+  p.nitroHeat = getFloatField(receiver, "nitro_H");
+  p.nitroCooling = getFloatField(receiver, "nitro_cooling");
+  auto* state = nativeResourceState(receiver, arena);
+  const auto persistent = state ? state->dyno : nullptr;
+  DynoModel temporary;
+  auto calculated = (persistent ? *persistent : temporary).calculate(p, std::get<float>(args[0]));
+  if (const auto* error = std::get_if<std::string>(&calculated))
+    return *error;
+  const auto& result = std::get<DynoResult>(calculated);
+  if (p.maximumRpm <= 0)
+    setFloatField(receiver, "maxRPM", result.maximumRpm);
+  if (!persistent) {
+    const auto copy = [&](const char* name, const std::vector<float>& curve) {
+      const auto* array = getObjectField(receiver, name);
+      if (!array)
+        return true;
+      if (array->arrayElements.size() > curve.size())
+        return false;
+      for (size_t i = 0; i < array->arrayElements.size(); ++i)
+        array->arrayElements[i] = VmValue{curve[i] <= 0 ? 0.0f : curve[i]};
+      return true;
+    };
+    if (!copy("torquetable", result.primary.torque) || !copy("HPtable", result.primary.power) ||
+        (!result.nitro.torque.empty() && !copy("torquetable2", result.nitro.torque)))
+      return std::string{"DynoData.calcDyno: legacy array exceeds native table"};
+    setFloatField(receiver, "table_stepsize", result.requestedStepRpm);
+    setFloatField(receiver, "torque", 1);
+    if (!result.nitro.torque.empty())
+      setFloatField(receiver, "torque2", 1);
+  }
+  setFloatField(receiver, "Displacement", result.displacement);
+  setFloatField(receiver, "Compression", result.compression);
+  setFloatField(receiver, "maxTorque", result.maximumTorque);
+  setFloatField(receiver, "RPM_maxTorque", result.maximumTorqueRpm);
+  setFloatField(receiver, "maxHP", result.maximumHorsepower);
+  setFloatField(receiver, "RPM_maxHP", result.maximumHorsepowerRpm);
+  runlog::event(runlog::EventKind::Note,
+                "DynoData.calcDyno: native=%d rows=%zu step=%d displacement=%g compression=%g peakNm=%g peakHP=%g",
+                persistent ? 1 : 0, result.primary.torque.size(), result.stepRpm,
+                result.displacement, result.compression, result.maximumTorque, result.maximumHorsepower);
+  return VmValue{0.0f};
 }
 
-// 0046b0f0: java.game.parts.DynoData.getTorque (FF)F
-NativeResult dynoDataGetTorque(const std::vector<VmValue>& args, const VmObject* receiver, VmArena*,
+namespace {
+// Newer 004cc2b0/004cc1b0 deliberately ignore the nitrous argument. The
+// last grid point is excluded, and getHP returns the stored watt sample.
+NativeResult sampleDyno(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena, bool power) {
+  if (args.size() != 2 || !std::holds_alternative<float>(args[0]) || !std::holds_alternative<float>(args[1]))
+    return std::string{"invalid DynoData sample arguments"};
+  const auto* state = nativeResourceState(receiver, arena);
+  const auto* result = state && state->dyno ? state->dyno->result() : nullptr;
+  const float speed = std::get<float>(args[0]);
+  if (!result || speed < 0 || !std::isfinite(speed))
+    return VmValue{0.0f};
+  const auto& curve = power ? result->primary.power : result->primary.torque;
+  for (size_t i = 1; i < curve.size(); ++i) {
+    const float upper = static_cast<float>(i * static_cast<size_t>(result->stepRpm));
+    if (speed < upper) {
+      const float lower = static_cast<float>((i - 1) * static_cast<size_t>(result->stepRpm));
+      return VmValue{((curve[i] - curve[i - 1]) * (speed - lower)) / static_cast<float>(result->stepRpm) + curve[i - 1]};
+    }
+  }
+  return VmValue{0.0f};
+}
+} // namespace
+
+NativeResult dynoDataGetTorque(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
                                const std::vector<const TufaClass*>*) {
-	if (args.size() != 2 || !std::holds_alternative<float>(args[0]) || !std::holds_alternative<float>(args[1]))
-		return std::string{"invalid DynoData.getTorque arguments"};
-	if (!receiver) return VmValue{0.0f};
-	const float rpm = std::get<float>(args[0]);
-	if (rpm < 0.0f) return VmValue{0.0f};
-	const float stepSize = std::max(1.0f, getFloatField(receiver, "table_stepsize", 250.0f));
-	const auto* table = getObjectField(receiver, "torquetable");
-	if (table && table->arrayElements.size() > 1) {
-		const float idxF = rpm / stepSize;
-		const auto idx = static_cast<size_t>(idxF);
-		if (idx + 1 < table->arrayElements.size()) {
-			const float frac = idxF - static_cast<float>(idx);
-			const auto* v0 = std::get_if<float>(&table->arrayElements[idx]);
-			const auto* v1 = std::get_if<float>(&table->arrayElements[idx + 1]);
-			if (v0 && v1) return VmValue{*v0 + (*v1 - *v0) * frac};
-		}
-	}
-	const float maxTq = getFloatField(receiver, "maxTorque", 200.0f);
-	return VmValue{maxTq};
+  return sampleDyno(args, receiver, arena, false);
 }
 
-// 0046b210: java.game.parts.DynoData.getHP (FF)F
-NativeResult dynoDataGetHp(const std::vector<VmValue>& args, const VmObject* receiver, VmArena*,
+NativeResult dynoDataGetHp(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
                            const std::vector<const TufaClass*>*) {
-	if (args.size() != 2 || !std::holds_alternative<float>(args[0]) || !std::holds_alternative<float>(args[1]))
-		return std::string{"invalid DynoData.getHP arguments"};
-	if (!receiver) return VmValue{0.0f};
-	const float rpm = std::get<float>(args[0]);
-	if (rpm < 0.0f) return VmValue{0.0f};
-	const float stepSize = std::max(1.0f, getFloatField(receiver, "table_stepsize", 250.0f));
-	const auto* table = getObjectField(receiver, "HPtable");
-	if (table && table->arrayElements.size() > 1) {
-		const float idxF = rpm / stepSize;
-		const auto idx = static_cast<size_t>(idxF);
-		if (idx + 1 < table->arrayElements.size()) {
-			const float frac = idxF - static_cast<float>(idx);
-			const auto* v0 = std::get_if<float>(&table->arrayElements[idx]);
-			const auto* v1 = std::get_if<float>(&table->arrayElements[idx + 1]);
-			if (v0 && v1) return VmValue{*v0 + (*v1 - *v0) * frac};
-		}
-	}
-	const float maxHp = getFloatField(receiver, "maxHP", 150.0f);
-	return VmValue{maxHp};
+  return sampleDyno(args, receiver, arena, true);
 }
 
 // --- java.game.parts.bodypart.Chassis ---
@@ -851,58 +848,58 @@ NativeResult dynoDataGetHp(const std::vector<VmValue>& args, const VmObject* rec
 // 0043c7f0: java.game.parts.bodypart.Chassis.getTorque (FF)F
 NativeResult chassisGetTorque(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
                               const std::vector<const TufaClass*>* classes) {
-	if (args.size() != 2 || !std::holds_alternative<float>(args[0]) || !std::holds_alternative<float>(args[1]))
-		return std::string{"invalid Chassis.getTorque arguments"};
-	if (const auto* dyno = getObjectField(receiver, "dyno"))
-		return dynoDataGetTorque(args, dyno, arena, classes);
-	const auto resolved = resolvePartAndCar(receiver, arena);
-	return VmValue{resolved.partInst ? resolved.partInst->driveTorque : 200.0f};
+  if (args.size() != 2 || !std::holds_alternative<float>(args[0]) || !std::holds_alternative<float>(args[1]))
+    return std::string{"invalid Chassis.getTorque arguments"};
+  if (const auto* dyno = getObjectField(receiver, "dyno"))
+    return dynoDataGetTorque(args, dyno, arena, classes);
+  const auto resolved = resolvePartAndCar(receiver, arena);
+  return VmValue{resolved.partInst ? resolved.partInst->driveTorque : 200.0f};
 }
 
 // 0043c930: java.game.parts.bodypart.Chassis.setTorque (F)V
 NativeResult chassisSetTorque(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
                               const std::vector<const TufaClass*>*) {
-	if (args.size() != 1 || !std::holds_alternative<float>(args[0]))
-		return std::string{"invalid Chassis.setTorque arguments"};
-	const float val = std::get<float>(args[0]);
-	const auto resolved = resolvePartAndCar(receiver, arena);
-	if (resolved.partInst) resolved.partInst->driveTorque = val;
-	if (resolved.carInst) resolved.carInst->driveTorque = val;
-	return std::monostate{};
+  if (args.size() != 1 || !std::holds_alternative<float>(args[0]))
+    return std::string{"invalid Chassis.setTorque arguments"};
+  const float val = std::get<float>(args[0]);
+  const auto resolved = resolvePartAndCar(receiver, arena);
+  if (resolved.partInst) resolved.partInst->driveTorque = val;
+  if (resolved.carInst) resolved.carInst->driveTorque = val;
+  return std::monostate{};
 }
 
 // 0043caa0: java.game.parts.bodypart.Chassis.getMass ()F
 NativeResult chassisGetMass(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
                             const std::vector<const TufaClass*>*) {
-	if (!args.empty()) return std::string{"invalid Chassis.getMass arguments"};
-	const auto resolved = resolvePartAndCar(receiver, arena);
-	if (resolved.carInst && resolved.carInst->totalMass > 0.0f) return VmValue{resolved.carInst->totalMass};
-	if (resolved.partInst && resolved.partInst->totalMass > 0.0f) return VmValue{resolved.partInst->totalMass};
-	if (resolved.partNode && arena && arena->gameState && arena->gameState->world) {
-		const float m = prototypeMass(nodePrototype(resolved.partNode, *arena->gameState->world));
-		if (m > 0.0f) return VmValue{m};
-	}
-	return VmValue{1200.0f};
+  if (!args.empty()) return std::string{"invalid Chassis.getMass arguments"};
+  const auto resolved = resolvePartAndCar(receiver, arena);
+  if (resolved.carInst && resolved.carInst->totalMass > 0.0f) return VmValue{resolved.carInst->totalMass};
+  if (resolved.partInst && resolved.partInst->totalMass > 0.0f) return VmValue{resolved.partInst->totalMass};
+  if (resolved.partNode && arena && arena->gameState && arena->gameState->world) {
+    const float m = prototypeMass(nodePrototype(resolved.partNode, *arena->gameState->world));
+    if (m > 0.0f) return VmValue{m};
+  }
+  return VmValue{1200.0f};
 }
 
 // 0043cb80: java.game.parts.bodypart.Chassis.getCM ()Ljava.lang.Vector3;
 NativeResult chassisGetCm(const std::vector<VmValue>& args, const VmObject*, VmArena* arena,
                           const std::vector<const TufaClass*>* classes) {
-	if (!args.empty()) return std::string{"invalid Chassis.getCM arguments"};
-	return allocateVector3(arena, classes, 0.0f, 0.0f, 0.0f);
+  if (!args.empty()) return std::string{"invalid Chassis.getCM arguments"};
+  return allocateVector3(arena, classes, 0.0f, 0.0f, 0.0f);
 }
 
 // 0043d600: java.game.parts.bodypart.Chassis.getMin ()Ljava.lang.Vector3;
 NativeResult chassisGetMin(const std::vector<VmValue>& args, const VmObject*, VmArena* arena,
                            const std::vector<const TufaClass*>* classes) {
-	if (!args.empty()) return std::string{"invalid Chassis.getMin arguments"};
-	return allocateVector3(arena, classes, -0.95f, -0.45f, -2.2f);
+  if (!args.empty()) return std::string{"invalid Chassis.getMin arguments"};
+  return allocateVector3(arena, classes, -0.95f, -0.45f, -2.2f);
 }
 
 // 0043d8b0: java.game.parts.bodypart.Chassis.getMax ()Ljava.lang.Vector3;
 NativeResult chassisGetMax(const std::vector<VmValue>& args, const VmObject*, VmArena* arena,
                            const std::vector<const TufaClass*>* classes) {
-	if (!args.empty()) return std::string{"invalid Chassis.getMax arguments"};
+  if (!args.empty()) return std::string{"invalid Chassis.getMax arguments"};
 	return allocateVector3(arena, classes, 0.95f, 0.85f, 2.2f);
 }
 
@@ -1073,22 +1070,16 @@ NativeResult chassisForceUpdate(const std::vector<VmValue>& args, const VmObject
 	              resolved.partNode ? resolved.partNode->instanceId : 0u,
 	              resolved.carNode ? resolved.carNode->instanceId : 0u,
 	              receiver && receiver->runtimeClass ? receiver->runtimeClass->name.c_str() : "none");
-	// FUN_0043e320 -> FUN_00448430 invokes the actual chassis script before
-	// consuming its wheel/engine variables. A mass-only update skips every
-	// installed suspension/tire setter performed by that script.
-	if (resolved.carInst && resolved.carInst->carPhysics) {
-		const auto* chassis = resolved.carInst->chassisObject
-		                          ? resolved.carInst->chassisObject : receiver;
-		if (!arena || !arena->callScript || !chassis)
-			return std::string{"Chassis.forceUpdate: script caller unavailable"};
-		auto result = arena->callScript(chassis, "updatevariables", {});
-		if (!result.ok) return "Chassis.forceUpdate: updatevariables: " + result.error;
-		static bool gapNoted = false;
-		if (!gapNoted) {
-			gapNoted = true;
-			runlog::event(runlog::EventKind::Note, "Chassis.forceUpdate: script wheel configuration applied; FUN_00448430 complete engine-field transfer remains a gap");
-		}
-	}
+  // 0043e320 enters the same native routine as the frame request.
+  if (resolved.carNode && resolved.carInst && resolved.carInst->carPhysics) {
+    if (!arena)
+      return std::string{"Chassis.forceUpdate: script arena unavailable"};
+    std::string error;
+    // Copy the function: vmExecute may temporarily replace arena.callScript.
+    const auto callback = arena->callScript;
+    if (!refreshCarVariables(*resolved.carNode, *arena, callback, error))
+      return "Chassis.forceUpdate: " + error;
+  }
 	if (arena && arena->gameState && arena->gameState->world) {
 		if (resolved.carNode) carPartUpdateMass(*resolved.carNode, *arena->gameState->world);
 		else if (resolved.partNode) carPartUpdateMass(*resolved.partNode, *arena->gameState->world);
@@ -1189,28 +1180,28 @@ NativeResult wheelRefSetRadius(const std::vector<VmValue>& args, const VmObject*
 NativeResult wheelRefSetFriction(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
                                  const std::vector<const TufaClass*>*) {
 	if (args.size() != 1 || !std::holds_alternative<float>(args[0])) return std::string{"invalid WheelRef.setFriction"};
-	if (auto w = resolveWheel(receiver, arena); w.extra) w.extra->friction = std::get<float>(args[0]);
+	if (auto w = resolveWheel(receiver, arena); w.extra) w.extra->tire.setFriction(std::get<float>(args[0]));
 	return std::monostate{};
 }
 
 NativeResult wheelRefSetFrictnX(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
                                 const std::vector<const TufaClass*>*) {
 	if (args.size() != 1 || !std::holds_alternative<float>(args[0])) return std::string{"invalid WheelRef.setFrictn_x"};
-	if (auto w = resolveWheel(receiver, arena); w.extra) w.extra->frictionX = std::get<float>(args[0]);
+	if (auto w = resolveWheel(receiver, arena); w.extra) w.extra->tire.setFrictn_x(std::get<float>(args[0]));
 	return std::monostate{};
 }
 
 NativeResult wheelRefSetSliction(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
                                  const std::vector<const TufaClass*>*) {
 	if (args.size() != 1 || !std::holds_alternative<float>(args[0])) return std::string{"invalid WheelRef.setSliction"};
-	if (auto w = resolveWheel(receiver, arena); w.extra) w.extra->sliction = std::get<float>(args[0]);
+	if (auto w = resolveWheel(receiver, arena); w.extra) w.extra->tire.setSliction(std::get<float>(args[0]));
 	return std::monostate{};
 }
 
 NativeResult wheelRefSetStiffness(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
                                   const std::vector<const TufaClass*>*) {
 	if (args.size() != 1 || !std::holds_alternative<float>(args[0])) return std::string{"invalid WheelRef.setStiffness"};
-	if (auto w = resolveWheel(receiver, arena); w.extra) w.extra->stiffness = std::get<float>(args[0]);
+	if (auto w = resolveWheel(receiver, arena); w.extra) w.extra->tire.setStiffness(std::get<float>(args[0]));
 	return std::monostate{};
 }
 
@@ -1231,14 +1222,14 @@ NativeResult wheelRefSetBearing(const std::vector<VmValue>& args, const VmObject
 NativeResult wheelRefSetMaxLoad(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
                                 const std::vector<const TufaClass*>*) {
 	if (args.size() != 1 || !std::holds_alternative<float>(args[0])) return std::string{"invalid WheelRef.setMaxLoad"};
-	if (auto w = resolveWheel(receiver, arena); w.extra) w.extra->maxLoad = std::get<float>(args[0]);
+	if (auto w = resolveWheel(receiver, arena); w.extra) w.extra->tire.setMaxLoad(std::get<float>(args[0]));
 	return std::monostate{};
 }
 
 NativeResult wheelRefSetLoadSmooth(const std::vector<VmValue>& args, const VmObject* receiver, VmArena* arena,
                                    const std::vector<const TufaClass*>*) {
 	if (args.size() != 1 || !std::holds_alternative<float>(args[0])) return std::string{"invalid WheelRef.setLoadSmooth"};
-	if (auto w = resolveWheel(receiver, arena); w.extra) w.extra->loadSmooth = std::get<float>(args[0]);
+	if (auto w = resolveWheel(receiver, arena); w.extra) w.extra->tire.setLoadSmooth(std::get<float>(args[0]));
 	return std::monostate{};
 }
 
@@ -1247,8 +1238,8 @@ NativeResult wheelRefSetPacejka(const std::vector<VmValue>& args, const VmObject
 	if (args.size() != 2 || !std::holds_alternative<int32_t>(args[0]) || !std::holds_alternative<float>(args[1]))
 		return std::string{"invalid WheelRef.setPacejka"};
 	const int32_t idx = std::get<int32_t>(args[0]);
-	if (auto w = resolveWheel(receiver, arena); w.extra && idx >= 0 && static_cast<size_t>(idx) < w.extra->pacejka.size())
-		w.extra->pacejka[static_cast<size_t>(idx)] = std::get<float>(args[1]);
+	if (auto w = resolveWheel(receiver, arena); w.extra)
+		w.extra->tire.setPacejka(idx, std::get<float>(args[1]));
 	return std::monostate{};
 }
 

@@ -151,9 +151,15 @@ bool CarWorldStepper::step(float seconds, std::string& error) {
   }
   // Stock camera input/zoom callback 004386a0 precedes the force callback
   // 00438b60 and physics prediction, including cameras without follow targets.
-  world_.advanceCameraZoom(seconds);
+  if (!world_.advanceCameraControls(seconds, error))
+    return false;
   const auto cars = world_.carNodes();
-  if (cars.empty()) {
+  bool hasGround = false;
+  for (auto* owner : world_.loadList(2, true))
+    if (auto* node = world_.nodeFor(owner); node && node->groundBody)
+      hasGround = true;
+  if (cars.empty() && !world_.hasRegisteredParts() &&
+      !world_.hasRegisteredObjects() && !hasGround) {
     if (world_.dynamicBodyCount() == 0)
       return world_.stepEmptyPhysics(seconds, error);
     return world_.stepArmedCameraFollow(seconds, error);
@@ -259,11 +265,11 @@ bool CarWorldStepper::step(float seconds, std::string& error) {
     stepCars.push_back(std::move(entry));
   }
   // Diagnostics and the cartrace line describe the seated car (else the first).
-  CarRuntimeInstance& instance = *stepCars[primaryIndex].instance;
-  const std::shared_ptr<CarPhysics> car = stepCars[primaryIndex].car;
-  const auto sectors = stepCars[primaryIndex].sectors;
+  CarRuntimeInstance* primaryInstance = stepCars.empty() ? nullptr : stepCars[primaryIndex].instance;
+  const std::shared_ptr<CarPhysics> car = stepCars.empty() ? nullptr : stepCars[primaryIndex].car;
 
-  {
+  if (car) {
+    const auto& sectors = stepCars[primaryIndex].sectors;
     static bool sectorsLogged = false;
     if (!sectorsLogged) {
       sectorsLogged = true;
@@ -293,149 +299,152 @@ bool CarWorldStepper::step(float seconds, std::string& error) {
       }
     }
 
-  static bool wheelsLogged = false;
-  if (!wheelsLogged) {
-    wheelsLogged = true;
-    for (size_t i = 0; i < car->wheels.size(); ++i) {
-      const auto& wheel = car->wheels[i];
-      if (!wheel)
-        continue;
-      const auto& extra = instance.wheelExtras[i];
-      runlog::event(runlog::EventKind::Note,
-                    "wheel setup %zu: radius=%.4g coefficientRadius=%.4g spring=%.4g damping=%.4g rebound=%.4g rest=%.4g min=%.4g max=%.4g",
-                    i, wheel->radius, extra.radius, wheel->suspension.settings.force,
-                    wheel->suspension.settings.damping, wheel->suspension.settings.reboundDamping,
-                    wheel->suspension.settings.restLength, wheel->suspension.settings.minLength,
-                    wheel->suspension.settings.maxLength);
-      runlog::event(
-          runlog::EventKind::Note,
-          "car wheel %zu: hasWheel=%d susp(force=%g damp=%g rebound=%g rest=%g "
-          "min=%g max=%g) extra(force=%g bump=%g rebound=%g rest=%g min=%g "
-          "max=%g drive=%g radius=%g friction=%g stiff=%g maxLoad=%g) "
-          "runtime radius=%g",
-          i, int(wheel->config.hasWheel), wheel->suspension.settings.force,
-          wheel->suspension.settings.damping,
-          wheel->suspension.settings.reboundDamping,
-          wheel->suspension.settings.restLength,
-          wheel->suspension.settings.minLength,
-          wheel->suspension.settings.maxLength, extra.springForce,
-          extra.dampingBump, extra.dampingRebound, extra.restLength,
-          extra.minLength, extra.maxLength, extra.drive, extra.radius,
-          extra.friction, extra.stiffness, extra.maxLoad, wheel->radius);
-    }
-    for (size_t i = 0; i < car->wheels.size(); ++i) {
-      const auto& extra = instance.wheelExtras[i];
-      if (car->wheels[i])
-        runlog::event(runlog::EventKind::Note,
-                      "car wheel %zu extras: drive=%g radius=%g/%g friction=%g "
-                      "steer=%g brake=%g handbrake=%g inertia=%g",
-                      i, extra.drive, extra.radius, car->wheels[i]->radius,
-                      extra.friction, extra.steer, extra.brake, extra.handBrake,
-                      car->wheels[i]->effectiveInverseInertia);
-    }
-    runlog::event(runlog::EventKind::Note,
-                  "car drivetrain: engineRunning=%d gear=%d maxRpm=%g "
-                  "rpmLimit=%g seats=%zu mass=%g",
-                  int(instance.engineRunning), instance.currentGear,
-                  instance.maximumRpm, instance.rpmLimit, instance.seats.size(),
-                  car->mass);
-  }
-  {
-    static double lastNote = -1e9;
-    const double now = runlog::monotonicSeconds();
-    if (now - lastNote >= 0.25) {
-      lastNote = now;
-      const auto& root = *car->root;
-      const auto& velocity = root.state[root.current].vel;
-      runlog::event(
-          runlog::EventKind::Note,
-          "car live: asleep=%d controls=%s throttle=%.2f brake=%.2f "
-          "clutch=%.2f "
-          "steer=%.2f gear=%d engine=%.0frad/s speed=%.2f pos=%.1f,%.1f,%.1f",
-          int((root.flags & physics::kBodyAsleep) != 0),
-          lastControls_ ? "sampled" : "none", instance.throttleState,
-          instance.brakeState, instance.clutchState, instance.steeringState,
-          instance.currentGear, instance.engineAngularSpeed,
-          std::sqrt(velocity[0] * velocity[0] + velocity[1] * velocity[1] +
-                    velocity[2] * velocity[2]),
-          root.state[root.current].pos[0], root.state[root.current].pos[1],
-          root.state[root.current].pos[2]);
-      const auto wheelSpeed = [&](size_t i) {
-        return car->wheels.size() > i && car->wheels[i]
-                   ? car->wheels[i]->angularSpeed
-                   : 0.0f;
-      };
-      runlog::event(runlog::EventKind::Note,
-                    "car live wheels: witnesses=%zu tire ok/rejected=%llu/%llu "
-                    "w0=%.1f w1=%.1f w2=%.1f w3=%.1f rad/s",
-                    witnesses_.size(),
-                    static_cast<unsigned long long>(tireSteps_),
-                    static_cast<unsigned long long>(tireRejects_),
-                    wheelSpeed(0), wheelSpeed(1), wheelSpeed(2), wheelSpeed(3));
-      {
-        // Wheel frames: is the wheel body where the suspension puts it
-        // (anchor - length, downward) or elsewhere?
-        static double lastFrameLog = -1e9;
-        const double nowFrame = runlog::monotonicSeconds();
-        if (nowFrame - lastFrameLog >= 2.0) {
-          lastFrameLog = nowFrame;
-          const auto& rootP = root.state[root.current].pos;
-          for (size_t i = 0; i < car->wheels.size(); ++i) {
-            const auto& w = car->wheels[i];
-            if (!w || !w->suspensionBody)
-              continue;
-            const auto& c = w->suspension;
-            const auto* wb = c.wheelBody;
-            const auto rel = (wb && wb->attachment)
-                                 ? wb->attachment->relative.position
-                                 : physics::Vec3{};
-            const auto wP = wb ? wb->state[wb->current].pos : physics::Vec3{};
-            const auto sP =
-                w->suspensionBody->state[w->suspensionBody->current].pos;
-            runlog::event(
-                runlog::EventKind::Note,
-                "wheel frame %zu: rootY=%.3f wheelY=%.3f relY=%.3f "
-                "anchorY=%.3f len=%.3f radius=%.3f suspBodyY=%.3f "
-                "wheelBelowRoot=%.3f relPos=%.3f,%.3f,%.3f "
-                "rootRotY=(%.3f,%.3f,%.3f) contactBodyY=%.3f",
-                i, rootP[1], wP[1], rel[1], c.anchor[1], c.length, w->radius,
-                sP[1], rootP[1] - wP[1],
-                (wb && wb->attachment) ? wb->attachment->relative.position[0]
-                                       : 0.0f,
-                (wb && wb->attachment) ? wb->attachment->relative.position[1]
-                                       : 0.0f,
-                (wb && wb->attachment) ? wb->attachment->relative.position[2]
-                                       : 0.0f,
-                root.state[root.current].rot[0],
-                root.state[root.current].rot[4],
-                root.state[root.current].rot[8],
-                c.contactBody
-                    ? c.contactBody->state[c.contactBody->current].pos[1]
-                    : 0.0f);
-          }
-        }
-      }
+  if (car) {
+    const auto& instance = *primaryInstance;
+    static bool wheelsLogged = false;
+    if (!wheelsLogged) {
+      wheelsLogged = true;
       for (size_t i = 0; i < car->wheels.size(); ++i) {
-        const auto& w = car->wheels[i];
-        if (!w)
+        const auto& wheel = car->wheels[i];
+        if (!wheel)
           continue;
-        const auto& c = w->suspension;
-        const auto found = witnesses_.find(c.wheelBody);
+        const auto& extra = instance.wheelExtras[i];
+        runlog::event(runlog::EventKind::Note,
+                      "wheel setup %zu: radius=%.4g coefficientRadius=%.4g spring=%.4g damping=%.4g rebound=%.4g rest=%.4g min=%.4g max=%.4g",
+                      i, wheel->radius, extra.radius, wheel->suspension.settings.force,
+                      wheel->suspension.settings.damping, wheel->suspension.settings.reboundDamping,
+                      wheel->suspension.settings.restLength, wheel->suspension.settings.minLength,
+                      wheel->suspension.settings.maxLength);
         runlog::event(
             runlog::EventKind::Note,
-            "car live wheel %zu: witness=%d contactBody=%d len=%.3f "
-            "force=%.0f drive=%.2f w=%.1f contactY=%.3f wheelY=%.3f "
-            "dist=%.3f max=%.3f sep=%d",
-            i, int(found != witnesses_.end() && found->second),
-            c.contactBody ? 1 : 0, c.length, c.force,
-            i < instance.wheelExtras.size() ? instance.wheelExtras[i].drive
-                                            : -1.0f,
-            w->angularSpeed, c.contactPoint[1],
-            c.wheelBody ? c.wheelBody->state[c.wheelBody->current].pos[1]
-                        : 0.0f,
-            std::sqrt(c.distanceSquared), c.settings.maxLength,
-            int(c.settings.maxLength * c.settings.maxLength <=
-                c.distanceSquared));
+            "car wheel %zu: hasWheel=%d susp(force=%g damp=%g rebound=%g rest=%g "
+            "min=%g max=%g) extra(force=%g bump=%g rebound=%g rest=%g min=%g "
+            "max=%g drive=%g radius=%g friction=%g stiff=%g maxLoad=%g) "
+            "runtime radius=%g",
+            i, int(wheel->config.hasWheel), wheel->suspension.settings.force,
+            wheel->suspension.settings.damping,
+            wheel->suspension.settings.reboundDamping,
+            wheel->suspension.settings.restLength,
+            wheel->suspension.settings.minLength,
+            wheel->suspension.settings.maxLength, extra.springForce,
+            extra.dampingBump, extra.dampingRebound, extra.restLength,
+            extra.minLength, extra.maxLength, extra.drive, extra.radius,
+            extra.tire.pacejka[2], extra.tire.pacejka[4], extra.tire.pacejka[11], wheel->radius);
+      }
+      for (size_t i = 0; i < car->wheels.size(); ++i) {
+        const auto& extra = instance.wheelExtras[i];
+        if (car->wheels[i])
+          runlog::event(runlog::EventKind::Note,
+                        "car wheel %zu extras: drive=%g radius=%g/%g friction=%g "
+                        "steer=%g brake=%g handbrake=%g inertia=%g",
+                        i, extra.drive, extra.radius, car->wheels[i]->radius,
+                        extra.tire.pacejka[2], extra.steer, extra.brake, extra.handBrake,
+                        car->wheels[i]->effectiveInverseInertia);
+      }
+      runlog::event(runlog::EventKind::Note,
+                    "car drivetrain: engineRunning=%d gear=%d maxRpm=%g "
+                    "rpmLimit=%g seats=%zu mass=%g",
+                    int(instance.engineRunning), instance.currentGear,
+                    instance.maximumRpm, instance.rpmLimit, instance.seats.size(),
+                    car->mass);
+    }
+    {
+      static double lastNote = -1e9;
+      const double now = runlog::monotonicSeconds();
+      if (now - lastNote >= 0.25) {
+        lastNote = now;
+        const auto& root = *car->root;
+        const auto& velocity = root.state[root.current].vel;
+        runlog::event(
+            runlog::EventKind::Note,
+            "car live: asleep=%d controls=%s throttle=%.2f brake=%.2f "
+            "clutch=%.2f "
+            "steer=%.2f gear=%d engine=%.0frad/s speed=%.2f pos=%.1f,%.1f,%.1f",
+            int((root.flags & physics::kBodyAsleep) != 0),
+            lastControls_ ? "sampled" : "none", instance.throttleState,
+            instance.brakeState, instance.clutchState, instance.steeringState,
+            instance.currentGear, instance.engineAngularSpeed,
+            std::sqrt(velocity[0] * velocity[0] + velocity[1] * velocity[1] +
+                      velocity[2] * velocity[2]),
+            root.state[root.current].pos[0], root.state[root.current].pos[1],
+            root.state[root.current].pos[2]);
+        const auto wheelSpeed = [&](size_t i) {
+          return car->wheels.size() > i && car->wheels[i]
+                     ? car->wheels[i]->angularSpeed
+                     : 0.0f;
+        };
+        runlog::event(runlog::EventKind::Note,
+                      "car live wheels: witnesses=%zu tire ok/rejected=%llu/%llu "
+                      "w0=%.1f w1=%.1f w2=%.1f w3=%.1f rad/s",
+                      witnesses_.size(),
+                      static_cast<unsigned long long>(tireSteps_),
+                      static_cast<unsigned long long>(tireRejects_),
+                      wheelSpeed(0), wheelSpeed(1), wheelSpeed(2), wheelSpeed(3));
+        {
+          // Wheel frames: is the wheel body where the suspension puts it
+          // (anchor - length, downward) or elsewhere?
+          static double lastFrameLog = -1e9;
+          const double nowFrame = runlog::monotonicSeconds();
+          if (nowFrame - lastFrameLog >= 2.0) {
+            lastFrameLog = nowFrame;
+            const auto& rootP = root.state[root.current].pos;
+            for (size_t i = 0; i < car->wheels.size(); ++i) {
+              const auto& w = car->wheels[i];
+              if (!w || !w->suspensionBody)
+                continue;
+              const auto& c = w->suspension;
+              const auto* wb = c.wheelBody;
+              const auto rel = (wb && wb->attachment)
+                                   ? wb->attachment->relative.position
+                                   : physics::Vec3{};
+              const auto wP = wb ? wb->state[wb->current].pos : physics::Vec3{};
+              const auto sP =
+                  w->suspensionBody->state[w->suspensionBody->current].pos;
+              runlog::event(
+                  runlog::EventKind::Note,
+                  "wheel frame %zu: rootY=%.3f wheelY=%.3f relY=%.3f "
+                  "anchorY=%.3f len=%.3f radius=%.3f suspBodyY=%.3f "
+                  "wheelBelowRoot=%.3f relPos=%.3f,%.3f,%.3f "
+                  "rootRotY=(%.3f,%.3f,%.3f) contactBodyY=%.3f",
+                  i, rootP[1], wP[1], rel[1], c.anchor[1], c.length, w->radius,
+                  sP[1], rootP[1] - wP[1],
+                  (wb && wb->attachment) ? wb->attachment->relative.position[0]
+                                         : 0.0f,
+                  (wb && wb->attachment) ? wb->attachment->relative.position[1]
+                                         : 0.0f,
+                  (wb && wb->attachment) ? wb->attachment->relative.position[2]
+                                         : 0.0f,
+                  root.state[root.current].rot[0],
+                  root.state[root.current].rot[4],
+                  root.state[root.current].rot[8],
+                  c.contactBody
+                      ? c.contactBody->state[c.contactBody->current].pos[1]
+                      : 0.0f);
+            }
+          }
+        }
+        for (size_t i = 0; i < car->wheels.size(); ++i) {
+          const auto& w = car->wheels[i];
+          if (!w)
+            continue;
+          const auto& c = w->suspension;
+          const auto found = witnesses_.find(c.wheelBody);
+          runlog::event(
+              runlog::EventKind::Note,
+              "car live wheel %zu: witness=%d contactBody=%d len=%.3f "
+              "force=%.0f drive=%.2f w=%.1f contactY=%.3f wheelY=%.3f "
+              "dist=%.3f max=%.3f sep=%d",
+              i, int(found != witnesses_.end() && found->second),
+              c.contactBody ? 1 : 0, c.length, c.force,
+              i < instance.wheelExtras.size() ? instance.wheelExtras[i].drive
+                                              : -1.0f,
+              w->angularSpeed, c.contactPoint[1],
+              c.wheelBody ? c.wheelBody->state[c.wheelBody->current].pos[1]
+                          : 0.0f,
+              std::sqrt(c.distanceSquared), c.settings.maxLength,
+              int(c.settings.maxLength * c.settings.maxLength <=
+                  c.distanceSquared));
+        }
       }
     }
   }
@@ -508,7 +517,7 @@ bool CarWorldStepper::step(float seconds, std::string& error) {
     float candB[4] = {};                // candidate world contact point y
     physics::Vec3 tirePoint[4] = {}, tireNormal[4] = {};
     float tireLoad[4] = {}, tireLength[4] = {}; // inputs at the tire callback, before prediction
-    float steer[4] = {};                // applied steering angle per wheel (rad)
+    float steer[4] = {};                        // applied steering angle per wheel (rad)
     // Worst contact by separation (most negative), for identifying bogus cores.
     float minSeparation = 0;
     physics::Vec3 minSepNormal{};
@@ -554,7 +563,7 @@ bool CarWorldStepper::step(float seconds, std::string& error) {
         why = "car step: the car prototype configuration is unavailable";
         return false;
       }
-      const CarConfig& config = prototype->config;
+      const CarConfig& config = instance.effectiveConfig(prototype->config);
       if (seat) {
         if (const auto controls = sampleCarControls(world_, *seat)) {
           CarControlStepContext context;
@@ -624,15 +633,7 @@ bool CarWorldStepper::step(float seconds, std::string& error) {
           scratch.tireNormal[i] = wheel->suspension.normal;
         }
         const auto& extra = instance.wheelExtras[i];
-        Wheel coefficients;
-        std::copy(extra.pacejka.begin(), extra.pacejka.end(),
-                  coefficients.pacejka.begin());
-        coefficients.setSliction(extra.sliction);
-        coefficients.setFriction(extra.friction);
-        coefficients.setStiffness(extra.stiffness);
-        coefficients.setMaxLoad(extra.maxLoad);
-        coefficients.setFrictn_x(extra.frictionX);
-        coefficients.setLoadSmooth(extra.loadSmooth);
+        const Wheel& coefficients = extra.tire;
         // A contact that does not match this predicted pose (wheel in the air,
         // or a face that unloaded) carries no tire force this frame.
         if (stepLiveGroundTire(*found->second, *wheel, coefficients,
@@ -666,12 +667,12 @@ bool CarWorldStepper::step(float seconds, std::string& error) {
     return true;
   };
   const auto bodyLabel = [&](const physics::Body* body) {
-    if (body == car->root.get())
+    if (car && body == car->root.get())
       return std::string("root");
-    for (size_t i = 0; i < car->wheels.size(); ++i)
+    for (size_t i = 0; car && i < car->wheels.size(); ++i)
       if (car->wheels[i] && car->wheels[i]->suspension.wheelBody == body)
         return "wheel" + std::to_string(i);
-    for (size_t i = 0; i < car->wheels.size(); ++i)
+    for (size_t i = 0; car && i < car->wheels.size(); ++i)
       if (car->wheels[i] && car->wheels[i]->suspensionBody.get() == body)
         return "suspBody" + std::to_string(i);
     char buffer[96];
@@ -731,7 +732,7 @@ bool CarWorldStepper::step(float seconds, std::string& error) {
         return false;
       }
       size_t wheelIndex = 4; // 4 = not a wheel of the diagnosed car
-      for (size_t i = 0; i < car->wheels.size(); ++i)
+      for (size_t i = 0; car && i < car->wheels.size(); ++i)
         if (car->wheels[i].get() == runtime)
           wheelIndex = i;
       if (wheelIndex < 4) {
@@ -878,7 +879,21 @@ bool CarWorldStepper::step(float seconds, std::string& error) {
     // walk the car uses, with 0049f4d0 body/face records retained across
     // gathers, plus 0049b830 body/body records against the other stepped
     // roots.
-    const auto& objects = world_.steppedObjectPhysics();
+    // One borrowed view over each actual registered owner. Loose Parts and
+    // passive scene objects share the same body/face and body/body collector;
+    // no synthetic car or substitute bounds become contact geometry.
+    struct BodyTreeView {
+      physics::Body* rootBody;
+      const std::vector<physics::Body*>* tree;
+      physics::Body* root() const { return rootBody; }
+      const std::vector<physics::Body*>& bodies() const { return *tree; }
+    };
+    std::vector<BodyTreeView> objects;
+    for (auto* object : world_.steppedObjectPhysics())
+      objects.push_back({object->root(), &object->bodies()});
+    for (const auto& part : world_.steppedPartPhysics())
+      if (!part.empty())
+        objects.push_back({part.front(), &part});
     std::set<PairKey> seenObject;
     std::set<DynamicPairKey> seenDynamic;
     std::vector<physics::Body*> carBodies;
@@ -941,7 +956,7 @@ bool CarWorldStepper::step(float seconds, std::string& error) {
     // whose bounds contain its predicted centre (the same approximation the
     // car step uses).
     for (size_t handleIndex = 0; handleIndex < objects.size(); ++handleIndex) {
-      auto* handle = objects[handleIndex];
+      const auto* handle = &objects[handleIndex];
       auto* objectRoot = handle->root();
       if (!objectRoot || !objectRoot->proto || objectRoot->current > 1) {
         why = "car step: object root unavailable";
@@ -971,12 +986,12 @@ bool CarWorldStepper::step(float seconds, std::string& error) {
           minimum[axis] = rootState.pos[axis] - rootRadius;
           maximum[axis] = rootState.pos[axis] + rootRadius;
         }
-        // Object slots all attach to the compound root (00465bd0), so the tree
-        // is the root plus its direct children in body-table order.
+        // The registered tree includes installed Part descendants, whose
+        // parent can be the root geometry body. Offer each true shape once;
+        // featureless aggregate roots only provide the parent-face filter.
         std::vector<physics::Body*> leaves;
         for (auto* body : handle->bodies())
-          if (body && body != objectRoot && body->attachment &&
-              body->attachment->parent == objectRoot)
+          if (body && body != objectRoot && body->attachment && !degenerate(body))
             leaves.push_back(body);
         const bool compound = !leaves.empty();
         if (!compound)
@@ -1144,11 +1159,11 @@ bool CarWorldStepper::step(float seconds, std::string& error) {
     }
     for (size_t i = 0; i < objects.size(); ++i) {
       for (size_t j = i + 1; j < objects.size(); ++j) {
-        if ((objects[i]->root()->flags & physics::kBodyAsleep) != 0 &&
-            (objects[j]->root()->flags & physics::kBodyAsleep) != 0)
+        if ((objects[i].root()->flags & physics::kBodyAsleep) != 0 &&
+            (objects[j].root()->flags & physics::kBodyAsleep) != 0)
           continue;
-        for (auto* body : objects[i]->bodies())
-          for (auto* other : objects[j]->bodies()) {
+        for (auto* body : objects[i].bodies())
+          for (auto* other : objects[j].bodies()) {
             if (!body || !other || degenerate(body) || degenerate(other))
               continue;
             if (!considerDynamicPair(body, other, geometryWorld, contacts,
@@ -1167,7 +1182,7 @@ bool CarWorldStepper::step(float seconds, std::string& error) {
     scratch.pairs = std::max(scratch.pairs, lastOffers_.size());
     // Enumerate the near-rest support contacts once in a while: what holds
     // the root at its resting height.
-    {
+    if (car) {
       static double lastSupportLog = -1e9;
       const double now = runlog::monotonicSeconds();
       const auto& rp = car->root->state[car->root->current].pos;
@@ -1211,8 +1226,10 @@ bool CarWorldStepper::step(float seconds, std::string& error) {
   size_t contactIterations = 0;
   float maxImpulse = 0;
   hooks.finishContacts = [&](const std::vector<physics::DirectContact>& done) {
-    scratch.rootForce = car->root->state[car->root->current].force;
-    scratch.rootTorque = car->root->state[car->root->current].torque;
+    if (car) {
+      scratch.rootForce = car->root->state[car->root->current].force;
+      scratch.rootTorque = car->root->state[car->root->current].torque;
+    }
     if (!done.empty() && !notedWheelEdgewalk_) {
       notedWheelEdgewalk_ = true;
       runlog::event(runlog::EventKind::Note,
@@ -1249,7 +1266,7 @@ bool CarWorldStepper::step(float seconds, std::string& error) {
     const auto belongsToPlayer = [&](const physics::Body* body) {
       while (body && body->attachment)
         body = body->attachment->parent;
-      return body == car->root.get();
+      return car && body == car->root.get();
     };
     for (size_t ci = 0; ci < done.size(); ++ci) {
       const auto& c = done[ci];
@@ -1380,7 +1397,7 @@ bool CarWorldStepper::step(float seconds, std::string& error) {
     scratch.iterSepMin[slot] = sepMin;
     scratch.iterSepMax[slot] = sepMax;
     scratch.iterCorrected[slot] = static_cast<unsigned short>(correctedCount);
-    scratch.iterRootShiftY[slot] = car->root->state[car->root->current].shift[1];
+    scratch.iterRootShiftY[slot] = car ? car->root->state[car->root->current].shift[1] : 0;
     for (size_t i = 0; i < done.size() && i < lastOffers_.size(); ++i) {
       const auto& offer = lastOffers_[i];
       if (offer.carPair) {
@@ -1396,12 +1413,14 @@ bool CarWorldStepper::step(float seconds, std::string& error) {
     }
   };
   const auto speedOf = [&] {
+    if (!car)
+      return 0.0f;
     const auto& v = car->root->state[car->root->current].vel;
     return std::sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
   };
-  const physics::Vec3 prePos = car->root->state[car->root->current].pos;
-  const physics::Vec3 preVel = car->root->state[car->root->current].vel;
-  const bool asleepBeforeStep = (car->root->flags & physics::kBodyAsleep) != 0;
+  const physics::Vec3 prePos = car ? car->root->state[car->root->current].pos : physics::Vec3{};
+  const physics::Vec3 preVel = car ? car->root->state[car->root->current].vel : physics::Vec3{};
+  const bool asleepBeforeStep = car && (car->root->flags & physics::kBodyAsleep) != 0;
   const float speedBefore = speedOf();
   const double wallNow = runlog::monotonicSeconds();
   const double wallDelta = lastWall_ > 0 ? wallNow - lastWall_ : 0;
@@ -1538,7 +1557,8 @@ bool CarWorldStepper::step(float seconds, std::string& error) {
   pendingObjectErase_.clear();
   pendingDynamicErase_.clear();
 
-  {
+  if (car) {
+    const auto& instance = *primaryInstance;
     // One structured line per step. The ring is always on (formatting is a few
     // microseconds); SLRR_CAR_TRACE=1 also streams every line to
     // cartrace-full.jsonl in the run directory.

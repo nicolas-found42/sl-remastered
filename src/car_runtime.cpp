@@ -13,6 +13,53 @@
 #include <cmath>
 #include <limits>
 
+CarWheelExtraState::CarWheelExtraState() {
+  // Preserve the existing unrefreshed host defaults while storing the native
+  // aliases together. The qualified prototype block replaces them at refresh.
+  tire.setSliction(1);
+  tire.setFriction(1);
+  tire.setStiffness(10);
+  tire.setMaxLoad(8000);
+  tire.setFrictn_x(1);
+  tire.setLoadSmooth(.5f);
+}
+
+bool resetCarWheelVariables(CarRuntimeInstance& car, const CarConfig& config,
+                            std::string& error) {
+  const size_t count = car.carPhysics ? car.carPhysics->wheels.size() : 0;
+  if ((!car.carPhysics && !config.wheels.empty()) ||
+      count > car.wheelExtras.size()) {
+    error = "car variable refresh: wheel records unavailable";
+    return false;
+  }
+  if (car.carPhysics) {
+    for (const auto& wheel : car.carPhysics->wheels) {
+      if (!wheel) {
+        error = "car variable refresh: wheel record unavailable";
+        return false;
+      }
+    }
+  }
+  auto defaults = kStockWheelParameters;
+  constexpr std::array<size_t, 9> slots{0, 2, 4, 11, 12, 13, 14, 15, 16};
+  for (size_t i = 0; i < slots.size(); ++i)
+    defaults[slots[i]] = config.wheelPars[i];
+  for (size_t i = 0; i < count; ++i) {
+    auto& extra = car.wheelExtras[i];
+    extra.tire.frictionScale = 0;    // +0x15c
+    extra.frictionWearRate = 0;      // +0x160
+    extra.brakeThermal.wear = 0;     // +0x164
+    extra.brakeThermal.wearRate = 0; // +0x168
+    extra.variableDamage16c = 0;
+    extra.variableDamageRate170 = 0;
+    // This memcpy must not execute setFriction: the four derived friction
+    // values are outside the copied block and retain their current values.
+    std::memcpy(extra.tire.pacejka.data(), defaults.data(), sizeof(defaults));
+  }
+  error.clear();
+  return true;
+}
+
 void CarRuntimeInstance::initializeWheelDrivetrain() {
   if (!carPhysics)
     return;
@@ -866,6 +913,7 @@ CarSeat* CarRuntimeInstance::selectSeat(uint32_t playerId) const {
 }
 
 CarRuntimeInstance::~CarRuntimeInstance() {
+  setLinkOwner(installedEngine, nullptr);
   setLinkOwner(prototypeSource, nullptr);
   setLinkOwner(carLink, nullptr);
   setLinkOwner(physicsRoot, nullptr);

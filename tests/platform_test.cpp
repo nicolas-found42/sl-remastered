@@ -14,6 +14,26 @@ int main(int argc, char** argv) {
   const auto modes = uniqueDisplayModes({{1920, 1080, 32}, {1920, 1080, 32}, {1920, 1080, 16}, {0, 1, 32}, {800, 600, 24}});
   if (modes.size() != 2 || modes[0] != PlatformDisplayMode{1920, 1080, 32} || modes[1] != PlatformDisplayMode{1920, 1080, 16}) return 1;
 
+  {
+    MouseAxisState mouse;
+    mouse.beginFrame({16, -8, 4}, 10);
+    const float rawBeforeReset = mouse.sample(0);
+    if (mouse.sample(7) != 0.125f || mouse.sample(8) != -0.0625f || mouse.sample(9) != 0.03125f ||
+        mouse.sample(-1) != 0.0f || mouse.sample(7) != 0.0f || mouse.sample(8) != 0.0f ||
+        mouse.sample(9) != 0.0f || mouse.sample(0) != rawBeforeReset) return 1;
+    mouse.beginFrame({16, -8, 4}, 10);
+    if (mouse.sample(7) != 0.0f || mouse.sample(-51) != 0.0f) return 1;
+    mouse.beginFrame({16, -8, 4}, 10);
+    if (mouse.sample(7) != 0.125f || mouse.sample(8) != -0.0625f ||
+        mouse.sample(-101) != 0.0f || mouse.sample(8) != 0.0f) return 1;
+    mouse.beginFrame({128, -128, 128}, 10);
+    if (mouse.sample(7) != 1.0f || mouse.sample(8) != -1.0f || mouse.sample(9) != 1.0f ||
+        mouse.sample(-102) != 0.0f || mouse.sample(7) != 1.0f) return 1;
+    mouse.beginFrame({0, 0, 0}, 10);
+    if (mouse.sample(0) != 0.0f || mouse.sample(7) != 1.0f) return 1;
+    std::fprintf(stderr, "production mouse reset/sensitivity/next-delta regression exercised\n");
+  }
+
 	const bool visible = argc == 2 && std::strcmp(argv[1], "--visible") == 0;
 	if (!visible && !SDL_SetHint(SDL_HINT_VIDEO_DRIVER, "dummy")) return 1;
 	std::string error;
@@ -44,7 +64,9 @@ int main(int argc, char** argv) {
 		keyEvent.type = SDL_EVENT_KEY_DOWN; keyEvent.key.scancode = SDL_SCANCODE_B; keyEvent.key.key = 'b';
 		if (!SDL_PushEvent(&keyEvent) || input->nextKey() != (uint32_t{'b'} << 16 | 0x30) || !SDL_HasEvent(SDL_EVENT_KEY_DOWN)) return 1;
 		const auto found = std::find(input->names().begin(), input->names().end(), "SysMouse");
-		if (found != input->names().end()) {
+		if (found == input->names().end())
+      std::fprintf(stderr, "SDL mouse event integration unavailable on this driver; production axis-state regression remains mandatory\n");
+    if (found != input->names().end()) {
 			const auto index = static_cast<int32_t>(found - input->names().begin());
 			input->beginFrame();
 			SDL_Event wheel{};
@@ -54,10 +76,11 @@ int main(int argc, char** argv) {
 			SDL_Delay(2);
 			input->beginFrame();
 			const auto sampled = input->sample(index, 2);
-			if (!sampled || *sampled <= 0.0f || *sampled > 1.0f || input->type(index, 2) != 1 ||
+			if (!sampled || *sampled <= 0.0f || *sampled > 1.0f || input->type(index, 2) != 1 || input->deviceKind(index) != 2 ||
 			    !SDL_HasEvent(SDL_EVENT_MOUSE_WHEEL)) return 1;
 			input->beginFrame();
 			if (input->sample(index, 2) != 0.0f) return 1;
+            if (input->axisCount(index) != 10 || input->type(index, 7) != 1 || input->axisName(index, 7) != "Mouse X") return 1;
 			SDL_Event button{};
 			button.type = SDL_EVENT_MOUSE_BUTTON_DOWN;
 			button.button.button = SDL_BUTTON_LEFT;
@@ -88,7 +111,7 @@ int main(int argc, char** argv) {
 			key.type = SDL_EVENT_KEY_UP;
 			if (!SDL_PushEvent(&key)) return 1;
 			input->beginFrame();
-			if (input->sample(index, 0x2e) != 1.0f) return 1;
+			if (input->sample(index, 0x2e) != 1.0f || input->deviceKind(index) != 1) return 1;
 			input->beginFrame();
 			if (input->sample(index, 0x2e) != 0.0f) return 1;
 		}

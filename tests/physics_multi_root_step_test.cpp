@@ -121,6 +121,45 @@ int main() {
       follower.state[follower.current].vel[0] <= 0 ||
       car.state[car.current].pos[0] <= 10)
     return 7;
+  // A garage camera reads its map's immutable ground body while other roots
+  // are stepped. Ground is intentionally absent from the dynamic root set.
+  {
+    BodyProto groundProto = proto;
+    groundProto.flags |= kProtoStatic;
+    groundProto.invMass = 0;
+    Body ground, groundCamera;
+    ground.proto = &groundProto;
+    ground.flags = kBodyActive;
+    ground.state[0].pos = {10, 0, 0};
+    groundCamera.proto = &proto;
+    groundCamera.flags = kBodyActive | kBodyNoRotation;
+    World groundWorld;
+    groundWorld.params.gravityEnabled = false;
+    groundWorld.bodies = {&groundCamera};
+    CameraFollowSmoothing groundSmoothing;
+    CameraFollowStep groundFollow = cb;
+    groundFollow.camera = &groundCamera;
+    groundFollow.look = groundFollow.move = &ground;
+    groundFollow.smoothing = &groundSmoothing;
+    MultiRootWork groundWork;
+    groundWork.collisionFreeProven = true;
+    groundWork.cameraCallbacks = {groundFollow};
+    if (stepMultiRootWorld(groundWorld, {{&groundCamera}}, 0.02f, groundWork, error) !=
+            FreeBodyStepResult::Advanced ||
+        groundCamera.state[groundCamera.current].vel[0] <= 0 ||
+        ground.current != 0 || ground.state[0].pos != Vec3({10, 0, 0}) ||
+        ground.state[0].vel != Vec3{} || ground.state[0].force != Vec3{})
+      return 42;
+    // An awake unregistered dynamic target remains unsupported; static
+    // support must not erase the existing target-lifetime/root contract.
+    ground.proto = &proto;
+    const auto heldTime = groundWorld.time;
+    const auto heldVelocity = groundCamera.state[groundCamera.current].vel;
+    if (stepMultiRootWorld(groundWorld, {{&groundCamera}}, 0.02f, groundWork, error) !=
+            FreeBodyStepResult::Unsupported || groundWorld.time != heldTime ||
+        groundCamera.state[groundCamera.current].vel != heldVelocity)
+      return 43;
+  }
   Body controlled;
   controlled.proto = &proto;
   controlled.flags = kBodyActive | kBodyNoRotation;
