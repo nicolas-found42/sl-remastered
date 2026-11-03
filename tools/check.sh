@@ -59,6 +59,7 @@ python3 -I tools/parity/resource_pool.py --wait 5 --cpu 1 --host-memory 1 --time
 python3 -I tools/parity/resource_pool.py --wait 5 --cpu 1 --host-memory 1 --timeout 30 -- python3 -I tools/parity/stock/test_durable_archive.py
 python3 -I tools/parity/resource_pool.py --wait 5 --cpu 1 --host-memory 1 --timeout 30 -- python3 -I tools/parity/stock/test_durable_wire.py
 python3 -I tools/parity/resource_pool.py --wait 5 --cpu 1 --host-memory 1 --timeout 30 -- python3 -I tools/parity/stock/test_container_preflight.py
+python3 -I tools/parity/resource_pool.py --wait 5 --cpu 1 --host-memory 1 --timeout 30 -- python3 -I tools/parity/stock/test_shutdown_evidence.py
 python3 -I tools/parity/resource_pool.py --wait 5 --cpu 1 --host-memory 1 --timeout 60 -- python3 -I tools/parity/test_storage.py
 python3 -I tools/parity/test_dev.py
 python3 -I tools/parity/test_experiment_result.py
