@@ -1,0 +1,98 @@
+[
+  {
+    "class": "java.lang.Float",
+    "method": "toString",
+    "descriptor": "(FLjava.lang.String;)Ljava.lang.String;",
+    "handler": "00481dd0",
+    "stock_md5": "e686099e7233bb7d7c461b1b35c5064c",
+    "source": "Headless Ghidra decompile and listing of 00481dd0; String argument is the format text; formatter 00551220 -> 00553d70 read in full with jump table 005540f4/00554114, int formatter 00554170, __ftol 005d6750, constants 005f0c18/005f3ab8/005f0cf0 from read_memory; result interned by 004174a0. PARTIAL: only literal text, %% and one %f modeled. See docs/native-batch-lang.md."
+  },
+  {
+    "class": "java.lang.Integer",
+    "method": "toString",
+    "descriptor": "(I)Ljava.lang.String;",
+    "handler": "00481e30",
+    "stock_md5": "e686099e7233bb7d7c461b1b35c5064c",
+    "source": "Headless Ghidra decompile and listing of 00481e30; format at 00613398 is %d (read_memory); formatter 00553d70 and 00554170 read in full; result interned by 004174a0."
+  },
+  {
+    "class": "java.lang.String",
+    "method": "append",
+    "descriptor": "(I)Ljava.lang.String;",
+    "handler": "00481f50",
+    "stock_md5": "e686099e7233bb7d7c461b1b35c5064c",
+    "source": "Headless Ghidra listing of 00481f50; copy 00551120 = 005548c0 (at most n-1 bytes, always terminated); backspace on 8, ignore below 0x20, store low byte otherwise; result interned by 004174a0."
+  },
+  {
+    "class": "java.lang.String",
+    "method": "length",
+    "descriptor": "()I",
+    "handler": "00481fe0",
+    "stock_md5": "e686099e7233bb7d7c461b1b35c5064c",
+    "source": "Headless Ghidra listing of 00481fe0; strlen of the receiver String text via 0042ab50."
+  },
+  {
+    "class": "java.lang.String",
+    "method": "token",
+    "descriptor": "(ILjava.lang.String;)Ljava.lang.String;",
+    "handler": "00481cf0",
+    "stock_md5": "e686099e7233bb7d7c461b1b35c5064c",
+    "source": "Headless Ghidra listing of 00481cf0 and strtok 00554c70 (delimiter bitmap including NUL, position saved in the caller); null result interned as 0 by 004174a0."
+  },
+  {
+    "class": "java.lang.Vector3",
+    "method": "length",
+    "descriptor": "()F",
+    "handler": "004823e0",
+    "stock_md5": "e686099e7233bb7d7c461b1b35c5064c",
+    "source": "Headless Ghidra listing of 004823e0; float fields x, y, z read by name (strings at 0061340c..00613414); FSQRT. PARTIAL: x87 precision control unknown."
+  },
+  {
+    "class": "java.lang.Vector3",
+    "method": "distance",
+    "descriptor": "(Ljava.lang.Vector3;)F",
+    "handler": "00482550",
+    "stock_md5": "e686099e7233bb7d7c461b1b35c5064c",
+    "source": "Headless Ghidra listing of 00482550; fields at 00613430..00613444; FSQRT. PARTIAL: x87 precision control unknown."
+  },
+  {
+    "class": "java.lang.Vector3",
+    "method": "normalize",
+    "descriptor": "()V",
+    "handler": "00482450",
+    "stock_md5": "e686099e7233bb7d7c461b1b35c5064c",
+    "source": "Headless Ghidra listing of 00482450; constants 005e73cc = 0.0f and 005f08f0 = 1.0f (read_memory); fields at 00613418..0061342c. PARTIAL: x87 precision control unknown."
+  },
+  {
+    "class": "java.lang.Vector3",
+    "method": "rotate",
+    "descriptor": "(Ljava.lang.Ypr;)Ljava.lang.Vector3;",
+    "handler": "00482110",
+    "stock_md5": "e686099e7233bb7d7c461b1b35c5064c",
+    "source": "Headless Ghidra listing of 00482110 and matrix builder 0054ecd0 (FSIN/FCOS, float store points); Ypr fields y, p, r at 006133c4..006133cc; Vector3 fields at 006133d0..006133e4; returns the receiver. PARTIAL: x87 sin/cos and precision control unmodeled."
+  },
+  {
+    "class": "java.lang.System",
+    "method": "arraycopy",
+    "descriptor": "(Ljava.lang.Object;ILjava.lang.Object;II)V",
+    "handler": "00487660",
+    "stock_md5": "e686099e7233bb7d7c461b1b35c5064c",
+    "source": "Headless Ghidra decompile and listing of 00487660; length field name at 00613a2c; error strings at 00613a64 and 00613a40. PARTIAL: see docs/native-batch-lang.md."
+  },
+  {
+    "class": "java.lang.System",
+    "method": "exit",
+    "descriptor": "(Ljava.lang.String;)V",
+    "handler": "0047be60",
+    "stock_md5": "e686099e7233bb7d7c461b1b35c5064c",
+    "source": "Headless Ghidra listing of 0047be60: argument parser call and return only."
+  },
+  {
+    "class": "java.lang.System",
+    "method": "log",
+    "descriptor": "(Ljava.lang.String;)V",
+    "handler": "0047be80",
+    "stock_md5": "e686099e7233bb7d7c461b1b35c5064c",
+    "source": "Headless Ghidra listing of 0047be80 and 0054bed0: only a semaphore wait and release on [0x0062def8+0x100]; no text is written. PARTIAL: semaphore state not modeled."
+  }
+]

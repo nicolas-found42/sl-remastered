@@ -1,0 +1,50 @@
+[
+  {
+    "class": "java.lang.System",
+    "method": "buildNumber",
+    "descriptor": "()I",
+    "handler": "0047c0b0",
+    "stock_md5": "e686099e7233bb7d7c461b1b35c5064c",
+    "source": "Ghidra stock program: FUN_00487f20 registers buildNumber at 0048812a; headless DecompileStockHandler.java confirms the loaded executable MD5 and decompiles FUN_0047c0b0 as return 0x25e. Raw handler bytes are b8 5e 02 00 00 c3. See docs/native-lookup.md."
+  },
+  {
+    "class": "java.lang.Integer",
+    "method": "toString",
+    "descriptor": "(I)Ljava.lang.String;",
+    "handler": "00481e30",
+    "stock_md5": "e686099e7233bb7d7c461b1b35c5064c",
+    "source": "Headless Ghidra decompile and listing of 00481e30; format at 00613398 is %d (read_memory); formatter 00553d70 and 00554170 read in full; result interned by 004174a0. Re-read independently: handler passes the parsed int to FUN_00551220 with format %d, then interns the buffer; 00553d70 cases 0x64/0x69 call 00554170 with the raw int, which negates in 32 bits so INT_MIN yields negative digits; 0041eb70 looks the string up by content hash and compare."
+  },
+  {
+    "class": "java.lang.String",
+    "method": "append",
+    "descriptor": "(I)Ljava.lang.String;",
+    "handler": "00481f50",
+    "stock_md5": "e686099e7233bb7d7c461b1b35c5064c",
+    "source": "Headless Ghidra listing of 00481f50; copy 00551120 = 005548c0 (at most n-1 bytes, always terminated); backspace on 8, ignore below 0x20, store low byte otherwise; result interned by 004174a0. Re-read independently: 005548c0 copies at most count-1 bytes and always terminates, so a 256 count keeps 255; backspace removes the last byte when length > 0; codes below 0x20 other than 8 are ignored (signed compare); codes >= 0x20 store the low byte then a NUL (one byte past the 256 byte buffer when the source holds 255 bytes)."
+  },
+  {
+    "class": "java.lang.String",
+    "method": "length",
+    "descriptor": "()I",
+    "handler": "00481fe0",
+    "stock_md5": "e686099e7233bb7d7c461b1b35c5064c",
+    "source": "Headless Ghidra listing of 00481fe0; strlen of the receiver String text via 0042ab50. Re-read independently: FUN_0045d910 yields the receiver payload, 0042ab50 returns its int field 0 (global 0062e008 is only ever written 0, at 0040ff60), then SCASB.REPNE counts bytes up to the NUL."
+  },
+  {
+    "class": "java.lang.String",
+    "method": "token",
+    "descriptor": "(ILjava.lang.String;)Ljava.lang.String;",
+    "handler": "00481cf0",
+    "stock_md5": "e686099e7233bb7d7c461b1b35c5064c",
+    "source": "Headless Ghidra listing of 00481cf0 and strtok 00554c70 (delimiter bitmap including NUL, position saved in the caller); null result interned as 0 by 004174a0. Re-read independently: the copy keeps the NUL (stack buffer up to 256 bytes, heap above), strtok 00554c70 skips leading delimiters, a delimiter bitmap always includes NUL and the next position is saved by the caller; the loop returns token number index, null for a negative index (loops until strtok returns 0) or one past the last token."
+  },
+  {
+    "class": "java.lang.System",
+    "method": "exit",
+    "descriptor": "(Ljava.lang.String;)V",
+    "handler": "0047be60",
+    "stock_md5": "e686099e7233bb7d7c461b1b35c5064c",
+    "source": "Headless Ghidra listing of 0047be60: argument parser call and return only. Re-read independently: body is FUN_0045d910(this, 0, &arg) then return, so only the String argument is parsed."
+  }
+]
