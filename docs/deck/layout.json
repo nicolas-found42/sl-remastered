@@ -1,0 +1,1700 @@
+{
+  "pages": [
+    {
+      "notes": "Scope is retained repository evidence as of 2 November 2026. This is a status briefing, not a release claim; every number is traceable to a documented run or artifact.",
+      "page": 1,
+      "rects": [
+        {
+          "h": 34.0,
+          "kind": "tag",
+          "label": "macOS / arm64",
+          "w": 128.0625,
+          "x": 657.9375,
+          "y": 152.0
+        },
+        {
+          "h": 15.65625,
+          "kind": "badge",
+          "label": "IN DEVELOPMENT",
+          "w": 97.3125,
+          "x": 688.6875,
+          "y": 201.171875
+        },
+        {
+          "h": 14.34375,
+          "kind": "kicker",
+          "label": "FULL PORT 1.0.0 / EXECUTIVE BRIEFING",
+          "w": 295.34375,
+          "x": 56.0,
+          "y": 152.0
+        },
+        {
+          "h": 252.0,
+          "kind": "title",
+          "label": "Street Legal Racing: Redline",
+          "w": 534.3125,
+          "x": 54.0,
+          "y": 185.0
+        },
+        {
+          "h": 34.0,
+          "kind": "subtitle",
+          "label": "The game's own scripts, native. Parity is a gate.",
+          "w": 541.15625,
+          "x": 56.0,
+          "y": 461.0
+        },
+        {
+          "h": 14.34375,
+          "kind": "meta",
+          "label": "SL-REMASTERED / ISSUE #53 / 2 NOVEMBER 2026",
+          "w": 353.09375,
+          "x": 56.0,
+          "y": 515.0
+        },
+        {
+          "h": 10.0,
+          "kind": "waveform",
+          "label": "wave 0",
+          "w": 4.0,
+          "x": 492.0,
+          "y": 516.0
+        },
+        {
+          "h": 27.7713623046875,
+          "kind": "waveform",
+          "label": "wave 1",
+          "w": 4.0,
+          "x": 502.0,
+          "y": 498.2286376953125
+        },
+        {
+          "h": 40.301055908203125,
+          "kind": "waveform",
+          "label": "wave 2",
+          "w": 4.0,
+          "x": 512.0,
+          "y": 485.6989440917969
+        },
+        {
+          "h": 43.893402099609375,
+          "kind": "waveform",
+          "label": "wave 3",
+          "w": 4.0,
+          "x": 522.0,
+          "y": 482.1065979003906
+        },
+        {
+          "h": 37.4888916015625,
+          "kind": "waveform",
+          "label": "wave 4",
+          "w": 4.0,
+          "x": 532.0,
+          "y": 488.5111083984375
+        },
+        {
+          "h": 22.976470947265625,
+          "kind": "waveform",
+          "label": "wave 5",
+          "w": 4.0,
+          "x": 542.0,
+          "y": 503.0235290527344
+        },
+        {
+          "h": 15.363372802734375,
+          "kind": "waveform",
+          "label": "wave 6",
+          "w": 4.0,
+          "x": 552.0,
+          "y": 510.6366271972656
+        },
+        {
+          "h": 32.121246337890625,
+          "kind": "waveform",
+          "label": "wave 7",
+          "w": 4.0,
+          "x": 562.0,
+          "y": 493.8787536621094
+        },
+        {
+          "h": 42.354461669921875,
+          "kind": "waveform",
+          "label": "wave 8",
+          "w": 4.0,
+          "x": 572.0,
+          "y": 483.6455383300781
+        },
+        {
+          "h": 43.044708251953125,
+          "kind": "waveform",
+          "label": "wave 9",
+          "w": 4.0,
+          "x": 582.0,
+          "y": 482.9552917480469
+        },
+        {
+          "h": 33.988372802734375,
+          "kind": "waveform",
+          "label": "wave 10",
+          "w": 4.0,
+          "x": 592.0,
+          "y": 492.0116271972656
+        },
+        {
+          "h": 17.85662841796875,
+          "kind": "waveform",
+          "label": "wave 11",
+          "w": 4.0,
+          "x": 602.0,
+          "y": 508.14337158203125
+        },
+        {
+          "h": 20.5924072265625,
+          "kind": "waveform",
+          "label": "wave 12",
+          "w": 4.0,
+          "x": 612.0,
+          "y": 505.4075927734375
+        },
+        {
+          "h": 35.917236328125,
+          "kind": "waveform",
+          "label": "wave 13",
+          "w": 4.0,
+          "x": 622.0,
+          "y": 490.082763671875
+        },
+        {
+          "h": 43.59771728515625,
+          "kind": "waveform",
+          "label": "wave 14",
+          "w": 4.0,
+          "x": 632.0,
+          "y": 482.40228271484375
+        },
+        {
+          "h": 41.3685302734375,
+          "kind": "waveform",
+          "label": "wave 15",
+          "w": 4.0,
+          "x": 642.0,
+          "y": 484.6314697265625
+        },
+        {
+          "h": 29.887176513671875,
+          "kind": "waveform",
+          "label": "wave 16",
+          "w": 4.0,
+          "x": 652.0,
+          "y": 496.1128234863281
+        },
+        {
+          "h": 12.5400390625,
+          "kind": "waveform",
+          "label": "wave 17",
+          "w": 4.0,
+          "x": 662.0,
+          "y": 513.4599609375
+        },
+        {
+          "h": 25.556243896484375,
+          "kind": "waveform",
+          "label": "wave 18",
+          "w": 4.0,
+          "x": 672.0,
+          "y": 500.4437561035156
+        },
+        {
+          "h": 39.064208984375,
+          "kind": "waveform",
+          "label": "wave 19",
+          "w": 4.0,
+          "x": 682.0,
+          "y": 486.935791015625
+        },
+        {
+          "h": 43.999664306640625,
+          "kind": "waveform",
+          "label": "wave 20",
+          "w": 4.0,
+          "x": 692.0,
+          "y": 482.0003356933594
+        },
+        {
+          "h": 38.906890869140625,
+          "kind": "waveform",
+          "label": "wave 21",
+          "w": 4.0,
+          "x": 702.0,
+          "y": 487.0931091308594
+        },
+        {
+          "h": 25.287994384765625,
+          "kind": "waveform",
+          "label": "wave 22",
+          "w": 4.0,
+          "x": 712.0,
+          "y": 500.7120056152344
+        },
+        {
+          "h": 12.840087890625,
+          "kind": "waveform",
+          "label": "wave 23",
+          "w": 4.0,
+          "x": 722.0,
+          "y": 513.159912109375
+        },
+        {
+          "h": 30.130523681640625,
+          "kind": "waveform",
+          "label": "wave 24",
+          "w": 4.0,
+          "x": 732.0,
+          "y": 495.8694763183594
+        },
+        {
+          "h": 41.4833984375,
+          "kind": "waveform",
+          "label": "wave 25",
+          "w": 4.0,
+          "x": 742.0,
+          "y": 484.5166015625
+        },
+        {
+          "h": 43.55023193359375,
+          "kind": "waveform",
+          "label": "wave 26",
+          "w": 4.0,
+          "x": 752.0,
+          "y": 482.44976806640625
+        },
+        {
+          "h": 35.721405029296875,
+          "kind": "waveform",
+          "label": "wave 27",
+          "w": 4.0,
+          "x": 762.0,
+          "y": 490.2785949707031
+        },
+        {
+          "h": 20.305999755859375,
+          "kind": "waveform",
+          "label": "wave 28",
+          "w": 4.0,
+          "x": 772.0,
+          "y": 505.6940002441406
+        },
+        {
+          "h": 18.149169921875,
+          "kind": "waveform",
+          "label": "wave 29",
+          "w": 4.0,
+          "x": 782.0,
+          "y": 507.850830078125
+        },
+        {
+          "h": 11.65625,
+          "kind": "source",
+          "label": "https://github.com/nicolas-found42/sl-remastered/issues/53",
+          "w": 145.8125,
+          "x": 56.0,
+          "y": 565.0
+        },
+        {
+          "h": 14.34375,
+          "kind": "footer",
+          "label": "counter",
+          "w": 54.125,
+          "x": 731.875,
+          "y": 565.0
+        },
+        {
+          "h": 14.0,
+          "kind": "progress-filled",
+          "label": "bar 1",
+          "w": 4.0,
+          "x": 394.5,
+          "y": 563.0
+        },
+        {
+          "h": 14.0,
+          "kind": "progress-rest",
+          "label": "bar 2",
+          "w": 4.0,
+          "x": 401.5,
+          "y": 563.0
+        },
+        {
+          "h": 14.0,
+          "kind": "progress-rest",
+          "label": "bar 3",
+          "w": 4.0,
+          "x": 408.5,
+          "y": 563.0
+        },
+        {
+          "h": 14.0,
+          "kind": "progress-rest",
+          "label": "bar 4",
+          "w": 4.0,
+          "x": 415.5,
+          "y": 563.0
+        },
+        {
+          "h": 14.0,
+          "kind": "progress-rest",
+          "label": "bar 5",
+          "w": 4.0,
+          "x": 422.5,
+          "y": 563.0
+        },
+        {
+          "h": 14.0,
+          "kind": "progress-rest",
+          "label": "bar 6",
+          "w": 4.0,
+          "x": 429.5,
+          "y": 563.0
+        },
+        {
+          "h": 14.0,
+          "kind": "progress-rest",
+          "label": "bar 7",
+          "w": 4.0,
+          "x": 436.5,
+          "y": 563.0
+        },
+        {
+          "h": 14.0,
+          "kind": "progress-rest",
+          "label": "bar 8",
+          "w": 4.0,
+          "x": 443.5,
+          "y": 563.0
+        }
+      ],
+      "size": {
+        "h": 595.0,
+        "w": 842.0
+      }
+    },
+    {
+      "notes": "The menu and player-name dialog are the native build running stock scripts. The decompile is static evidence, and handler presence is not behavioral parity; 6 of the 360 stock signatures are currently matched.",
+      "page": 2,
+      "rects": [
+        {
+          "h": 14.34375,
+          "kind": "kicker",
+          "label": "THE ARCHITECTURE",
+          "w": 130.34375,
+          "x": 56.0,
+          "y": 62.0
+        },
+        {
+          "h": 40.0,
+          "kind": "title",
+          "label": "It runs the game's own code",
+          "w": 494.53125,
+          "x": 55.0,
+          "y": 91.0
+        },
+        {
+          "h": 68.0,
+          "kind": "bullet",
+          "label": "Tufa class files from the 2005 install feed a native Script VM; 1,451 of 1,452 decode, with one known stale file failing.",
+          "w": 321.5625,
+          "x": 80.0,
+          "y": 179.0
+        },
+        {
+          "h": 68.0,
+          "kind": "bullet",
+          "label": "240 native handlers dispatch against 360 stock signatures; the car-config parser reads all 107 directives and all 39 real cars.",
+          "w": 339.875,
+          "x": 80.0,
+          "y": 261.0
+        },
+        {
+          "h": 68.0,
+          "kind": "bullet",
+          "label": "A 7,535-function Ghidra decompile covers 97% of the stock .text; 70,269 lines of C++20 rebuild the engine around it.",
+          "w": 339.21875,
+          "x": 80.0,
+          "y": 343.0
+        },
+        {
+          "h": 112.0,
+          "kind": "card",
+          "label": "FUNCTIONS DECOMPILED",
+          "w": 358.0,
+          "x": 56.0,
+          "y": 419.0
+        },
+        {
+          "h": 38.0,
+          "kind": "card-value",
+          "label": "7,535",
+          "w": 101.09375,
+          "x": 72.0,
+          "y": 439.0
+        },
+        {
+          "h": 14.34375,
+          "kind": "card-label",
+          "label": "FUNCTIONS DECOMPILED",
+          "w": 152.90625,
+          "x": 72.0,
+          "y": 495.0
+        },
+        {
+          "h": 112.0,
+          "kind": "card",
+          "label": "STOCK SIGNATURES",
+          "w": 358.0,
+          "x": 428.0,
+          "y": 419.0
+        },
+        {
+          "h": 38.0,
+          "kind": "card-value",
+          "label": "360",
+          "w": 72.5625,
+          "x": 444.0,
+          "y": 439.0
+        },
+        {
+          "h": 14.34375,
+          "kind": "card-label",
+          "label": "STOCK SIGNATURES",
+          "w": 122.09375,
+          "x": 444.0,
+          "y": 495.0
+        },
+        {
+          "h": 200.0,
+          "kind": "image",
+          "label": "IMG",
+          "w": 357.0,
+          "x": 429.0,
+          "y": 165.0
+        },
+        {
+          "h": 11.65625,
+          "kind": "source",
+          "label": "https://github.com/nicolas-found42/sl-remastered",
+          "w": 91.8125,
+          "x": 56.0,
+          "y": 565.0
+        },
+        {
+          "h": 14.34375,
+          "kind": "footer",
+          "label": "counter",
+          "w": 54.125,
+          "x": 731.875,
+          "y": 565.0
+        },
+        {
+          "h": 14.0,
+          "kind": "progress-filled",
+          "label": "bar 1",
+          "w": 4.0,
+          "x": 394.5,
+          "y": 563.0
+        },
+        {
+          "h": 14.0,
+          "kind": "progress-filled",
+          "label": "bar 2",
+          "w": 4.0,
+          "x": 401.5,
+          "y": 563.0
+        },
+        {
+          "h": 14.0,
+          "kind": "progress-rest",
+          "label": "bar 3",
+          "w": 4.0,
+          "x": 408.5,
+          "y": 563.0
+        },
+        {
+          "h": 14.0,
+          "kind": "progress-rest",
+          "label": "bar 4",
+          "w": 4.0,
+          "x": 415.5,
+          "y": 563.0
+        },
+        {
+          "h": 14.0,
+          "kind": "progress-rest",
+          "label": "bar 5",
+          "w": 4.0,
+          "x": 422.5,
+          "y": 563.0
+        },
+        {
+          "h": 14.0,
+          "kind": "progress-rest",
+          "label": "bar 6",
+          "w": 4.0,
+          "x": 429.5,
+          "y": 563.0
+        },
+        {
+          "h": 14.0,
+          "kind": "progress-rest",
+          "label": "bar 7",
+          "w": 4.0,
+          "x": 436.5,
+          "y": 563.0
+        },
+        {
+          "h": 14.0,
+          "kind": "progress-rest",
+          "label": "bar 8",
+          "w": 4.0,
+          "x": 443.5,
+          "y": 563.0
+        }
+      ],
+      "size": {
+        "h": 595.0,
+        "w": 842.0
+      }
+    },
+    {
+      "notes": "The 1,401-step run and the 632-step controls run are separate retained runs. The save round-trip is functional native evidence, not yet a paired Stock parity proof.",
+      "page": 3,
+      "rects": [
+        {
+          "h": 14.34375,
+          "kind": "kicker",
+          "label": "WHAT RUNS TODAY",
+          "w": 122.09375,
+          "x": 56.0,
+          "y": 62.0
+        },
+        {
+          "h": 40.0,
+          "kind": "title",
+          "label": "A real drive, not a demo reel",
+          "w": 491.875,
+          "x": 55.0,
+          "y": 91.0
+        },
+        {
+          "h": 68.0,
+          "kind": "bullet",
+          "label": "Cold boot plays both intro videos, a 3.06 s splash and the stock Main Menu; Options opens and cancels.",
+          "w": 302.875,
+          "x": 80.0,
+          "y": 179.0
+        },
+        {
+          "h": 68.0,
+          "kind": "bullet",
+          "label": "Seeded Free Ride drives the city for 1,401 physics steps at up to 18.36 m/s; a 632-step controls run ends in sleep.",
+          "w": 317.875,
+          "x": 80.0,
+          "y": 261.0
+        },
+        {
+          "h": 45.34375,
+          "kind": "bullet",
+          "label": "Career create, load and save round-trip 10,859 bytes byte-identically.",
+          "w": 334.5625,
+          "x": 80.0,
+          "y": 343.0
+        },
+        {
+          "h": 112.0,
+          "kind": "card",
+          "label": "PHYSICS STEPS",
+          "w": 358.0,
+          "x": 56.0,
+          "y": 414.34375
+        },
+        {
+          "h": 38.0,
+          "kind": "card-value",
+          "label": "1,401",
+          "w": 102.3125,
+          "x": 72.0,
+          "y": 434.34375
+        },
+        {
+          "h": 14.34375,
+          "kind": "card-label",
+          "label": "PHYSICS STEPS",
+          "w": 99.0,
+          "x": 72.0,
+          "y": 490.34375
+        },
+        {
+          "h": 112.0,
+          "kind": "card",
+          "label": "M/S PEAK",
+          "w": 358.0,
+          "x": 428.0,
+          "y": 414.34375
+        },
+        {
+          "h": 38.0,
+          "kind": "card-value",
+          "label": "18.36",
+          "w": 105.53125,
+          "x": 444.0,
+          "y": 434.34375
+        },
+        {
+          "h": 14.34375,
+          "kind": "card-label",
+          "label": "M/S PEAK",
+          "w": 60.5,
+          "x": 444.0,
+          "y": 490.34375
+        },
+        {
+          "h": 200.0,
+          "kind": "image",
+          "label": "IMG",
+          "w": 357.0,
+          "x": 429.0,
+          "y": 165.0
+        },
+        {
+          "h": 11.65625,
+          "kind": "source",
+          "label": "https://github.com/nicolas-found42/sl-remastered",
+          "w": 97.1875,
+          "x": 56.0,
+          "y": 565.0
+        },
+        {
+          "h": 14.34375,
+          "kind": "footer",
+          "label": "counter",
+          "w": 54.125,
+          "x": 731.875,
+          "y": 565.0
+        },
+        {
+          "h": 14.0,
+          "kind": "progress-filled",
+          "label": "bar 1",
+          "w": 4.0,
+          "x": 394.5,
+          "y": 563.0
+        },
+        {
+          "h": 14.0,
+          "kind": "progress-filled",
+          "label": "bar 2",
+          "w": 4.0,
+          "x": 401.5,
+          "y": 563.0
+        },
+        {
+          "h": 14.0,
+          "kind": "progress-filled",
+          "label": "bar 3",
+          "w": 4.0,
+          "x": 408.5,
+          "y": 563.0
+        },
+        {
+          "h": 14.0,
+          "kind": "progress-rest",
+          "label": "bar 4",
+          "w": 4.0,
+          "x": 415.5,
+          "y": 563.0
+        },
+        {
+          "h": 14.0,
+          "kind": "progress-rest",
+          "label": "bar 5",
+          "w": 4.0,
+          "x": 422.5,
+          "y": 563.0
+        },
+        {
+          "h": 14.0,
+          "kind": "progress-rest",
+          "label": "bar 6",
+          "w": 4.0,
+          "x": 429.5,
+          "y": 563.0
+        },
+        {
+          "h": 14.0,
+          "kind": "progress-rest",
+          "label": "bar 7",
+          "w": 4.0,
+          "x": 436.5,
+          "y": 563.0
+        },
+        {
+          "h": 14.0,
+          "kind": "progress-rest",
+          "label": "bar 8",
+          "w": 4.0,
+          "x": 443.5,
+          "y": 563.0
+        }
+      ],
+      "size": {
+        "h": 595.0,
+        "w": 842.0
+      }
+    },
+    {
+      "notes": "Two stock builds are identified locally as 2.2.1/606 and 2.3.1/940. Distribution provenance is still unauthenticated, which the requirement map records as a blocker.",
+      "page": 4,
+      "rects": [
+        {
+          "h": 14.34375,
+          "kind": "kicker",
+          "label": "VERIFICATION",
+          "w": 97.34375,
+          "x": 56.0,
+          "y": 62.0
+        },
+        {
+          "h": 80.0,
+          "kind": "title",
+          "label": "Parity is defined against the stock executable",
+          "w": 604.46875,
+          "x": 55.0,
+          "y": 91.0
+        },
+        {
+          "h": 14.34375,
+          "kind": "claim-header",
+          "label": "Authority",
+          "w": 72.59375,
+          "x": 56.0,
+          "y": 251.0
+        },
+        {
+          "h": 68.0,
+          "kind": "claim",
+          "label": "Two stock builds in the reference folder; shared behavior is authoritative and every difference must be reconciled.",
+          "w": 341.875,
+          "x": 56.0,
+          "y": 285.0
+        },
+        {
+          "h": 14.34375,
+          "kind": "claim-header",
+          "label": "Identity",
+          "w": 64.34375,
+          "x": 443.0,
+          "y": 251.0
+        },
+        {
+          "h": 68.0,
+          "kind": "claim",
+          "label": "Every run must bind executable, game data, fixture and scenario hashes before a comparison can count.",
+          "w": 315.21875,
+          "x": 443.0,
+          "y": 285.0
+        },
+        {
+          "h": 14.34375,
+          "kind": "claim-header",
+          "label": "Repeatability",
+          "w": 105.59375,
+          "x": 56.0,
+          "y": 379.0
+        },
+        {
+          "h": 68.0,
+          "kind": "claim",
+          "label": "At least two independent runs per side must agree exactly before Stock and Port are compared.",
+          "w": 316.5625,
+          "x": 56.0,
+          "y": 413.0
+        },
+        {
+          "h": 14.34375,
+          "kind": "claim-header",
+          "label": "Refusal",
+          "w": 56.09375,
+          "x": 443.0,
+          "y": 379.0
+        },
+        {
+          "h": 68.0,
+          "kind": "claim",
+          "label": "Duplicate records, altered stimuli, missing capabilities and rehashed artifacts are rejected as inconclusive.",
+          "w": 336.21875,
+          "x": 443.0,
+          "y": 413.0
+        },
+        {
+          "h": 11.65625,
+          "kind": "source",
+          "label": "https://github.com/nicolas-found42/sl-remastered/issues/53",
+          "w": 129.59375,
+          "x": 56.0,
+          "y": 565.0
+        },
+        {
+          "h": 14.34375,
+          "kind": "footer",
+          "label": "counter",
+          "w": 54.125,
+          "x": 731.875,
+          "y": 565.0
+        },
+        {
+          "h": 14.0,
+          "kind": "progress-filled",
+          "label": "bar 1",
+          "w": 4.0,
+          "x": 394.5,
+          "y": 563.0
+        },
+        {
+          "h": 14.0,
+          "kind": "progress-filled",
+          "label": "bar 2",
+          "w": 4.0,
+          "x": 401.5,
+          "y": 563.0
+        },
+        {
+          "h": 14.0,
+          "kind": "progress-filled",
+          "label": "bar 3",
+          "w": 4.0,
+          "x": 408.5,
+          "y": 563.0
+        },
+        {
+          "h": 14.0,
+          "kind": "progress-filled",
+          "label": "bar 4",
+          "w": 4.0,
+          "x": 415.5,
+          "y": 563.0
+        },
+        {
+          "h": 14.0,
+          "kind": "progress-rest",
+          "label": "bar 5",
+          "w": 4.0,
+          "x": 422.5,
+          "y": 563.0
+        },
+        {
+          "h": 14.0,
+          "kind": "progress-rest",
+          "label": "bar 6",
+          "w": 4.0,
+          "x": 429.5,
+          "y": 563.0
+        },
+        {
+          "h": 14.0,
+          "kind": "progress-rest",
+          "label": "bar 7",
+          "w": 4.0,
+          "x": 436.5,
+          "y": 563.0
+        },
+        {
+          "h": 14.0,
+          "kind": "progress-rest",
+          "label": "bar 8",
+          "w": 4.0,
+          "x": 443.5,
+          "y": 563.0
+        }
+      ],
+      "size": {
+        "h": 595.0,
+        "w": 842.0
+      }
+    },
+    {
+      "notes": "The latest local CTest log shows a physics failure before later gate stages; the continuation records object_world_step_unit. The complete gate exits 8 either way.",
+      "page": 5,
+      "rects": [
+        {
+          "h": 14.34375,
+          "kind": "kicker",
+          "label": "THE FRONTIER",
+          "w": 97.34375,
+          "x": 56.0,
+          "y": 62.0
+        },
+        {
+          "h": 40.0,
+          "kind": "title",
+          "label": "The gate is red at one physics assertion",
+          "w": 700.9375,
+          "x": 55.0,
+          "y": 91.0
+        },
+        {
+          "h": 14.34375,
+          "kind": "claim-header",
+          "label": "Gate",
+          "w": 31.34375,
+          "x": 56.0,
+          "y": 187.0
+        },
+        {
+          "h": 68.0,
+          "kind": "claim",
+          "label": "The full gate exits 8 at a single failing CTest, so the corpus, PTX and reference checks downstream never run.",
+          "w": 337.21875,
+          "x": 56.0,
+          "y": 221.0
+        },
+        {
+          "h": 14.34375,
+          "kind": "claim-header",
+          "label": "Symptom",
+          "w": 56.09375,
+          "x": 443.0,
+          "y": 187.0
+        },
+        {
+          "h": 68.0,
+          "kind": "claim",
+          "label": "The box-drop test ends awake at 0.467 m/s with omegaSq 2.76; the contact lifecycle never reaches Stock's resting state.",
+          "w": 336.21875,
+          "x": 443.0,
+          "y": 221.0
+        },
+        {
+          "h": 14.34375,
+          "kind": "claim-header",
+          "label": "Divergence",
+          "w": 80.84375,
+          "x": 56.0,
+          "y": 315.0
+        },
+        {
+          "h": 68.0,
+          "kind": "claim",
+          "label": "The delegated report isolates 0.02 pair admission in Stock versus 0.05 in Port, plus a 7 to 6 demotion.",
+          "w": 337.5625,
+          "x": 56.0,
+          "y": 349.0
+        },
+        {
+          "h": 14.34375,
+          "kind": "claim-header",
+          "label": "Next",
+          "w": 31.34375,
+          "x": 443.0,
+          "y": 315.0
+        },
+        {
+          "h": 45.34375,
+          "kind": "claim",
+          "label": "Adopt Stock's admission band, remove the demotion and rerun the unchanged test.",
+          "w": 307.5625,
+          "x": 443.0,
+          "y": 349.0
+        },
+        {
+          "h": 38.0,
+          "kind": "card-value",
+          "label": "1",
+          "w": 22.0,
+          "x": 72.0,
+          "y": 441.0
+        },
+        {
+          "h": 14.34375,
+          "kind": "card-label",
+          "label": "RED CTEST",
+          "w": 68.1875,
+          "x": 72.0,
+          "y": 495.0
+        },
+        {
+          "h": 38.0,
+          "kind": "card-value",
+          "label": "0/46",
+          "w": 82.3125,
+          "x": 315.33331298828125,
+          "y": 441.0
+        },
+        {
+          "h": 14.34375,
+          "kind": "card-label",
+          "label": "STORIES VERIFIED",
+          "w": 122.09375,
+          "x": 315.33331298828125,
+          "y": 495.0
+        },
+        {
+          "h": 38.0,
+          "kind": "card-value",
+          "label": "0/8",
+          "w": 58.96875,
+          "x": 558.6666259765625,
+          "y": 441.0
+        },
+        {
+          "h": 14.34375,
+          "kind": "card-label",
+          "label": "DELIVERABLES VERIFIED",
+          "w": 160.59375,
+          "x": 558.6666259765625,
+          "y": 495.0
+        },
+        {
+          "h": 11.65625,
+          "kind": "source",
+          "label": "https://github.com/nicolas-found42/sl-remastered/issues/53",
+          "w": 145.8125,
+          "x": 56.0,
+          "y": 565.0
+        },
+        {
+          "h": 14.34375,
+          "kind": "footer",
+          "label": "counter",
+          "w": 54.125,
+          "x": 731.875,
+          "y": 565.0
+        },
+        {
+          "h": 14.0,
+          "kind": "progress-filled",
+          "label": "bar 1",
+          "w": 4.0,
+          "x": 394.5,
+          "y": 563.0
+        },
+        {
+          "h": 14.0,
+          "kind": "progress-filled",
+          "label": "bar 2",
+          "w": 4.0,
+          "x": 401.5,
+          "y": 563.0
+        },
+        {
+          "h": 14.0,
+          "kind": "progress-filled",
+          "label": "bar 3",
+          "w": 4.0,
+          "x": 408.5,
+          "y": 563.0
+        },
+        {
+          "h": 14.0,
+          "kind": "progress-filled",
+          "label": "bar 4",
+          "w": 4.0,
+          "x": 415.5,
+          "y": 563.0
+        },
+        {
+          "h": 14.0,
+          "kind": "progress-filled",
+          "label": "bar 5",
+          "w": 4.0,
+          "x": 422.5,
+          "y": 563.0
+        },
+        {
+          "h": 14.0,
+          "kind": "progress-rest",
+          "label": "bar 6",
+          "w": 4.0,
+          "x": 429.5,
+          "y": 563.0
+        },
+        {
+          "h": 14.0,
+          "kind": "progress-rest",
+          "label": "bar 7",
+          "w": 4.0,
+          "x": 436.5,
+          "y": 563.0
+        },
+        {
+          "h": 14.0,
+          "kind": "progress-rest",
+          "label": "bar 8",
+          "w": 4.0,
+          "x": 443.5,
+          "y": 563.0
+        }
+      ],
+      "size": {
+        "h": 595.0,
+        "w": 842.0
+      }
+    },
+    {
+      "notes": "The counts are the specification's own structure. The requirement map records every product and D1-D8 row as unverified, so the contract is defined but not met.",
+      "page": 6,
+      "rects": [
+        {
+          "h": 14.34375,
+          "kind": "kicker",
+          "label": "THE 1.0.0 CONTRACT",
+          "w": 146.84375,
+          "x": 56.0,
+          "y": 62.0
+        },
+        {
+          "h": 40.0,
+          "kind": "title",
+          "label": "One signed app, one behavior set",
+          "w": 589.34375,
+          "x": 55.0,
+          "y": 91.0
+        },
+        {
+          "h": 68.0,
+          "kind": "bullet",
+          "label": "One reconciled behavior set from two stock builds; prefer newer behavior, retain older-only features, record every choice.",
+          "w": 313.875,
+          "x": 80.0,
+          "y": 183.1999969482422
+        },
+        {
+          "h": 68.0,
+          "kind": "bullet",
+          "label": "Players download a signed, notarized DMG, drag it to Applications and play without the original installation.",
+          "w": 313.21875,
+          "x": 80.0,
+          "y": 269.3999938964844
+        },
+        {
+          "h": 68.0,
+          "kind": "bullet",
+          "label": "46 user stories, 8 verification deliverables and 7 ordered exit gates define done; no public prerelease is permitted.",
+          "w": 301.21875,
+          "x": 467.0,
+          "y": 183.1999969482422
+        },
+        {
+          "h": 45.34375,
+          "kind": "bullet",
+          "label": "No original installation, version profile or developer checkout is required.",
+          "w": 289.5625,
+          "x": 467.0,
+          "y": 269.3999938964844
+        },
+        {
+          "h": 112.0,
+          "kind": "card",
+          "label": "USER STORIES",
+          "w": 234.0,
+          "x": 56.0,
+          "y": 363.3999938964844
+        },
+        {
+          "h": 38.0,
+          "kind": "card-value",
+          "label": "46",
+          "w": 47.875,
+          "x": 72.0,
+          "y": 383.3999938964844
+        },
+        {
+          "h": 14.34375,
+          "kind": "card-label",
+          "label": "USER STORIES",
+          "w": 91.3125,
+          "x": 72.0,
+          "y": 439.3999938964844
+        },
+        {
+          "h": 112.0,
+          "kind": "card",
+          "label": "DELIVERABLES",
+          "w": 234.0,
+          "x": 304.0,
+          "y": 363.3999938964844
+        },
+        {
+          "h": 38.0,
+          "kind": "card-value",
+          "label": "8",
+          "w": 24.5,
+          "x": 320.0,
+          "y": 383.3999938964844
+        },
+        {
+          "h": 14.34375,
+          "kind": "card-label",
+          "label": "DELIVERABLES",
+          "w": 91.3125,
+          "x": 320.0,
+          "y": 439.3999938964844
+        },
+        {
+          "h": 112.0,
+          "kind": "card",
+          "label": "EXIT GATES",
+          "w": 234.0,
+          "x": 552.0,
+          "y": 363.3999938964844
+        },
+        {
+          "h": 38.0,
+          "kind": "card-value",
+          "label": "7",
+          "w": 22.5,
+          "x": 568.0,
+          "y": 383.3999938964844
+        },
+        {
+          "h": 14.34375,
+          "kind": "card-label",
+          "label": "EXIT GATES",
+          "w": 75.90625,
+          "x": 568.0,
+          "y": 439.3999938964844
+        },
+        {
+          "h": 11.65625,
+          "kind": "source",
+          "label": "https://github.com/nicolas-found42/sl-remastered/issues/53",
+          "w": 145.8125,
+          "x": 56.0,
+          "y": 565.0
+        },
+        {
+          "h": 14.34375,
+          "kind": "footer",
+          "label": "counter",
+          "w": 54.125,
+          "x": 731.875,
+          "y": 565.0
+        },
+        {
+          "h": 14.0,
+          "kind": "progress-filled",
+          "label": "bar 1",
+          "w": 4.0,
+          "x": 394.5,
+          "y": 563.0
+        },
+        {
+          "h": 14.0,
+          "kind": "progress-filled",
+          "label": "bar 2",
+          "w": 4.0,
+          "x": 401.5,
+          "y": 563.0
+        },
+        {
+          "h": 14.0,
+          "kind": "progress-filled",
+          "label": "bar 3",
+          "w": 4.0,
+          "x": 408.5,
+          "y": 563.0
+        },
+        {
+          "h": 14.0,
+          "kind": "progress-filled",
+          "label": "bar 4",
+          "w": 4.0,
+          "x": 415.5,
+          "y": 563.0
+        },
+        {
+          "h": 14.0,
+          "kind": "progress-filled",
+          "label": "bar 5",
+          "w": 4.0,
+          "x": 422.5,
+          "y": 563.0
+        },
+        {
+          "h": 14.0,
+          "kind": "progress-filled",
+          "label": "bar 6",
+          "w": 4.0,
+          "x": 429.5,
+          "y": 563.0
+        },
+        {
+          "h": 14.0,
+          "kind": "progress-rest",
+          "label": "bar 7",
+          "w": 4.0,
+          "x": 436.5,
+          "y": 563.0
+        },
+        {
+          "h": 14.0,
+          "kind": "progress-rest",
+          "label": "bar 8",
+          "w": 4.0,
+          "x": 443.5,
+          "y": 563.0
+        }
+      ],
+      "size": {
+        "h": 595.0,
+        "w": 842.0
+      }
+    },
+    {
+      "notes": "The 7,859-file figure is the staged candidate from the 2 November production-entry audit; release_accepted is false. The rights statement is a repository fact, not a legal opinion.",
+      "page": 7,
+      "rects": [
+        {
+          "h": 14.34375,
+          "kind": "kicker",
+          "label": "WHAT BLOCKS RELEASE",
+          "w": 155.09375,
+          "x": 56.0,
+          "y": 62.0
+        },
+        {
+          "h": 40.0,
+          "kind": "title",
+          "label": "Four gaps, all visible",
+          "w": 354.625,
+          "x": 55.0,
+          "y": 91.0
+        },
+        {
+          "h": 14.34375,
+          "kind": "claim-header",
+          "label": "Provenance",
+          "w": 80.84375,
+          "x": 56.0,
+          "y": 187.0
+        },
+        {
+          "h": 68.0,
+          "kind": "claim",
+          "label": "28,308 recorded paths are unclassified; neither Build 606 nor Build 940 has an authenticated distribution-to-file chain.",
+          "w": 340.21875,
+          "x": 56.0,
+          "y": 221.0
+        },
+        {
+          "h": 14.34375,
+          "kind": "claim-header",
+          "label": "Physics",
+          "w": 56.09375,
+          "x": 443.0,
+          "y": 187.0
+        },
+        {
+          "h": 68.0,
+          "kind": "claim",
+          "label": "The contact lifecycle diverges, the full gate is red, and 0 of 8 verification deliverables are verified.",
+          "w": 324.875,
+          "x": 443.0,
+          "y": 221.0
+        },
+        {
+          "h": 14.34375,
+          "kind": "claim-header",
+          "label": "Distribution",
+          "w": 97.34375,
+          "x": 56.0,
+          "y": 315.0
+        },
+        {
+          "h": 68.0,
+          "kind": "claim",
+          "label": "0 signing identities, 0 clean-machine runners and a 7,859-file ad-hoc candidate that has never launched as a whole game.",
+          "w": 323.875,
+          "x": 56.0,
+          "y": 349.0
+        },
+        {
+          "h": 14.34375,
+          "kind": "claim-header",
+          "label": "Rights",
+          "w": 47.84375,
+          "x": 443.0,
+          "y": 315.0
+        },
+        {
+          "h": 68.0,
+          "kind": "claim",
+          "label": "No license or redistribution grant is recorded; the repository holds no game files, and assets belong to Invictus Games.",
+          "w": 330.21875,
+          "x": 443.0,
+          "y": 349.0
+        },
+        {
+          "h": 38.0,
+          "kind": "card-value",
+          "label": "28,308",
+          "w": 131.90625,
+          "x": 72.0,
+          "y": 441.0
+        },
+        {
+          "h": 14.34375,
+          "kind": "card-label",
+          "label": "UNCLASSIFIED PATHS",
+          "w": 137.5,
+          "x": 72.0,
+          "y": 495.0
+        },
+        {
+          "h": 38.0,
+          "kind": "card-value",
+          "label": "0",
+          "w": 24.09375,
+          "x": 437.0,
+          "y": 441.0
+        },
+        {
+          "h": 14.34375,
+          "kind": "card-label",
+          "label": "SIGNING IDENTITIES",
+          "w": 137.5,
+          "x": 437.0,
+          "y": 495.0
+        },
+        {
+          "h": 11.65625,
+          "kind": "source",
+          "label": "https://github.com/nicolas-found42/sl-remastered/issues/53",
+          "w": 145.8125,
+          "x": 56.0,
+          "y": 565.0
+        },
+        {
+          "h": 14.34375,
+          "kind": "footer",
+          "label": "counter",
+          "w": 54.125,
+          "x": 731.875,
+          "y": 565.0
+        },
+        {
+          "h": 14.0,
+          "kind": "progress-filled",
+          "label": "bar 1",
+          "w": 4.0,
+          "x": 394.5,
+          "y": 563.0
+        },
+        {
+          "h": 14.0,
+          "kind": "progress-filled",
+          "label": "bar 2",
+          "w": 4.0,
+          "x": 401.5,
+          "y": 563.0
+        },
+        {
+          "h": 14.0,
+          "kind": "progress-filled",
+          "label": "bar 3",
+          "w": 4.0,
+          "x": 408.5,
+          "y": 563.0
+        },
+        {
+          "h": 14.0,
+          "kind": "progress-filled",
+          "label": "bar 4",
+          "w": 4.0,
+          "x": 415.5,
+          "y": 563.0
+        },
+        {
+          "h": 14.0,
+          "kind": "progress-filled",
+          "label": "bar 5",
+          "w": 4.0,
+          "x": 422.5,
+          "y": 563.0
+        },
+        {
+          "h": 14.0,
+          "kind": "progress-filled",
+          "label": "bar 6",
+          "w": 4.0,
+          "x": 429.5,
+          "y": 563.0
+        },
+        {
+          "h": 14.0,
+          "kind": "progress-filled",
+          "label": "bar 7",
+          "w": 4.0,
+          "x": 436.5,
+          "y": 563.0
+        },
+        {
+          "h": 14.0,
+          "kind": "progress-rest",
+          "label": "bar 8",
+          "w": 4.0,
+          "x": 443.5,
+          "y": 563.0
+        }
+      ],
+      "size": {
+        "h": 595.0,
+        "w": 842.0
+      }
+    },
+    {
+      "notes": "1.0.0 is a gate, not a date: no prereleases, no partial launch, and an independent audit plus Jev completion review before publication.",
+      "page": 8,
+      "rects": [
+        {
+          "h": 14.34375,
+          "kind": "kicker",
+          "label": "THE RELEASE",
+          "w": 89.09375,
+          "x": 56.0,
+          "y": 62.0
+        },
+        {
+          "h": 40.0,
+          "kind": "title",
+          "label": "The gate is the product",
+          "w": 408.25,
+          "x": 55.0,
+          "y": 91.0
+        },
+        {
+          "h": 104.0,
+          "kind": "hero-value",
+          "label": "1.0.0",
+          "w": 257.9375,
+          "x": 53.0,
+          "y": 209.0
+        },
+        {
+          "h": 22.0,
+          "kind": "hero-label",
+          "label": "WHEN EVERY CLAIM IS VERIFIED",
+          "w": 237.78125,
+          "x": 56.0,
+          "y": 327.0
+        },
+        {
+          "h": 65.0,
+          "kind": "claim",
+          "label": "All 46 user stories and 8 deliverables verified against retained evidence, not a passing demo.",
+          "w": 288.21875,
+          "x": 479.4000244140625,
+          "y": 199.0
+        },
+        {
+          "h": 65.0,
+          "kind": "claim",
+          "label": "Stock and Port repeat independently before any paired comparison; first divergence is reported, never averaged.",
+          "w": 283.3125,
+          "x": 479.4000244140625,
+          "y": 326.34375
+        },
+        {
+          "h": 43.34375,
+          "kind": "claim",
+          "label": "A signed, notarized DMG installs and plays on a clean Apple Silicon Mac.",
+          "w": 306.5625,
+          "x": 479.4000244140625,
+          "y": 484.0
+        },
+        {
+          "h": 11.65625,
+          "kind": "source",
+          "label": "https://github.com/nicolas-found42/sl-remastered/issues/53",
+          "w": 145.8125,
+          "x": 56.0,
+          "y": 565.0
+        },
+        {
+          "h": 14.34375,
+          "kind": "footer",
+          "label": "counter",
+          "w": 54.125,
+          "x": 731.875,
+          "y": 565.0
+        },
+        {
+          "h": 14.0,
+          "kind": "progress-filled",
+          "label": "bar 1",
+          "w": 4.0,
+          "x": 394.5,
+          "y": 563.0
+        },
+        {
+          "h": 14.0,
+          "kind": "progress-filled",
+          "label": "bar 2",
+          "w": 4.0,
+          "x": 401.5,
+          "y": 563.0
+        },
+        {
+          "h": 14.0,
+          "kind": "progress-filled",
+          "label": "bar 3",
+          "w": 4.0,
+          "x": 408.5,
+          "y": 563.0
+        },
+        {
+          "h": 14.0,
+          "kind": "progress-filled",
+          "label": "bar 4",
+          "w": 4.0,
+          "x": 415.5,
+          "y": 563.0
+        },
+        {
+          "h": 14.0,
+          "kind": "progress-filled",
+          "label": "bar 5",
+          "w": 4.0,
+          "x": 422.5,
+          "y": 563.0
+        },
+        {
+          "h": 14.0,
+          "kind": "progress-filled",
+          "label": "bar 6",
+          "w": 4.0,
+          "x": 429.5,
+          "y": 563.0
+        },
+        {
+          "h": 14.0,
+          "kind": "progress-filled",
+          "label": "bar 7",
+          "w": 4.0,
+          "x": 436.5,
+          "y": 563.0
+        },
+        {
+          "h": 14.0,
+          "kind": "progress-filled",
+          "label": "bar 8",
+          "w": 4.0,
+          "x": 443.5,
+          "y": 563.0
+        }
+      ],
+      "size": {
+        "h": 595.0,
+        "w": 842.0
+      }
+    }
+  ]
+}
