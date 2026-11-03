@@ -152,6 +152,134 @@ class Tests(unittest.TestCase):
             with self.assertRaisesRegex(Refused, 'parent budget'): b.check()
         finally: b.close()
 
+    @contextlib.contextmanager
+    def changing_directory(self, target, mutate, *, repeatedly=False):
+        original = Path.lstat
+        calls = mutations = 0
+
+        def raced(path, *args, **kwargs):
+            nonlocal calls, mutations
+            info = original(path, *args, **kwargs)
+            if path == target:
+                calls += 1
+                # Reproduce a real namespace mutation between the scanner's
+                # ending path and open-descriptor metadata observations.
+                if calls % 2 == 0 and (repeatedly or not mutations):
+                    mutations += 1
+                    mutate(mutations)
+            return info
+
+        with mock.patch.object(Path, 'lstat', raced):
+            yield
+
+    def test_one_new_child_directory_race_restarts_complete_scan(self):
+        budget = self.budget()
+        self.addCleanup(budget.close)
+        with self.changing_directory(budget.child,
+                lambda _: (budget.child/'capture').write_bytes(b'new capture')):
+            sample = budget.check('final')
+        self.assertTrue(sample['complete'])
+        self.assertEqual((sample['logical_bytes'], sample['child_bytes']), (25, 11))
+        self.assertEqual(len(sample['scan_attempts']), 2)
+        self.assertFalse(sample['scan_attempts'][0]['complete'])
+        self.assertEqual(sample['scan_attempts'][0]['relative_path'], 'fresh')
+        self.assertIn('directory changed scanning', sample['scan_attempts'][0]['reason'])
+        self.assertTrue(sample['scan_attempts'][1]['complete'])
+        self.assertLedgerUnchanged()
+
+    def test_nested_new_child_directory_race_is_fully_recounted(self):
+        budget = self.budget()
+        self.addCleanup(budget.close)
+        nested = budget.child/'nested'; nested.mkdir()
+        with self.changing_directory(nested, lambda _: (nested/'capture').write_bytes(b'x')):
+            sample = budget.check('final')
+        self.assertEqual((sample['logical_bytes'], sample['child_bytes']), (15, 1))
+        self.assertEqual(sample['scan_attempts'][0]['relative_path'], 'fresh/nested')
+        self.assertTrue(sample['complete'])
+
+    def test_child_permission_change_is_not_a_namespace_retry(self):
+        budget = self.budget()
+        self.addCleanup(budget.close)
+        with self.changing_directory(budget.child,
+                lambda _: budget.child.chmod(budget.child.stat().st_mode ^ 0o010)):
+            with self.assertRaisesRegex(Refused, 'directory changed scanning'):
+                budget.check()
+        self.assertEqual(len(budget.last_sample['scan_attempts']), 1)
+        self.assertFalse(budget.last_sample['complete'])
+
+    def test_new_child_retry_cannot_reset_entry_limit(self):
+        budget = self.budget()
+        self.addCleanup(budget.close)
+        budget.max_entries = 5
+        with self.changing_directory(budget.child,
+                lambda _: (budget.child/'capture').write_bytes(b'x')):
+            with self.assertRaisesRegex(Refused, 'scan entry/deadline bound'):
+                budget.check()
+        self.assertEqual(len(budget.last_sample['scan_attempts']), 2)
+        self.assertFalse(budget.last_sample['complete'])
+
+    def test_new_child_retry_does_not_hide_old_evidence_mutation(self):
+        budget = self.budget()
+        self.addCleanup(budget.close)
+        def mutate(_):
+            (budget.child/'capture').write_bytes(b'x')
+            (self.parent/'old').write_bytes(b'changed bytes!')
+        with self.changing_directory(budget.child, mutate):
+            with self.assertRaisesRegex(Refused, 'old (metadata|bytes) changed'):
+                budget.check('final')
+        self.assertFalse(budget.last_sample['complete'])
+
+    def test_preexisting_directory_race_does_not_retry(self):
+        older = self.parent/'retained'; older.mkdir()
+        budget = self.budget()
+        self.addCleanup(budget.close)
+        with self.changing_directory(older, lambda _: (older/'new').write_bytes(b'x')):
+            with self.assertRaisesRegex(Refused, 'directory changed scanning'):
+                budget.check()
+        self.assertEqual(len(budget.last_sample['scan_attempts']), 1)
+        self.assertFalse(budget.last_sample['complete'])
+
+    def test_child_directory_retry_cannot_hide_overflow_or_special_file(self):
+        budget = self.budget()
+        self.addCleanup(budget.close)
+        with self.changing_directory(budget.child,
+                lambda _: (budget.child/'large').write_bytes(bytes(17))):
+            with self.assertRaisesRegex(Refused, 'child budget exceeded'):
+                budget.check()
+        (budget.child/'large').unlink()
+        with self.changing_directory(budget.child,
+                lambda _: os.mkfifo(budget.child/'pipe')):
+            with self.assertRaisesRegex(Refused, 'special artifact refused'):
+                budget.check()
+        self.assertFalse(budget.last_sample['complete'])
+        self.assertLedgerUnchanged()
+
+    def test_continuous_child_churn_has_finite_attempts(self):
+        budget = self.budget()
+        self.addCleanup(budget.close)
+        with self.changing_directory(budget.child,
+                lambda n: (budget.child/str(n)).write_bytes(b'x'), repeatedly=True):
+            with self.assertRaisesRegex(Refused, 'child directory scan retry bound'):
+                budget.check()
+        self.assertEqual(len(budget.last_sample['scan_attempts']), 3)
+        self.assertTrue(all(not a['complete'] for a in budget.last_sample['scan_attempts']))
+
+    def test_child_retries_share_the_original_scan_deadline(self):
+        budget = self.budget(scan_seconds=.05)
+        self.addCleanup(budget.close)
+        clock = [100.0]
+        def mutate(n):
+            (budget.child/str(n)).write_bytes(b'x')
+            clock[0] += .03
+        with mock.patch.object(prepaid.time, 'monotonic', lambda: clock[0]), \
+                self.changing_directory(budget.child, mutate, repeatedly=True):
+            with self.assertRaisesRegex(Refused, 'deadline bound'):
+                budget.check()
+        self.assertEqual(len(budget.last_sample['scan_attempts']), 2)
+        self.assertFalse(budget.last_sample['complete'])
+        self.assertAlmostEqual(budget.last_sample['scan_attempts'][-1]['elapsed'], .06)
+        self.assertEqual(budget.scan_seconds, .05)
+
     def test_final_old_preservation_does_not_spend_deadline_reading_new_artifact_bytes(self):
         budget = self.budget(scan_seconds=.25)
         self.addCleanup(budget.close)
