@@ -40,6 +40,14 @@ bool createGroundFacePair(Body &body, Body &ground,
                           const std::array<Vec3, 3> &vertices,
                           const Vec3 &normal, GroundFacePair &out,
                           std::string &error);
+// 0049ec00: search a creation-ordered candidate list against one static ground
+// body. Candidates own closest-feature caches independently of admitted contact
+// rows. Success preserves all queried caches, including when no row is selected;
+// Unsupported leaves every candidate unchanged. selected names the one proposed
+// row, whose contact carries the time-fraction priority and world point.
+ContactGeometryResult selectGroundFaceCandidate(
+    const std::vector<GroundFacePair*>& candidates,
+    ContactGeometryWorld& world, std::optional<std::size_t>& selected);
 // Orients a ground contact normal to the stored PHYS face normal. Returns
 // nullopt when the closest-core normal deviates from the face normal by more
 // than 45 degrees: the core query matched a non-ground feature, and stock

@@ -2,8 +2,400 @@
 #include "physics_core_pair.hpp"
 #include <bit>
 #include <cassert>
+#include <cstring>
 using namespace physics;
 int main() {
+  {
+    // Constructor-start original 0049ec00, step39 cache and first step40 row.
+    // first-input analysis 43038a54...a364; original/repeat64/control32 agree.
+    // Preserve native pending/Created flags and ground friction .6 here;
+    // the real object-world fixture independently exercises Port's flags/material.
+    const uint32_t cacheStates[] = {
+        1075838976u,
+        1051003004u,
+        0u,
+        0u,
+        3234918575u,
+        0u,
+        0u,
+        0u,
+        0u,
+        1059760811u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        1u,
+        1065353216u,
+        0u,
+        0u,
+        0u,
+        0u,
+        1065353216u,
+        0u,
+        0u,
+        0u,
+        0u,
+        1065353216u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        1065353216u,
+        1067030938u,
+        0u,
+        0u,
+        0u,
+        0u,
+        1067030938u,
+        0u,
+        0u,
+        0u,
+        0u,
+        1067030938u,
+        0u,
+        1075838976u,
+        1054608928u,
+        0u,
+        0u,
+        3234576803u,
+        0u,
+        0u,
+        0u,
+        0u,
+        1059481191u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        1u,
+        1065353216u,
+        0u,
+        0u,
+        0u,
+        0u,
+        1065353216u,
+        0u,
+        0u,
+        0u,
+        0u,
+        1065353216u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        1065353216u,
+        1067030938u,
+        0u,
+        0u,
+        0u,
+        0u,
+        1067030938u,
+        0u,
+        0u,
+        0u,
+        0u,
+        1067030938u,
+        0u,
+    };
+    const uint32_t landingStates[] = {
+        1075838976u,
+        1051003004u,
+        0u,
+        0u,
+        3234918575u,
+        0u,
+        0u,
+        0u,
+        0u,
+        1059760811u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        1u,
+        1065353216u,
+        0u,
+        0u,
+        0u,
+        0u,
+        1065353216u,
+        0u,
+        0u,
+        0u,
+        0u,
+        1065353216u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        1065353216u,
+        1067030938u,
+        0u,
+        0u,
+        0u,
+        0u,
+        1067030938u,
+        0u,
+        0u,
+        0u,
+        0u,
+        1067030938u,
+        0u,
+        1075838976u,
+        1046035887u,
+        0u,
+        0u,
+        3235260317u,
+        0u,
+        0u,
+        0u,
+        0u,
+        1060040431u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        1u,
+        1065353216u,
+        0u,
+        0u,
+        0u,
+        0u,
+        1065353216u,
+        0u,
+        0u,
+        0u,
+        0u,
+        1065353216u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        1065353216u,
+        1067030938u,
+        0u,
+        0u,
+        0u,
+        0u,
+        1067030938u,
+        0u,
+        0u,
+        0u,
+        0u,
+        1067030938u,
+        0u,
+    };
+    const uint32_t groundStates[] = {
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        1u,
+        1065353216u,
+        0u,
+        0u,
+        0u,
+        0u,
+        1065353216u,
+        0u,
+        0u,
+        0u,
+        0u,
+        1065353216u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        1065353216u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        1u,
+        1065353216u,
+        0u,
+        0u,
+        0u,
+        0u,
+        1065353216u,
+        0u,
+        0u,
+        0u,
+        0u,
+        1065353216u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        1065353216u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+        0u,
+    };
+    const uint32_t expectedContact[] = {
+        1048576000u,
+        3196059648u,
+        3196059648u,
+        1076887552u,
+        0u,
+        3196059650u,
+        0u,
+        1065353216u,
+        912786740u,
+        1015888544u,
+        1058642330u,
+        1045220557u,
+        0u,
+        0u,
+        0u,
+    };
+
+    std::string error;
+    auto proto = createBodyProto(20, 5, .25f, .25f, .25f, nullptr, error);
+    auto staticProto = createBodyProto(0, 0, 0, 0, 0, nullptr, error);
+    assert(proto && staticProto);
+    assert(buildShapeCore(*proto, proto->shape.core, error));
+    Body parent, body, ground;
+    parent.proto = &*proto;
+    parent.flags = 1033;
+    body.proto = &*proto;
+    body.flags = 1029;
+    body.attachment = BodyAttachment{&parent, {}};
+    body.current = 1;
+    std::memcpy(body.state, cacheStates, sizeof cacheStates);
+    ground.proto = &*staticProto;
+    std::memcpy(ground.state, groundStates, sizeof groundStates);
+    const std::array<std::array<Vec3, 3>, 4> vertices{{{{{2, 0, -1}, {3, 0, 0}, {3, 0, -1}}},
+                                                       {{{2, 0, -1}, {2, 0, 0}, {3, 0, 0}}},
+                                                       {{{2, 0, 0}, {3, 0, 1}, {3, 0, 0}}},
+                                                       {{{2, 0, 0}, {2, 0, 1}, {3, 0, 1}}}}};
+    std::array<GroundFacePair, 4> pairs;
+    std::vector<GroundFacePair*> candidates;
+    for (std::size_t i = 0; i < pairs.size(); ++i) {
+      assert(createGroundFacePair(body, ground, vertices[i], {0, 1, 0}, pairs[i], error));
+      candidates.push_back(&pairs[i]);
+    }
+    ContactGeometryWorld world;
+    std::optional<std::size_t> selected;
+    assert(selectGroundFaceCandidate(candidates, world, selected) == ContactGeometryResult::Dropped);
+    assert(!selected);
+    assert(pairs[0].bodyFeature && pairs[0].triangleFeature);
+    body.current = 0;
+    std::memcpy(body.state, landingStates, sizeof landingStates);
+    assert(selectGroundFaceCandidate(candidates, world, selected) == ContactGeometryResult::Updated);
+    assert(selected == 0 && pairs[0].bodyFeature == 6 && pairs[0].triangleFeature == 3);
+    const auto& contact = pairs[0].contact;
+    const float actual[] = {contact.pointA[0], contact.pointA[1], contact.pointA[2],
+                            contact.pointB[0], contact.pointB[1], contact.pointB[2],
+                            contact.normal[0], contact.normal[1], contact.normal[2],
+                            contact.separation, contact.friction, contact.bounce,
+                            contact.normalImpulse, contact.normalForce, contact.frictionForce};
+    for (std::size_t i = 0; i < std::size(actual); ++i)
+      assert(std::bit_cast<uint32_t>(actual[i]) == expectedContact[i]);
+    assert(contact.pendingPriority && std::bit_cast<uint32_t>(*contact.pendingPriority) == 1056964608u);
+  }
   {
     // Original 0049ec00 selector, frozen rotated Port poses at step42:
     // parity-selector-rotation-20261102/run-c1f92a2cf2. Two original runs
@@ -144,11 +536,23 @@ int main() {
     retained.contact.normalForce = 4;
     retained.contact.frictionForce = 5;
     crossing.state[0].pos = crossing.state[1].pos = {0, 0.53f, 0};
+    // 004af970 rejects the old fixed identity; 004a2d10 destroys that row.
+    // A fresh 0049ec00 candidate has independent features and admission band.
     assert(updateGroundFacePair(retained, faceWorld, point) ==
-           ContactGeometryResult::Updated);
-    assert(retained.triangleFeature != oldFeature);
-    assert(!retained.contact.resting && retained.contact.normalImpulse == 0 &&
-           retained.contact.normalForce == 0 && retained.contact.frictionForce == 0);
+           ContactGeometryResult::Dropped);
+    assert(retained.triangleFeature == oldFeature && retained.contact.resting);
+    assert(retained.contact.normalImpulse == 3 && retained.contact.normalForce == 4 &&
+           retained.contact.frictionForce == 5);
+    GroundFacePair replacement;
+    assert(createGroundFacePair(crossing, ground, triangle, {0, 1, 0}, replacement, error));
+    std::optional<std::size_t> selected;
+    assert(selectGroundFaceCandidate({&replacement}, faceWorld, selected) == ContactGeometryResult::Dropped);
+    assert(!selected);
+    crossing.state[0].pos = crossing.state[1].pos = {0, 0.515f, 0};
+    assert(selectGroundFaceCandidate({&replacement}, faceWorld, selected) == ContactGeometryResult::Updated);
+    assert(selected == 0 && replacement.triangleFeature != oldFeature);
+    assert(!replacement.contact.resting && replacement.contact.normalImpulse == 0 &&
+           replacement.contact.normalForce == 0 && replacement.contact.frictionForce == 0);
   }
   {
     // Captured from the deterministic box landing: 004af4f0 accepts this

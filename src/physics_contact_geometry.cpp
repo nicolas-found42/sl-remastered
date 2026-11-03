@@ -356,11 +356,14 @@ ContactGeometryResult updateGroundFacePair(GroundFacePair &pair,
   const auto &core = *body->proto->shape.core;
   auto bodyFeature = pair.bodyFeature;
   auto triangleFeature = pair.triangleFeature;
-  const auto query = [&](const State &a,
-                         const State &b) -> std::optional<CorePair> {
+  const auto query = [&](const State& a,
+                         const State& b) -> std::optional<CorePair> {
+    if ((pair.triangleFeature && *pair.triangleFeature >= pair.triangle.features.size()) ||
+        (pair.bodyFeature && *pair.bodyFeature >= core.features.size()))
+      return std::nullopt;
     // FUN_004af970 keeps valid cached vertex/face geometry. Rewalking a
     // different closest body feature here would discard a valid state-7 row.
-    if (pair.contact.resting && pair.triangleFeature) {
+    if (pair.triangleFeature) {
       std::optional<CorePair> fixed;
       if (body->proto->shape.type == ShapeType::Sphere)
         fixed = cachedPointFace(a, pair.triangle, b, *pair.triangleFeature);
@@ -380,8 +383,22 @@ ContactGeometryResult updateGroundFacePair(GroundFacePair &pair,
         triangleFeature = pair.triangleFeature;
         return fixed;
       }
+      const auto face = pair.triangle.features[*pair.triangleFeature].ref;
+      const bool vertex = body->proto->shape.type == ShapeType::Sphere ||
+                          (pair.bodyFeature && core.features[*pair.bodyFeature].ref.kind == CoreFeatureKind::Vertex);
+      if (face.kind == CoreFeatureKind::Face && vertex) {
+        // 004af970 does not rewalk an invalid cached vertex/face. Its zero
+        // result makes 004a2d10 destroy the admitted row. The independent
+        // 0049ec00 candidate may then propose a different feature identity.
+        CorePair invalid;
+        invalid.pointA = pair.contact.pointA;
+        invalid.pointB = pair.contact.pointB;
+        invalid.normal = pair.contact.normal;
+        invalid.distance = 0;
+        return invalid;
+      }
     }
-    if (pair.contact.resting && pair.triangleFeature) {
+    if (pair.triangleFeature) {
       const bool fixedFace = *pair.triangleFeature < pair.triangle.features.size() &&
           pair.triangle.features[*pair.triangleFeature].ref.kind == CoreFeatureKind::Face;
       const bool fixedVertex = body->proto->shape.type == ShapeType::Sphere ||
@@ -457,11 +474,9 @@ ContactGeometryResult updateGroundFacePair(GroundFacePair &pair,
     // FUN_004a2d10 uses fixed cached features through 004af970. Once a
     // feature leaves its Voronoi region the old row is destroyed; the full
     // walk above supplies a fresh pending contact, not a migrated state 7.
-    if (contact.resting && (bodyFeature != pair.bodyFeature ||
-                            triangleFeature != pair.triangleFeature)) {
-      contact.resting = false;
-      contact.normalImpulse = contact.normalForce = contact.frictionForce = 0;
-    }
+    if (pair.triangleFeature && (bodyFeature != pair.bodyFeature ||
+                                 triangleFeature != pair.triangleFeature))
+      return ContactGeometryResult::Dropped;
     const auto oriented = groundFaceContactNormal(contact.normal,
                                                   pair.faceNormal);
     if (!oriented)
@@ -474,6 +489,221 @@ ContactGeometryResult updateGroundFacePair(GroundFacePair &pair,
     pair.contact = contact;
   }
   return result;
+}
+
+ContactGeometryResult selectGroundFaceCandidate(
+    const std::vector<GroundFacePair*>& candidates,
+    ContactGeometryWorld& world, std::optional<std::size_t>& selected) {
+  selected.reset();
+  if (candidates.empty())
+    return ContactGeometryResult::Dropped;
+  // 00497280/00497910 cache features even without a 0049b830 contact. Work
+  // on copies so an unavailable core walk cannot partially publish caches.
+  std::vector<GroundFacePair> work;
+  for (const auto* candidate : candidates) {
+    if (!candidate || !candidate->contact.a || !candidate->contact.b)
+      return ContactGeometryResult::Unsupported;
+    const auto* body = candidate->contact.a;
+    const auto* ground = candidate->contact.b;
+    if (!body->proto || !ground->proto || body->current > 1 ||
+        ground->current > 1 || !body->proto->shape.core ||
+        !(ground->proto->flags & kProtoStatic) || ground->attachment ||
+        ground != candidates.front()->contact.b)
+      return ContactGeometryResult::Unsupported;
+    if (!std::isfinite(body->proto->shape.radius) || body->proto->shape.radius < 0)
+      return ContactGeometryResult::Unsupported;
+    if ((body->flags & kBodyActive) &&
+        (!validRotation(body->state[body->current]) ||
+         !validRotation(body->state[body->current ^ 1])))
+      return ContactGeometryResult::Unsupported;
+    for (const auto& pose : ground->state)
+      if (pose.pos != Vec3{} || pose.rot != matrixIdentity())
+        return ContactGeometryResult::Unsupported;
+    work.push_back(*candidate);
+  }
+  std::vector<CorePair> values(work.size());
+  uint32_t queries = 0;
+  const auto query = [&](std::size_t index, float fraction) {
+    auto& candidate = work[index];
+    const auto& body = *candidate.contact.a;
+    const auto& shape = body.proto->shape;
+    const auto& core = *shape.core;
+    const State pose = fraction == 1 ? body.state[body.current ^ 1]
+                                     : sampleInternal(body, fraction);
+    const auto& ground = *candidate.contact.b;
+    const auto& groundPose = ground.state[ground.current];
+    std::optional<CorePair> result;
+    switch (shape.type) {
+    case ShapeType::Sphere:
+      result = closestPointPolyhedron(pose, candidate.triangle, groundPose,
+                                      candidate.triangleFeature, true);
+      break;
+    case ShapeType::CylinderX:
+    case ShapeType::CylinderY:
+    case ShapeType::CylinderZ:
+      result = closestSegmentPolyhedron(core, pose, candidate.triangle,
+                                        groundPose, candidate.bodyFeature,
+                                        candidate.triangleFeature, true);
+      break;
+    case ShapeType::Box:
+    case ShapeType::Mesh:
+      result = closestPolyhedronCores(core, pose, candidate.triangle,
+                                      groundPose, candidate.bodyFeature,
+                                      candidate.triangleFeature);
+      break;
+    default:
+      break;
+    }
+    if (!result || !std::isfinite(result->distance))
+      return false;
+    values[index] = *result;
+    values[index].distance -= shape.radius;
+    ++queries;
+    return true;
+  };
+  // 0049ed2b/0049ef20: creation order breaks equal distances, and the first
+  // non-positive distance stops each list traversal immediately.
+  std::size_t best = 0;
+  const auto scan = [&](float fraction, std::optional<std::size_t> already) {
+    best = 0;
+    for (std::size_t i = 0; i < work.size(); ++i) {
+      if ((!already || *already != i) && !query(i, fraction))
+        return false;
+      if (i == 0 || values[i].distance < values[best].distance)
+        best = i;
+      if (values[best].distance <= 0)
+        break;
+    }
+    return true;
+  };
+  float fraction = 1, delta = 0.5f;
+  if (!scan(fraction, std::nullopt))
+    return ContactGeometryResult::Unsupported;
+  for (unsigned iteration = 0;;) {
+    const float distance = values[best].distance;
+    if (distance > 0) {
+      if (iteration == 0)
+        break;
+      if (distance < 0.02f) {
+        const auto& body = *work[best].contact.a;
+        const auto& predicted = body.state[body.current ^ 1];
+        const auto point = transformPoint(predicted.pos, predicted.rot,
+                                          values[best].pointA);
+        const auto& other = values[best].pointB;
+        const auto& normal = values[best].normal;
+        // 0049edf1 uses the predicted body pose, not the sampled pose.
+        const float dot = ((point[2] - other[2]) * normal[2] +
+                           (point[1] - other[1]) * normal[1]) +
+                          (point[0] - other[0]) * normal[0];
+        if (dot < 0)
+          break;
+      }
+      fraction += delta;
+    } else {
+      fraction -= delta;
+    }
+    ++iteration;
+    delta *= 0.5f;
+    if (iteration == 10)
+      break;
+    if (distance <= 0) {
+      if (!query(best, fraction))
+        return ContactGeometryResult::Unsupported;
+      if (values[best].distance <= 0)
+        continue;
+      if (!scan(fraction, best))
+        return ContactGeometryResult::Unsupported;
+    } else if (!scan(fraction, std::nullopt)) {
+      return ContactGeometryResult::Unsupported;
+    }
+  }
+  if (values[best].distance <= 0.02f) {
+    auto& candidate = work[best];
+    const auto& body = *candidate.contact.a;
+    const auto& shape = body.proto->shape;
+    const auto& core = *shape.core;
+    const auto pose = sampleInternal(body, fraction);
+    const auto& ground = *candidate.contact.b;
+    const auto& groundPose = ground.state[ground.current];
+    CorePair value = values[best];
+    if (value.distance <= -shape.radius) {
+      // 0049f020: a fully penetrating core falls back to the triangle's
+      // first face and the first minimum-projection body vertex feature.
+      if (candidate.triangle.features.empty() ||
+          candidate.triangle.features.front().ref.kind != CoreFeatureKind::Face)
+        return ContactGeometryResult::Unsupported;
+      candidate.triangleFeature = 0;
+      const auto& face = candidate.triangle.faces.front();
+      value.normal = face.normal;
+      const auto& normal = value.normal;
+      const Vec3 localNormal{
+          (pose.rot[4] * normal[1] + pose.rot[8] * normal[2]) + pose.rot[0] * normal[0],
+          (pose.rot[5] * normal[1] + pose.rot[9] * normal[2]) + pose.rot[1] * normal[0],
+          (pose.rot[2] * normal[0] + pose.rot[10] * normal[2]) + pose.rot[6] * normal[1]};
+      float minimum = 10000000;
+      candidate.bodyFeature.reset();
+      for (std::size_t i = 0; i < core.features.size(); ++i) {
+        const auto ref = core.features[i].ref;
+        if (ref.kind != CoreFeatureKind::Vertex)
+          continue;
+        const auto& vertex = core.vertices[ref.index].position;
+        const float dot = (localNormal[1] * vertex[1] +
+                           localNormal[2] * vertex[2]) +
+                          localNormal[0] * vertex[0];
+        if (dot < minimum) {
+          minimum = dot;
+          candidate.bodyFeature = i;
+          value.pointA = vertex;
+        }
+      }
+      if (!candidate.bodyFeature || face.vertices.empty())
+        return ContactGeometryResult::Unsupported;
+      const auto& anchor = candidate.triangle.vertices[face.vertices.front()].position;
+      value.distance = (((pose.pos[1] - anchor[1]) * normal[1] +
+                         (pose.pos[2] - anchor[2]) * normal[2]) +
+                        (pose.pos[0] - anchor[0]) * normal[0]) +
+                       minimum;
+      value.pointB = transformPoint(pose.pos, pose.rot, value.pointA);
+    }
+    // Match the two stored additions/subtractions at 0049f2fb/0049f31d.
+    value.distance += shape.radius;
+    Vec3 worldPoint{};
+    auto result = convert(candidate.contact, value, pose, groundPose,
+                          shape.radius, 0, worldPoint, true);
+    if (result != ContactGeometryResult::Updated)
+      return result;
+    candidate.contact.pendingPriority = fraction;
+    candidate.contact.pendingPoint = worldPoint;
+    candidate.contact.featureCross = 0;
+    if (candidate.bodyFeature && candidate.triangleFeature) {
+      const auto a = core.features[*candidate.bodyFeature].ref;
+      const auto b = candidate.triangle.features[*candidate.triangleFeature].ref;
+      if (a.kind == CoreFeatureKind::Edge && b.kind == CoreFeatureKind::Edge) {
+        const auto& ae = core.edges[a.index];
+        const auto& be = candidate.triangle.edges[b.index];
+        Vec3 edgeA{}, edgeB{};
+        const auto a0 = transformPoint(pose.pos, pose.rot, core.vertices[ae.vertices[0]].position);
+        const auto a1 = transformPoint(pose.pos, pose.rot, core.vertices[ae.vertices[1]].position);
+        const auto b0 = transformPoint(groundPose.pos, groundPose.rot, candidate.triangle.vertices[be.vertices[0]].position);
+        const auto b1 = transformPoint(groundPose.pos, groundPose.rot, candidate.triangle.vertices[be.vertices[1]].position);
+        for (std::size_t i = 0; i < 3; ++i) {
+          edgeA[i] = a1[i] - a0[i];
+          edgeB[i] = b1[i] - b0[i];
+        }
+        const Vec3 cross{edgeA[1] * edgeB[2] - edgeA[2] * edgeB[1],
+                         edgeA[2] * edgeB[0] - edgeA[0] * edgeB[2],
+                         edgeA[0] * edgeB[1] - edgeA[1] * edgeB[0]};
+        candidate.contact.featureCross = cross[0] * value.normal[0] +
+                                         cross[1] * value.normal[1] +
+                                         cross[2] * value.normal[2];
+      }
+    }
+    selected = best;
+  }
+  for (std::size_t i = 0; i < candidates.size(); ++i)
+    *candidates[i] = std::move(work[i]);
+  world.queries += queries;
+  return selected ? ContactGeometryResult::Updated : ContactGeometryResult::Dropped;
 }
 
 bool createDynamicBodyPair(Body &first, Body &second, DynamicBodyPair &out,
