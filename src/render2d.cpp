@@ -21,8 +21,28 @@ std::unique_ptr<Render2D> Render2D::forSurface(SDL_Surface* surface, std::string
 	return std::unique_ptr<Render2D>(new Render2D(renderer));
 }
 
+std::unique_ptr<Render2D> Render2D::forOffscreen(int width, int height, SDL_Window* coordinateWindow, std::string& error) {
+  if (width <= 0 || height <= 0 || width > 16384 || height > 16384) {
+    error = "invalid offscreen dimensions";
+    return nullptr;
+  }
+  SDL_Renderer* renderer = SDL_CreateGPURenderer(nullptr, nullptr);
+  if (!renderer) { error = SDL_GetError(); return nullptr; }
+  auto result = std::unique_ptr<Render2D>(new Render2D(renderer));
+  result->coordinateWindow_ = coordinateWindow;
+  result->backing_ = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_TARGET, width, height);
+  if (!result->backing_ || !SDL_SetRenderTarget(renderer, result->backing_) ||
+      !SDL_SetRenderLogicalPresentation(renderer, width, height, SDL_LOGICAL_PRESENTATION_LETTERBOX)) {
+    error = SDL_GetError();
+    return nullptr;
+  }
+  error.clear();
+  return result;
+}
+
 Render2D::~Render2D() {
 	for (SDL_Texture* texture : textures_) SDL_DestroyTexture(texture);
+  SDL_DestroyTexture(backing_);
 	SDL_DestroyRenderer(renderer_);
 }
 
@@ -152,7 +172,7 @@ bool Render2D::outputSize(int& width, int& height, std::string& error) const {
   if (!SDL_GetRenderLogicalPresentation(renderer_, &width, &height, &mode)) { error = SDL_GetError(); return false; }
   // SDL's current output size is the physical presentation rectangle, not
   // the logical content dimensions (e.g. 1265x949 for 800x600 fullscreen).
-  if (mode == SDL_LOGICAL_PRESENTATION_DISABLED && !SDL_GetRenderOutputSize(renderer_, &width, &height)) { error = SDL_GetError(); return false; }
+  if (mode == SDL_LOGICAL_PRESENTATION_DISABLED && !SDL_GetCurrentRenderOutputSize(renderer_, &width, &height)) { error = SDL_GetError(); return false; }
   error.clear(); return true;
 }
 
@@ -167,14 +187,56 @@ uint32_t Render2D::maxTextureSize() const {
 }
 
 bool Render2D::presentation(int width, int height, std::string& error) {
+  if (width <= 0 || height <= 0 || width > 16384 || height > 16384) {
+    error = "invalid presentation dimensions";
+    return false;
+  }
+  if (backing_) {
+    SDL_Texture* next = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_TARGET, width, height);
+    if (!next) { error = SDL_GetError(); return false; }
+    if (!SDL_SetRenderTarget(renderer_, next) ||
+        !SDL_SetRenderLogicalPresentation(renderer_, width, height, SDL_LOGICAL_PRESENTATION_LETTERBOX)) {
+      error = SDL_GetError();
+      SDL_SetRenderTarget(renderer_, backing_);
+      SDL_DestroyTexture(next);
+      return false;
+    }
+    SDL_DestroyTexture(backing_);
+    backing_ = next;
+    error.clear();
+    return true;
+  }
   if (!SDL_SetRenderLogicalPresentation(renderer_, width, height, SDL_LOGICAL_PRESENTATION_LETTERBOX)) {
     error = SDL_GetError(); return false;
   }
   error.clear(); return true;
 }
 bool Render2D::windowToRender(float x, float y, float& renderX, float& renderY) const {
+  if (backing_) {
+    int width = 0, height = 0, sourceWidth = 0, sourceHeight = 0;
+    std::string error;
+    if (!outputSize(width, height, error)) return false;
+    sourceWidth = width;
+    sourceHeight = height;
+    if (coordinateWindow_ && !SDL_GetWindowSize(coordinateWindow_, &sourceWidth, &sourceHeight)) return false;
+    if (sourceWidth <= 0 || sourceHeight <= 0) return false;
+    renderX = x * static_cast<float>(width) / static_cast<float>(sourceWidth);
+    renderY = y * static_cast<float>(height) / static_cast<float>(sourceHeight);
+    return true;
+  }
   return SDL_RenderCoordinatesFromWindow(renderer_, x, y, &renderX, &renderY);
 }
 bool Render2D::renderToWindow(float x, float y, float& windowX, float& windowY) const {
+  if (backing_) {
+    int width = 0, height = 0, sourceWidth = 0, sourceHeight = 0;
+    std::string error;
+    if (!outputSize(width, height, error) || width <= 0 || height <= 0) return false;
+    sourceWidth = width;
+    sourceHeight = height;
+    if (coordinateWindow_ && !SDL_GetWindowSize(coordinateWindow_, &sourceWidth, &sourceHeight)) return false;
+    windowX = x * static_cast<float>(sourceWidth) / static_cast<float>(width);
+    windowY = y * static_cast<float>(sourceHeight) / static_cast<float>(height);
+    return true;
+  }
   return SDL_RenderCoordinatesToWindow(renderer_, x, y, &windowX, &windowY);
 }

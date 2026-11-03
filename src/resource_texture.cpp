@@ -303,7 +303,8 @@ ResourceTextureResult resourceTextureLookup(const std::vector<uint8_t> &rpk,
     return fail("invalid resource root");
   const auto target = std::filesystem::canonical(base / relative, ec);
   if (ec)
-    return fail("texture file not found");
+    return fail(("texture file not found: " + relative.string() +
+                 " (" + ec.message() + ")").c_str());
   auto prefix = base.begin(), component = target.begin();
   for (; prefix != base.end() && component != target.end();
        ++prefix, ++component)
@@ -359,6 +360,7 @@ bool resourceTextureLoad(const std::vector<uint8_t> &rpk, uint16_t localId,
     pixels.width = decoded.width;
     pixels.height = decoded.height;
     pixels.rgba = std::move(decoded.rgba);
+    pixels.authoredMipChain = true;
     for (size_t i = 1; i < image.levels.size(); ++i) {
       DdsPixels mip;
       if (!ddsDecodeLevel(data.data(), data.size(), image, image.levels[i], mip,
@@ -388,6 +390,7 @@ bool resourceTextureLoad(const std::vector<uint8_t> &rpk, uint16_t localId,
     pixels.width = decoded.width;
     pixels.height = decoded.height;
     pixels.rgba = std::move(decoded.rgba);
+    pixels.authoredMipChain = true;
     for (size_t i = 1; i < image.levels.size(); ++i) {
       PtxPixels mip{};
       if (!ptxDecode(data.data(), data.size(), image.levels[i], mip, error)) {

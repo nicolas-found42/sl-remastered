@@ -75,7 +75,7 @@ int main() {
   const auto loadingFile = resourceTextureLookup(pack, 0xa8, "ref/raw");
   CHECK(loadingFile.ok && loadingFile.path.filename() == "Loading.dds");
   CHECK(resourceTextureLoad(pack, 0xa8, "ref/raw", loading, loadError));
-  CHECK(loading.width == 1024 && loading.height == 1024 &&
+  CHECK(loading.authoredMipChain && loading.width == 1024 && loading.height == 1024 &&
         loading.rgba.size() == 1024u * 1024u * 4u);
   if (loading.rgba.size() == 1024u * 1024u * 4u) {
     const size_t center = (512u * 1024u + 512u) * 4u;
@@ -93,7 +93,7 @@ int main() {
   }
   ResourceTexturePixels ptx{};
   CHECK(resourceTextureLoad(pack, 0x28, "ref/raw", ptx, loadError));
-  CHECK(ptx.width > 0 && ptx.height > 0 && !ptx.rgba.empty() && ptx.lodBias &&
+  CHECK(ptx.authoredMipChain && ptx.width > 0 && ptx.height > 0 && !ptx.rgba.empty() && ptx.lodBias &&
         *ptx.lodBias == 3.0f);
   if (result.ok) {
     std::ifstream asset(result.path, std::ios::binary);
@@ -180,7 +180,7 @@ int main() {
   CHECK(asphalt.ok && asphalt.path.filename() == "asphalt.tga");
   ResourceTexturePixels tga{};
   CHECK(resourceTextureLoad(particlesPack, 0x15, "ref/raw", tga, loadError));
-  CHECK(tga.width == 30 && tga.height == 30 &&
+  CHECK(!tga.authoredMipChain && tga.width == 30 && tga.height == 30 &&
         tga.rgba.size() == 30u * 30u * 4u);
   // Exercise origin conversion and packet bounds through the public loader.
   std::filesystem::path root;

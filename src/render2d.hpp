@@ -20,6 +20,9 @@ class Render2D {
 public:
 	static std::unique_ptr<Render2D> forWindow(SDL_Window* window, std::string& error);
 	static std::unique_ptr<Render2D> forSurface(SDL_Surface* surface, std::string& error);
+  // Owns an accelerated offscreen target. The optional coordinate window is
+  // never presented; it supplies the coordinate space of synthetic input.
+  static std::unique_ptr<Render2D> forOffscreen(int width, int height, SDL_Window* coordinateWindow, std::string& error);
 	~Render2D();
 	Render2D(const Render2D&) = delete;
 	Render2D& operator=(const Render2D&) = delete;
@@ -46,5 +49,7 @@ public:
 private:
 	explicit Render2D(SDL_Renderer* renderer) : renderer_(renderer) {}
 	SDL_Renderer* renderer_;
+  SDL_Texture* backing_ = nullptr;
+  SDL_Window* coordinateWindow_ = nullptr;
 	std::vector<SDL_Texture*> textures_;
 };

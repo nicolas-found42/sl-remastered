@@ -3,6 +3,7 @@
 #include "scene_raster3d.hpp"
 #include "car_tint.hpp"
 #include "scene_render_light.hpp"
+#include "scene_2d.hpp"
 
 #include "render2d.hpp"
 #include "world_model.hpp"
@@ -1381,7 +1382,8 @@ void testPaintTexture() {
     r.clear(0, 0, 0);
     d.material.texture = &textures.at(bodyPaintTexture(original, 0x20025, 0x303002a));
     CHECK(r.draw(d, error));
-    CHECK(near(pixelAt(r, W / 2, H / 2), Px{200, 16, 70}));
+    CHECK(near(pixelAt(r, W / 2, H / 2), original == 0x20025u
+                  ? Px{200, 16, 70} : Px{20, 40, 60}));
   }
 }
 
@@ -1432,6 +1434,7 @@ void testPaintDrawPath() {
   // A painted record swaps its texture; an unpainted one (glass, trim, which
   // never received Part.setTexture) keeps its material texture.
   CHECK(scenePaintTexture(0x20025, 0x20025, 0x303002a) == 0x303002a);
+  CHECK(scenePaintTexture(0x20026, 0x20025, 0x303002a) == 0x20026);
   CHECK(scenePaintTexture(0x20026, 0x20025, 0) == 0x20026);
   std::string error;
   Raster3D r;
@@ -1458,6 +1461,36 @@ void testPaintDrawPath() {
     CHECK(r.draw(d, error));
     CHECK(near(pixelAt(r, W / 2, H / 2), expected));
   }
+  // Native material replacement changes the first matching resource-table
+  // link. Unrelated trim, global environment, glass alpha and a later duplicate
+  // link must survive painting the same Part.
+  textures.emplace(0x20027, checker(1, 1, {0, 0, 200}, {0, 0, 200}));
+  Raster3DTexture glass;
+  const uint8_t glassPixel[4] = {20, 40, 60, 128};
+  CHECK(Raster3DTexture::build(1, 1, glassPixel, sizeof glassPixel, glass, error));
+  textures.emplace(0x20028, std::move(glass));
+  LinkOwner base, trim, environment, transparent;
+  base.value = 0x20025;
+  trim.value = 0x20026;
+  environment.value = 0x20027;
+  transparent.value = 0x20028;
+  SceneMaterialResources bindings(nullptr,
+      {&base, &trim, &base, &environment, &transparent});
+  const auto sample = [&](uint32_t id) -> const Raster3DTexture* {
+    const auto found = textures.find(id);
+    return found == textures.end() ? nullptr : &found->second;
+  };
+  const Px expected[] = {{200, 16, 70}, {20, 40, 60}, {180, 180, 180},
+                         {0, 0, 200}, {10, 20, 30}};
+  for (size_t slot = 0; slot < 5; ++slot) {
+    r.clear(0, 0, 0);
+    d.material.blend = slot == 4 ? Raster3DBlend::AlphaBlend : Raster3DBlend::Opaque;
+    d.material.texture = sceneBodyTexture(sample, bindings, slot, 0x20025, 0x303002a);
+    CHECK(d.material.texture);
+    CHECK(r.draw(d, error));
+    CHECK(near(pixelAt(r, W / 2, H / 2), expected[slot]));
+  }
+  CHECK(bindings.textureId(0) == 0x20025 && bindings.textureId(2) == 0x20025);
 }
 
 void testBodyTint() {

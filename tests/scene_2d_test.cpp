@@ -10,7 +10,10 @@
 #include "resource_texture.hpp"
 #include "resource_world.hpp"
 #include "scene_2d.hpp"
+#include "scene_raster3d.hpp"
 #include "scx.hpp"
+#include "car_runtime.hpp"
+#include "part_physics.hpp"
 #include <SDL3/SDL.h>
 
 #include <algorithm>
@@ -25,7 +28,193 @@
       return 1;                                                                \
     }                                                                          \
   } while (0)
+// Exercise the real world scene cache and draw, not the standalone file loader.
+static int sceneAuthoredMipRendering() {
+  std::string error;
+  PackRegistry registry("ref/raw");
+  uint32_t textureId = 0;
+  CHECK(registry.resolveLiteral("frontend.rpk", 0xa8, textureId, error));
+  GameWorld world;
+  auto* root = world.addRoot();
+  CHECK(root);
+  ResourceWorld resources(world, registry);
+  const auto texture = resources.lookup(textureId, 7);
+  CHECK(texture.status == LookupStatus::Found && texture.node.packNode);
+  auto pixels = std::make_shared<ResourceTextureCache>();
+  texture.node.packNode->texture = pixels;
+  auto* meshNode = world.addTypedChild(*root, 5, "mip-mesh", 0);
+  auto* typeNode = world.addTypedChild(*root, 14, "mip-type", 0);
+  auto* objectNode = world.addTypedChild(*root, 3, "mip-object", 0);
+  CHECK(meshNode && typeNode && objectNode);
+  auto model = std::make_shared<ScxModel>();
+  ScxMaterial material;
+  material.diffuse = {1, 1, 1, 1};
+  material.maps.push_back({0, 0, 0, 3, 1, 1, 0, 0});
+  model->materials.push_back(material);
+  ScxMesh quad;
+  quad.materialIndex = 0;
+  quad.vertexCount = 4;
+  quad.positions = {-10, -10, 5, 10, -10, 5, 10, 10, 5, -10, 10, 5};
+  quad.uv1 = {0, 0, 128, 0, 128, 128, 0, 128};
+  quad.indices = {0, 1, 2, 0, 2, 3};
+  model->meshes.push_back(quad);
+  CHECK(resources.bindSceneMesh(resources.resolve(meshNode), model));
+  CHECK(resources.bindSceneMaterial(resources.resolve(typeNode),
+      std::make_shared<SceneMaterialResources>(meshNode,
+          std::vector<LinkOwner*>{texture.node.owner})));
+  CHECK(resources.bindSceneRenderInstance(resources.resolve(objectNode),
+      std::make_shared<SceneRenderInstance>(typeNode)));
+  using Surface = std::unique_ptr<SDL_Surface, decltype(&SDL_DestroySurface)>;
+  Surface surface(SDL_CreateSurface(128, 128, SDL_PIXELFORMAT_RGBA32), SDL_DestroySurface);
+  CHECK(surface);
+  auto renderer = Render2D::forSurface(surface.get(), error);
+  CHECK(renderer);
+  const std::array<float, 16> identity{1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
+  ViewportInstance viewport;
+  viewport.left = viewport.top = 0;
+  viewport.width = viewport.height = 1;
+  const auto solid = [](uint32_t size, std::array<uint8_t, 4> color) {
+    std::vector<uint8_t> result(size_t(size) * size * 4);
+    for (size_t i = 0; i < result.size(); i += 4)
+      std::copy(color.begin(), color.end(), result.begin() + static_cast<ptrdiff_t>(i));
+    return result;
+  };
+  const auto draw = [&]() {
+    SceneRaster3D scene;
+    scene.addObject(*objectNode);
+    renderer->clear(0, 0, 0, 255, error);
+    scene.draw(resources, *renderer, {}, identity, identity, viewport, nullptr, nullptr);
+    renderer->present(error);
+    const auto* center = static_cast<const uint8_t*>(surface->pixels) + 64 * surface->pitch + 64 * 4;
+    return std::array<uint8_t, 3>{center[0], center[1], center[2]};
+  };
+  auto& image = pixels->pixels;
+  image.width = image.height = 8;
+  image.rgba = solid(8, {255, 0, 0, 255});
+  CHECK(draw() == (std::array<uint8_t, 3>{255, 0, 0}));
+  image.authoredMipChain = true;
+  image.mipLevels = {{4, 4, solid(4, {0, 255, 0, 255})},
+                     {2, 2, solid(2, {0, 0, 255, 255})}};
+  // A deliberately truncated chain clamps to its authored blue2x2 level.
+  CHECK(draw() == (std::array<uint8_t, 3>{0, 0, 255}));
+  image.mipLevels.pop_back();
+  CHECK(draw() == (std::array<uint8_t, 3>{0, 255, 0}));
+  image.mipLevels.clear();
+  image.rgba = solid(8, {0, 255, 0, 255});
+  for (size_t y = 0; y < 8; ++y) {
+    image.rgba[y * 8 * 4] = 255;
+    image.rgba[y * 8 * 4 + 1] = 0;
+  }
+  // Base-only authored input must stay atLOD0 under strong minification.
+  CHECK(draw() == (std::array<uint8_t, 3>{0, 255, 0}));
+  image.authoredMipChain = false;
+  const auto generated = draw();
+  CHECK(generated[0] > 0 && generated[1] < 255 && generated[2] == 0);
+  uint32_t mixTextureId = 0, environmentId = 0;
+  CHECK(registry.resolveLiteral("frontend.rpk", 0xaf, mixTextureId, error));
+  CHECK(registry.resolveLiteral("maps\\skydome.rpk", 0x3a, environmentId, error));
+  const auto mixTexture = resources.lookup(mixTextureId, 7);
+  const auto environment = resources.lookup(environmentId, 7);
+  CHECK(mixTexture.node.packNode && environment.node.packNode);
+  auto mixPixels = std::make_shared<ResourceTextureCache>();
+  auto environmentPixels = std::make_shared<ResourceTextureCache>();
+  mixTexture.node.packNode->texture = mixPixels;
+  environment.node.packNode->texture = environmentPixels;
+  image.width = image.height = 1;
+  image.authoredMipChain = true;
+  image.rgba = {128, 0, 0, 255};
+  mixPixels->pixels.width = mixPixels->pixels.height = 1;
+  mixPixels->pixels.rgba = {0, 128, 0, 128};
+  environmentPixels->pixels.width = environmentPixels->pixels.height = 1;
+  environmentPixels->pixels.rgba = {0, 0, 255, 255};
+  auto& mixedMaterial = model->materials.front();
+  mixedMaterial.flags = 0x11;
+  mixedMaterial.maps = {{0, 0, 1, 3, 1, 1, 0, 0},
+                        {1, 1, 0, 3, 1, 1, 0, 0},
+                        {3, 2, 0xfffffffeu, 3, 1, 1, 0, 0}};
+  mixedMaterial.properties = {{0x01000001u, 0x3e99999au}}; // 0.3f
+  model->meshes.front().uv1.assign(8, .25f);
+  model->meshes.front().uv2.assign(8, .75f);
+  model->meshes.front().normals = {0, 0, -1, 0, 0, -1, 0, 0, -1, 0, 0, -1};
+  CHECK(resources.bindSceneMaterial(resources.resolve(typeNode),
+      std::make_shared<SceneMaterialResources>(meshNode,
+          std::vector<LinkOwner*>{texture.node.owner, mixTexture.node.owner})));
+  Raster3DLight halfLight;
+  halfLight.enabled = true;
+  halfLight.ambient = {.5f, .5f, .5f};
+  halfLight.diffuse = {0, 0, 0};
+  const auto drawMixed = [&]() {
+    SceneRaster3D mixedScene;
+    mixedScene.addObject(*objectNode);
+    renderer->clear(0, 0, 0, 255, error);
+    mixedScene.draw(resources, *renderer, {}, identity, identity, viewport,
+                    nullptr, &halfLight, environmentId);
+    renderer->present(error);
+    const auto* center = static_cast<const uint8_t*>(surface->pixels) +
+                         64 * surface->pitch + 64 * 4;
+    return std::array<uint8_t, 3>{center[0], center[1], center[2]};
+  };
+  const auto mixed = drawMixed();
+  CHECK(mixed[0] >= 31 && mixed[0] <= 33);
+  CHECK(mixed[1] >= 31 && mixed[1] <= 33);
+  CHECK(mixed[2] == 76);
+  // Reflection is its own stage and follows the authored coefficient.
+  mixedMaterial.properties.front().raw = 0;
+  const auto noReflection = drawMixed();
+  CHECK(noReflection[0] == mixed[0] && noReflection[1] == mixed[1]);
+  CHECK(noReflection[2] == 0);
+  mixedMaterial.properties.front().raw = 0x3e99999au;
+  // Map0 requests UV channel1 (uv2), not channel0 (uv1). Distinct texels
+  // make silently reusing the base UV stream observable in the final draw.
+  image.width = 2;
+  image.rgba = {128, 0, 0, 255, 0, 0, 128, 255};
+  const auto selectedChannel = drawMixed();
+  CHECK(selectedChannel[0] == 0);
+  CHECK(selectedChannel[1] >= 31 && selectedChannel[1] <= 33);
+  CHECK(selectedChannel[2] >= 107 && selectedChannel[2] <= 109);
+  // Exercise the actual painted-Car append path: only the bound paint link
+  // changes. The blend map and global environment remain independent.
+  uint32_t paintId = 0;
+  CHECK(registry.resolveLiteral("frontend.rpk", 0x28, paintId, error));
+  const auto paint = resources.lookup(paintId, 7);
+  CHECK(paint.node.packNode);
+  auto paintPixels = std::make_shared<ResourceTextureCache>();
+  paint.node.packNode->texture = paintPixels;
+  paintPixels->pixels.width = paintPixels->pixels.height = 1;
+  paintPixels->pixels.rgba = {128, 128, 0, 255};
+  image.width = 1;
+  image.rgba = {128, 0, 0, 255};
+  auto* carNode = world.addTypedChild(*root, 3, "painted-car", 0);
+  CHECK(carNode);
+  carNode->carInstance = std::make_unique<CarRuntimeInstance>();
+  auto& car = *carNode->carInstance;
+  car.isCar = true;
+  car.renderType = typeNode->value;
+  car.meshId = meshNode->value;
+  car.defaultTextureId = textureId;
+  car.textureId = paintId;
+  car.partPhysics = std::make_shared<PartPhysics>();
+  car.partPhysics->root = std::make_unique<physics::Body>();
+  SceneRaster3D paintedScene;
+  renderer->clear(0, 0, 0, 255, error);
+  paintedScene.draw(resources, *renderer, {nullptr}, identity, identity,
+                    viewport, nullptr, &halfLight, environmentId);
+  renderer->present(error);
+  const auto* paintedCenter = static_cast<const uint8_t*>(surface->pixels) +
+                              64 * surface->pitch + 64 * 4;
+  CHECK(paintedCenter[0] >= 31 && paintedCenter[0] <= 33);
+  CHECK(paintedCenter[1] >= 63 && paintedCenter[1] <= 65);
+  CHECK(paintedCenter[2] == 76);
+  carNode->carInstance.reset();
+  paint.node.packNode->texture.reset();
+  mixTexture.node.packNode->texture.reset();
+  environment.node.packNode->texture.reset();
+  texture.node.packNode->texture.reset();
+  return 0;
+}
+
 int main() {
+  CHECK(sceneAuthoredMipRendering() == 0);
   {
     ScxMaterial material;
     CHECK(!sceneScyMaterialType(material));
@@ -681,7 +870,7 @@ int main() {
       auto textureCache = loadingNode.node.packNode->texture;
       CHECK(textureCache);
       auto savedPixels = textureCache->pixels;
-      textureCache->pixels = {1, 1, {255, 0, 0, 255}, {}, {}};
+      textureCache->pixels = {1, 1, {255, 0, 0, 255}, {}, {}, {}};
       Raster3D raster;
       SceneSpatialTextures spatialTextures;
       CHECK(raster.resize(128, 128, error));
@@ -1094,7 +1283,7 @@ int main() {
     // The software renderer exercises both passes with texture alpha. Vertex
     // fog is range-based; the selected stock device branch is not verified.
     const uint8_t fogTexel[] = {200, 40, 20, 128};
-    ResourceTexturePixels fogPixels{1, 1, {200, 40, 20, 128}, {}, {}};
+    ResourceTexturePixels fogPixels{1, 1, {200, 40, 20, 128}, {}, {}, {}};
     const auto fogTexture =
         renderer->texture(1, 1, fogTexel, sizeof fogTexel, error);
     ScxMesh fogMesh = importScaleMesh;
@@ -1123,7 +1312,7 @@ int main() {
     if (fogTexture)
       CHECK(renderer->releaseTexture(*fogTexture, error));
     const uint8_t opaqueFogTexel[] = {200, 40, 20, 255};
-    ResourceTexturePixels opaqueFogPixels{1, 1, {200, 40, 20, 255}, {}, {}};
+    ResourceTexturePixels opaqueFogPixels{1, 1, {200, 40, 20, 255}, {}, {}, {}};
     const auto opaqueFogTexture =
         renderer->texture(1, 1, opaqueFogTexel, sizeof opaqueFogTexel, error);
     const CameraFog farFog{0x0014c864, 0, 0.1f};

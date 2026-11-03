@@ -52,7 +52,7 @@ static bool sceneLoadMeshImpl(ResourceWorld &world, uint32_t id,
   }
   std::istringstream input(payload);
   std::string line, source;
-  bool fontFlagsSeen = false;
+  bool flagsSeen = false;
   while (std::getline(input, line)) {
     const auto begin = line.find_first_not_of(" \t\r");
     if (begin == std::string::npos)
@@ -72,15 +72,20 @@ static bool sceneLoadMeshImpl(ResourceWorld &world, uint32_t id,
     const auto value = line.substr(first, last - first + 1);
     if (key == "sourcefile" && source.empty())
       source = value;
-    else if (allowFontFlags && key == "flags" && !fontFlagsSeen &&
-             (value == "16" || value == "16.000"))
-      fontFlagsSeen = true;
-    else if (key == "radius" || key == "slot" || key == "oc_rect") {
+    else if (key == "flags" && !flagsSeen &&
+             ((value == "8" || value == "8.000") ||
+              (allowFontFlags && (value == "16" || value == "16.000")))) {
+      // Stock flag 8 requests private writable mesh data. Each SCX load and
+      // cached-model copy here owns its vertex vectors, including the scale
+      // and duplicate paths; no shared upload buffer is mutated.
+      flagsSeen = true;
+    } else if (key == "radius" || key == "slot" || key == "oc_rect") {
       // City mesh metadata (cull radius, slot index, occlusion rectangle).
       // Stock reads them into the mesh record; the bounded renderer ignores
       // them, so the values are accepted without interpretation.
     } else {
-      error = "unsupported mesh directive";
+      error = "mesh " + std::to_string(id) + ": unsupported directive '" +
+              key + " " + value + "'";
       return false;
     }
   }

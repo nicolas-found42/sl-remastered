@@ -32,14 +32,13 @@ resolveBodyTint(const std::map<uint32_t, uint32_t>& tints, uint32_t renderType,
 
 // FUN_00467ff0 replaces the render record's texture with the freshly set one
 // (`*(record + 0x84) != *(new + 8)` then the record's setter). The record is
-// per part, so the paint only lands on the parts Part.setTexture was called
-// on: glass and trim records never receive it. `paintTexture` is that
-// record's texture after setTexture; 0 means the part was never painted and
-// keeps its material texture.
+// per part. Its material virtual replacement matches the old resource ID;
+// unrelated texture links (including glass and trim on that same Part) stay
+// unchanged. The scene binding additionally preserves its first-match scope.
 inline uint32_t bodyPaintTexture(uint32_t materialTexture, uint32_t defaultTexture,
                                  uint32_t paintTexture) {
-  (void)defaultTexture;
-  return paintTexture ? paintTexture : materialTexture;
+  return paintTexture && materialTexture == defaultTexture
+             ? paintTexture : materialTexture;
 }
 
 inline void applyBodyTint(std::array<float, 4> &diffuse, uint32_t color) {

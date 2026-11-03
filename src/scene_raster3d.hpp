@@ -14,6 +14,7 @@ struct ViewportInstance;
 struct CameraFog;
 struct GamePolygonGroup;
 struct PreparedSpatialGamePayload;
+class SceneMaterialResources;
 
 // Converts the packed POLY vertex records to the arrays consumed by Raster3D.
 bool sceneGroundMesh(const GamePolygonGroup &group, ScxMesh &mesh,
@@ -56,6 +57,13 @@ sceneBodyTexture(const std::function<const Raster3DTexture *(uint32_t)> &sample,
                  uint32_t materialId, uint32_t defaultTextureId,
                  uint32_t currentTextureId);
 
+// Resolve a bound texture table slot, preserving native first-match replacement
+// when multiple entries name the same old resource.
+const Raster3DTexture *sceneBodyTexture(
+    const std::function<const Raster3DTexture *(uint32_t)> &sample,
+    const SceneMaterialResources &material, size_t textureIndex,
+    uint32_t defaultTextureId, uint32_t currentTextureId);
+
 class SceneRaster3D {
 public:
   ~SceneRaster3D();
@@ -66,7 +74,7 @@ public:
             const std::array<float, 16> &view,
             const std::array<float, 16> &projection,
             const ViewportInstance &viewport, const CameraFog *fog,
-            const Raster3DLight *worldLight);
+            const Raster3DLight *worldLight, uint32_t globalEnvmapId = 0);
 
 private:
   struct GroundMeshCache {

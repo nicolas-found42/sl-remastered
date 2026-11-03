@@ -10,6 +10,9 @@ struct SDL_AudioStream;
 class AudioOutput {
 public:
   static constexpr size_t maxQueuedSamples = 48000 * 2 * 2;
+  // Call before audio initialization. Routes this process's physical final mix
+  // to a new RAW file, preserving all logical streams and their pause state.
+  static bool configurePrivateCapture(const std::string& path, std::string& error);
   static std::unique_ptr<AudioOutput> create(std::string& error);
   ~AudioOutput();
   AudioOutput(const AudioOutput&) = delete;
@@ -23,11 +26,10 @@ public:
   // "<driver> device '<name>'" of the opened playback device, for evidence.
   std::string describeDevice() const;
   // Name of the bound playback device (e.g. "MacBook Pro Speakers"), empty
-  // on failure. Lets a run prove it opened real hardware, not a dummy sink.
+  // on failure. A device name alone does not establish its output route.
   bool deviceName(std::string& name, std::string& error) const;
-  // Windowed level of the samples handed to the real device since the last
-  // call: RMS and peak as linear amplitudes plus the frame count. Proves the
-  // queued signal is non-silent; it says nothing about acoustic loudness.
+  // Level of samples queued since the last call, before conversion/consumption.
+  // Final output evidence comes from the captured mix rather than this meter.
   bool meter(double& rms, float& peak, size_t& frames, std::string& error);
 
 private:

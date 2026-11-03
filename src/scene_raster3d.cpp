@@ -19,6 +19,172 @@
 #include <set>
 
 namespace {
+// CMaterial_MixTASpheremap, newer 00432f38: mix two authored maps, light
+// that result, then add the environment map multiplied by the reflection
+// property. Keep every stage explicit for the rasterizer's state validation.
+struct MixSpheremapDraw {
+  Raster3DFixedState state;
+  Raster3DFixedDraw fixed;
+  std::array<ScxTextureMap, 3> maps;
+  std::array<const Raster3DTexture*, 3> textures{};
+  std::array<std::vector<float>, 3> coordinates;
+  std::vector<uint8_t> colors, specular;
+  float reflection = .5f;
+  std::array<float, 3> emissive{};
+};
+
+bool prepareMixSpheremap(Raster3DDraw& draw, const ScxMesh& mesh,
+                         const ScxMaterial& material, MixSpheremapDraw& out,
+                         std::string& error) {
+  if (!draw.normals || draw.material.blend == Raster3DBlend::AlphaBlend ||
+      material.functionWord != 0) {
+    error = "MixTASpheremap: unsupported normal or function state";
+    return false;
+  }
+  auto unit = [](std::array<float, 3>& value) {
+    const float length = std::sqrt(value[0] * value[0] + value[1] * value[1] +
+                                   value[2] * value[2]);
+    if (!(length > 0) || !std::isfinite(length))
+      return false;
+    for (auto& component : value)
+      component /= length;
+    return true;
+  };
+  const auto transform = [](const std::array<float, 3>& v,
+                            const std::array<float, 16>& matrix, float w) {
+    return std::array<float, 3>{
+        v[0] * matrix[0] + v[1] * matrix[4] + v[2] * matrix[8] + w * matrix[12],
+        v[0] * matrix[1] + v[1] * matrix[5] + v[2] * matrix[9] + w * matrix[13],
+        v[0] * matrix[2] + v[1] * matrix[6] + v[2] * matrix[10] + w * matrix[14]};
+  };
+  std::array<float, 3> toLight = draw.light.toLight;
+  if (draw.light.enabled && !unit(toLight)) {
+    error = "MixTASpheremap: invalid light direction";
+    return false;
+  }
+  // The camera view is a rigid inverse. 00441ad0 reads the camera's world
+  // forward vector and subtracts its horizontal angle / (2*pi) from U.
+  const float yaw = std::atan2(draw.view[2], draw.view[10]);
+  const float yawOffset = -yaw / 6.2831853071795864769f;
+  for (auto& coordinates : out.coordinates)
+    coordinates.resize(draw.vertexCount * 3);
+  out.colors.resize(draw.vertexCount * 4);
+  out.specular.assign(draw.vertexCount * 4, 0);
+  for (size_t vertex = 0; vertex < draw.vertexCount; ++vertex) {
+    std::array<float, 3> normal{draw.normals[vertex * 3],
+                                draw.normals[vertex * 3 + 1],
+                                draw.normals[vertex * 3 + 2]};
+    normal = transform(normal, draw.model, 0);
+    if (!unit(normal)) {
+      error = "MixTASpheremap: invalid normal";
+      return false;
+    }
+    const float dot = std::max(0.0f, normal[0] * toLight[0] +
+                                         normal[1] * toLight[1] +
+                                         normal[2] * toLight[2]);
+    for (size_t channel = 0; channel < 3; ++channel) {
+      const float lit = out.emissive[channel] +
+                        (draw.light.enabled
+                             ? draw.light.ambient[channel] +
+                                   draw.light.diffuse[channel] * dot
+                             : 1.0f);
+      if (!std::isfinite(lit)) {
+        error = "MixTASpheremap: invalid vertex light";
+        return false;
+      }
+      out.colors[vertex * 4 + 2 - channel] =
+          static_cast<uint8_t>(std::clamp(lit, 0.0f, 1.0f) * 255.0f);
+    }
+    out.colors[vertex * 4 + 3] = 255;
+    const auto cameraNormal = transform(normal, draw.view, 0);
+    std::array<float, 3> position{draw.positions[vertex * 3] * draw.positionScale,
+                                  draw.positions[vertex * 3 + 1] * draw.positionScale,
+                                  draw.positions[vertex * 3 + 2] * draw.positionScale};
+    position = transform(transform(position, draw.model, 1), draw.view, 1);
+    if (!unit(position)) {
+      error = "MixTASpheremap: reflection direction unavailable";
+      return false;
+    }
+    const float incident = position[0] * cameraNormal[0] +
+                           position[1] * cameraNormal[1] +
+                           position[2] * cameraNormal[2];
+    for (size_t layer = 0; layer < out.maps.size(); ++layer) {
+      const auto& map = out.maps[layer];
+      float u = 0, v = 0;
+      if (layer == 2 && map.channel == 0xfffffffeu) {
+        const float rx = position[0] - 2 * cameraNormal[0] * incident;
+        const float ry = position[1] - 2 * cameraNormal[1] * incident;
+        u = rx * .5f + yawOffset;
+        v = -ry * .5f + .5f;
+      } else {
+        const auto* uv = map.channel == 0   ? &mesh.uv1
+                         : map.channel == 1 ? &mesh.uv2
+                         : map.channel == 2 ? &mesh.uv3
+                                            : nullptr;
+        if (!uv || uv->size() != draw.vertexCount * 2) {
+          error = "MixTASpheremap: authored UV channel unavailable";
+          return false;
+        }
+        u = (*uv)[vertex * 2];
+        v = (*uv)[vertex * 2 + 1];
+      }
+      out.coordinates[layer][vertex * 3] = u * map.scaleU + map.offsetU;
+      out.coordinates[layer][vertex * 3 + 1] = v * map.scaleV + map.offsetV;
+      out.coordinates[layer][vertex * 3 + 2] = 1;
+    }
+  }
+  auto& state = out.state;
+  state.lighting = false; // the actual world light was resolved above
+  const auto factor = static_cast<uint8_t>(out.reflection * 255.0f);
+  const auto alpha = static_cast<uint8_t>(std::clamp(material.diffuse[3], 0.0f, 1.0f) * 255.0f);
+  state.textureFactor = (uint32_t(alpha) << 24) | (uint32_t(factor) * 0x010101u);
+  for (size_t stage = 0; stage < 4; ++stage) {
+    auto& value = state.stages[stage];
+    value.resultArg = Raster3DTexArg::Current;
+    value.colorArg0 = Raster3DTexArg::Current;
+    value.colorArg1 = Raster3DTexArg::Texture;
+    value.colorArg2 = Raster3DTexArg::Current;
+    value.alphaOp = Raster3DTexOp::SelectArg1;
+    value.alphaArg1 = stage == 0 ? Raster3DTexArg::TFactor : Raster3DTexArg::Current;
+  }
+  state.stages[0].colorOp = Raster3DTexOp::SelectArg1;
+  state.stages[1].colorOp = Raster3DTexOp::BlendTextureAlpha;
+  state.stages[2].colorOp = Raster3DTexOp::Modulate;
+  state.stages[2].colorArg1 = Raster3DTexArg::Diffuse;
+  state.stages[3].colorOp = Raster3DTexOp::MultiplyAdd;
+  state.stages[3].colorArg2 = Raster3DTexArg::TFactor;
+  state.stages[4].colorOp = Raster3DTexOp::Disable;
+  for (size_t layer = 0; layer < out.textures.size(); ++layer) {
+    const uint32_t stage = layer == 2 ? 3 : static_cast<uint32_t>(layer);
+    auto& value = state.stages[stage];
+    auto& binding = out.fixed.stages[stage];
+    value.textureBound = true;
+    value.boundTexture = binding.texture = out.textures[layer];
+    binding.coordinates = out.coordinates[layer].data();
+    binding.addressU = out.maps[layer].tiling & 1 ? Raster3DAddress::Wrap : Raster3DAddress::Clamp;
+    binding.addressV = out.maps[layer].tiling & 2 ? Raster3DAddress::Wrap : Raster3DAddress::Clamp;
+    binding.filter = Raster3DFilter::Bilinear;
+    binding.mipFilter = Raster3DMipFilter::Linear;
+    binding.mipLodBias = 0.0f;
+    binding.maxMipLevel = 0;
+    state.samplerRaw.push_back({stage, 1, binding.addressU == Raster3DAddress::Wrap ? 1u : 3u});
+    state.samplerRaw.push_back({stage, 2, binding.addressV == Raster3DAddress::Wrap ? 1u : 3u});
+    state.samplerRaw.push_back({stage, 5, 2});
+    state.samplerRaw.push_back({stage, 6, 2});
+    state.samplerRaw.push_back({stage, 7, 2});
+    state.samplerRaw.push_back({stage, 8, 0});
+    state.samplerRaw.push_back({stage, 9, 0});
+  }
+  out.fixed.state = &state;
+  out.fixed.lightingResolved = true;
+  out.fixed.specular = out.specular.data();
+  draw.colors = out.colors.data();
+  draw.light.enabled = false;
+  draw.material.texture = nullptr;
+  draw.fixed = &out.fixed;
+  return true;
+}
+
 void note(const std::string& s) {
   static std::set<std::string> seen;
   if (seen.insert(s).second)
@@ -218,6 +384,24 @@ uint32_t scenePaintTexture(uint32_t materialId, uint32_t defaultTextureId,
   return painted;
 }
 
+const Raster3DTexture* sceneBodyTexture(
+    const std::function<const Raster3DTexture*(uint32_t)>& sample,
+    const SceneMaterialResources& material, size_t textureIndex,
+    uint32_t defaultTextureId, uint32_t currentTextureId) {
+  if (textureIndex >= material.textureCount())
+    return nullptr;
+  // 00522b00 returns immediately after replacing the first matching link.
+  // Multiple mesh maps can share that link, but a later duplicate table entry
+  // must retain its own original binding.
+  size_t first = 0;
+  while (first < material.textureCount() &&
+         material.textureId(first) != defaultTextureId)
+    ++first;
+  return sceneBodyTexture(sample, material.textureId(textureIndex),
+                          defaultTextureId,
+                          textureIndex == first ? currentTextureId : 0);
+}
+
 void sceneApplyBackgroundPass(Raster3DDraw& draw) {
   // FUN_004bb050 inverts the view, zeroes the inverse's translation and
   // inverts back: for an affine view that is the view with its translation
@@ -257,7 +441,8 @@ void SceneRaster3D::draw(ResourceWorld& resources, Render2D& renderer,
                          const std::array<float, 16>& view,
                          const std::array<float, 16>& projection,
                          const ViewportInstance& viewport,
-                         const CameraFog* fog, const Raster3DLight* worldLight) {
+                         const CameraFog* fog, const Raster3DLight* worldLight,
+                         uint32_t globalEnvmapId) {
   int width = 0, height = 0;
   std::string error;
   if (!renderer.outputSize(width, height, error) || width <= 0 || height <= 0) {
@@ -303,6 +488,8 @@ void SceneRaster3D::draw(ResourceWorld& resources, Render2D& renderer,
     const char* layer = "";
     bool background = false;
     std::vector<float> skinnedPositions, skinnedNormals;
+    const ScxMaterial* layeredMaterial = nullptr;
+    std::unique_ptr<MixSpheremapDraw> layered;
   };
   std::vector<Piece> pieces;
   std::vector<std::shared_ptr<ScxModel>> retainedModels;
@@ -321,18 +508,42 @@ void SceneRaster3D::draw(ResourceWorld& resources, Render2D& renderer,
       return nullptr;
     }
     Raster3DTexture result;
-    if (!Raster3DTexture::build(pixels.width, pixels.height, pixels.rgba.data(),
-                                pixels.rgba.size(), result, error)) {
+    const bool authored = pixels.authoredMipChain || !pixels.mipLevels.empty();
+    if (authored) {
+      // Newer 004572a0/00457071 submit the file's selected level and pixels;
+      // do not replace authored DDS/PTX levels with a base-derived chain.
+      const auto valid = [](uint32_t width, uint32_t height, size_t size) {
+        return width && height && width <= 16384 && height <= 16384 &&
+               static_cast<uint64_t>(width) * height * 4 == size;
+      };
+      if (!valid(pixels.width, pixels.height, pixels.rgba.size())) {
+        note("invalid authored texture base level");
+        return nullptr;
+      }
+      result.levels.push_back({pixels.width, pixels.height, std::move(pixels.rgba)});
+      for (auto& mip : pixels.mipLevels) {
+        const auto& previous = result.levels.back();
+        if ((previous.width == 1 && previous.height == 1) ||
+            mip.width != std::max(previous.width / 2, 1u) ||
+            mip.height != std::max(previous.height / 2, 1u) ||
+            !valid(mip.width, mip.height, mip.rgba.size())) {
+          note("invalid authored texture mip chain");
+          return nullptr;
+        }
+        result.levels.push_back({mip.width, mip.height, std::move(mip.rgba)});
+      }
+      for (const auto& level : result.levels)
+        for (size_t i = 3; i < level.rgba.size(); i += 4)
+          result.hasAlpha = result.hasAlpha || level.rgba[i] != 255;
+    } else if (!Raster3DTexture::build(pixels.width, pixels.height, pixels.rgba.data(),
+                                       pixels.rgba.size(), result, error)) {
       note(error);
       return nullptr;
     }
+    runlog::event(runlog::EventKind::Note,
+                  "world raster texture 0x%08x: %ux%u levels=%zu authored=%d",
+                  id, pixels.width, pixels.height, result.levels.size(), int(authored));
     return &textures_.emplace(id, std::move(result)).first->second;
-  };
-  const auto texture = [&](const SceneMaterialResources& material,
-                           size_t index) -> const Raster3DTexture* {
-    if (index >= material.textureCount())
-      return nullptr;
-    return textureById(material.textureId(index));
   };
   std::map<std::string, LayerStats> stats;
   // A part's tint belongs to the body record that names its render resource
@@ -407,9 +618,14 @@ void SceneRaster3D::draw(ResourceWorld& resources, Render2D& renderer,
         mapped.state.blend = Raster3DBlend::AlphaTest;
         mapped.state.alphaRef = 0x38; // 004e6b50 writes reference 0x38
       }
-    } else if (!raster3dScxMaterial(material, {true, true}, mapped, error)) {
-      note(error);
-      return;
+    } else {
+      auto baseMaterial = material;
+      if (material.flags == 0x11)
+        baseMaterial.flags = 0; // layered state is prepared below, never base-only
+      if (!raster3dScxMaterial(baseMaterial, {true, true}, mapped, error)) {
+        note(error);
+        return;
+      }
     }
     // An index beyond the bound material's textures leaves the piece
     // untextured, as the texture() lookup does.
@@ -417,10 +633,9 @@ void SceneRaster3D::draw(ResourceWorld& resources, Render2D& renderer,
         *mapped.baseTextureIndex < resourcesMaterial.textureCount()) {
       // FUN_00467ff0 replaces only the cfg paint texture (Part.setTexture);
       // glass/trim materials keep their own texture.
-      const auto materialId =
-          resourcesMaterial.textureId(*mapped.baseTextureIndex);
       mapped.state.texture =
-          sceneBodyTexture(textureById, materialId, defaultTextureId,
+          sceneBodyTexture(textureById, resourcesMaterial,
+                           *mapped.baseTextureIndex, defaultTextureId,
                            currentTextureId);
     }
     ++layerStats.pieces;
@@ -484,6 +699,46 @@ void SceneRaster3D::draw(ResourceWorld& resources, Render2D& renderer,
       applyBodyTint(mapped.state.diffuse, *tint);
     }
     Piece piece;
+    if (material.flags == 0x11) {
+      piece.layered = std::make_unique<MixSpheremapDraw>();
+      piece.layeredMaterial = &material;
+      for (size_t layer = 0; layer < 3; ++layer) {
+        const uint32_t slot = layer == 2 ? 3 : static_cast<uint32_t>(layer);
+        const auto map = std::find_if(material.maps.begin(), material.maps.end(),
+                                      [&](const auto& value) { return value.slot == slot; });
+        if (map == material.maps.end()) {
+          note("MixTASpheremap: required authored map unavailable");
+          return;
+        }
+        piece.layered->maps[layer] = *map;
+        if (map->textureIndex < resourcesMaterial.textureCount() &&
+            resourcesMaterial.textureId(map->textureIndex))
+          piece.layered->textures[layer] =
+              sceneBodyTexture(textureById, resourcesMaterial, map->textureIndex,
+                               defaultTextureId, currentTextureId);
+        else if (map->channel == 0xfffffffeu && globalEnvmapId)
+          // The global fallback is not a link in this material's table and
+          // therefore never participates in its resource replacement.
+          piece.layered->textures[layer] = textureById(globalEnvmapId);
+        if (!piece.layered->textures[layer]) {
+          note("MixTASpheremap: bound texture or global environment unavailable");
+          return;
+        }
+      }
+      for (const auto& property : material.properties) {
+        if (property.type == 0x01000001u)
+          std::memcpy(&piece.layered->reflection, &property.raw, sizeof(float));
+        if (property.type == 2)
+          for (size_t channel = 0; channel < 3; ++channel)
+            piece.layered->emissive[channel] =
+                float((property.raw >> (channel * 8)) & 255) / 255.0f;
+      }
+      if (!std::isfinite(piece.layered->reflection) ||
+          piece.layered->reflection < 0 || piece.layered->reflection > 1) {
+        note("MixTASpheremap: invalid reflection property");
+        return;
+      }
+    }
     piece.background =
         !isGround && sceneBackgroundMaterial(resourcesMaterial.flags());
     piece.layer = piece.background ? "background" : layer;
@@ -628,9 +883,6 @@ void SceneRaster3D::draw(ResourceWorld& resources, Render2D& renderer,
     for (const uint32_t carId : resources.world().carInstanceIds()) {
       auto* carNode = resources.world().findInstance(carId);
       auto* car = carNode ? carNode->carInstance.get() : nullptr;
-      auto* partNode = car && car->chassisObject
-                           ? resources.world().findByReceiver(car->chassisObject)
-                           : carNode;
       auto* bodyNode =
           car ? resources.world().nodeFor(car->physicsRoot.owner) : nullptr;
       auto body =
@@ -831,6 +1083,11 @@ void SceneRaster3D::draw(ResourceWorld& resources, Render2D& renderer,
                     : (m.normals.size() == m.vertexCount * 3 ? m.normals.data()
                                                              : nullptr);
     d.colors = m.color.size() == m.vertexCount * 4 ? m.color.data() : nullptr;
+    if (piece.layered && !prepareMixSpheremap(d, m, *piece.layeredMaterial,
+                                             *piece.layered, error)) {
+      note(error);
+      continue;
+    }
     const auto before = raster_.stats();
     if (!raster_.draw(d, error))
       note(error);

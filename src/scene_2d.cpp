@@ -1484,7 +1484,7 @@ bool SceneCameraRenderer::draw(const std::array<float, 16> &view,
                                const std::array<float, 16> &projection,
                                const ViewportInstance &viewport,
                                std::string &error, bool requireCached,
-                               const CameraFog *fog) {
+                               const CameraFog *fog, uint32_t globalEnvmapId) {
   pendingGround_.clear();
   bool ok = true;
   candidates_.drain(0, true, [&](LinkOwner &owner) -> uint32_t {
@@ -1703,7 +1703,8 @@ bool SceneCameraRenderer::draw(const std::array<float, 16> &view,
     }
   }
   worldRaster_.draw(resources_, renderer_, pendingGround_, view, projection,
-                    viewport, fog, worldLight.enabled ? &worldLight : nullptr);
+                    viewport, fog, worldLight.enabled ? &worldLight : nullptr,
+                    globalEnvmapId);
   pendingGround_.clear();
   for (size_t i = 0; i < objects_.size();) {
     bool stale = !objects_[i]->owner();

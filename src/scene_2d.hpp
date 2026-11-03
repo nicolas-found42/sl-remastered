@@ -485,7 +485,8 @@ public:
   bool draw(const std::array<float, 16> &view,
             const std::array<float, 16> &projection,
             const ViewportInstance &viewport, std::string &error,
-            bool requireCached = false, const CameraFog *fog = nullptr);
+            bool requireCached = false, const CameraFog *fog = nullptr,
+            uint32_t globalEnvmapId = 0);
 
 private:
   ResourceWorld &resources_;

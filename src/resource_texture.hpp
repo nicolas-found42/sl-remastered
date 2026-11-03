@@ -33,6 +33,8 @@ struct ResourceTexturePixels {
   std::vector<ResourceTextureMip> mipLevels;
   std::optional<float> lodBias;
   std::optional<float> lodAmplitude;
+  // DDS/PTX declare a chain even when it contains only the base level.
+  bool authoredMipChain = false;
 };
 
 class Render2D;
