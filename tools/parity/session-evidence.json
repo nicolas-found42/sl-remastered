@@ -2417,6 +2417,462 @@
           "equals": true
         }
       ]
+    },
+    {
+      "id": "issue53-part-subtree-owner-transfer",
+      "deliverable": "3",
+      "sequence": 15,
+      "scope": "US10/13 preassembled Car/Part subtree registration and owner transfer; newer child callback; self-owner refresh correction. Focused realresource reds/greens and five tests; native load, full removal, Stock Journeys unresolved.",
+      "outcome": "incomplete",
+      "review": "pending",
+      "evidence": {
+        "audit": {
+          "path": "local/verify/issue53-career-journeys-20261102/subtree-owner-inspection-v2.json",
+          "sha256": "b51598daa094639b1678d6e14f02f0110ca54409c491792b6376c54e09832ec3"
+        }
+      },
+      "assertions": [
+        {
+          "evidence": "audit",
+          "pointer": "/controls/detached_registry_red_green",
+          "equals": true
+        },
+        {
+          "evidence": "audit",
+          "pointer": "/controls/self_refresh_red_green",
+          "equals": true
+        }
+      ]
+    },
+    {
+      "id": "issue53-subtree-owner-refresh-regression",
+      "deliverable": "3",
+      "sequence": 16,
+      "scope": "Actual diagnostic reload exits0 but11parts rejected andPlayerCar0 shrinks2309to1761. Prestige151. New synchronousrefresh suspected; Stockdirty/suspend_update semantics underqualification. Native capture finalized, source unchanged; no pairedparity.",
+      "outcome": "failed",
+      "review": "pending",
+      "evidence": {
+        "audit": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-fx-mutant/issue53-native-subtree-owner-review-v1/audit.json",
+          "sha256": "25b57fa7f5782dd7e27cbed7d2a8171a063162aa75f79c6915a202ed2e68e401"
+        }
+      },
+      "assertions": [
+        {
+          "evidence": "audit",
+          "pointer": "/save_comparison/0/before_bytes",
+          "equals": 2309
+        },
+        {
+          "evidence": "audit",
+          "pointer": "/save_comparison/0/after_bytes",
+          "equals": 1761
+        },
+        {
+          "evidence": "audit",
+          "pointer": "/save_comparison/0/equal",
+          "equals": false
+        }
+      ]
+    },
+    {
+      "id": "issue53-scene-layered-independent-review",
+      "deliverable": "3",
+      "sequence": 17,
+      "scope": "US29 actualcommon0x11layeredmaterial andflag8focusedcontrols independentlyreviewed; pairedvisual,color/tint andremainingcontentgaps unresolved",
+      "outcome": "incomplete",
+      "review": "pending",
+      "evidence": {
+        "audit": {
+          "path": "local/verify/issue53-career-journeys-20261102/scene-layered-independent-review.json",
+          "sha256": "3dcc7cf0e194ef0fe8204a5f47686cdb0f8bc6328ad0c9f184c68617d61f7032"
+        }
+      },
+      "assertions": [
+        {
+          "evidence": "audit",
+          "pointer": "/status",
+          "equals": "implemented but unverified"
+        }
+      ]
+    },
+    {
+      "id": "issue53-car-refresh-static-and-focused",
+      "deliverable": "3",
+      "sequence": 18,
+      "scope": "US10/13/17/19 qualified full native refresh static boundary; deferred script consumption and wheel reset focused controls, full postscript engine/dyno/config and actual repaired Journey remain incomplete",
+      "outcome": "incomplete",
+      "review": "pending",
+      "evidence": {
+        "reference": {
+          "path": "local/verify/issue53-car-refresh-20261102/full-refresh-rea.json",
+          "sha256": "b0bd643bfa514765f803497718f974c145d425e6f9f29e70f30dea4be0ce2b79"
+        },
+        "post_screens": {
+          "path": "local/verify/issue53-car-refresh-20261102/full-refresh-posts.json",
+          "sha256": "c64326ed5210d1febc24ce3dadc944aaf64110983bf5d82ef569755ea698829a"
+        },
+        "lease": {
+          "path": "local/verify/issue53-car-refresh-20261102/full-refresh-lease-finish.json",
+          "sha256": "0f5db33a6886064753adbfb70ec2539076c718bfd5e524c5294266ed71978cef"
+        },
+        "deferred_control": {
+          "path": "local/verify/issue53-car-refresh-20261102/car-refresh-green-v2/result.json",
+          "sha256": "14687c20daa5234ee58aad1b8515fab3064dcc91f87fdbc75cd755ee0c91f264"
+        },
+        "wheel_integration": {
+          "path": "local/verify/issue53-reconciliation-20261102/wheel-refresh-final-v4/result.json",
+          "sha256": "6cc657ab7008897f2b8ff9d8689eb70d454af65337acbe241e74d8d472fcd4b9"
+        }
+      },
+      "assertions": [
+        {
+          "evidence": "lease",
+          "pointer": "/released",
+          "equals": true
+        },
+        {
+          "evidence": "lease",
+          "pointer": "/expired",
+          "equals": false
+        },
+        {
+          "evidence": "deferred_control",
+          "pointer": "/execution_passed",
+          "equals": true
+        },
+        {
+          "evidence": "wheel_integration",
+          "pointer": "/execution_passed",
+          "equals": true
+        }
+      ]
+    },
+    {
+      "id": "issue53-deferred-refresh-actual-same-build",
+      "deliverable": "3",
+      "sequence": 19,
+      "scope": "Fresh native purchase/ordinaryreload sameprobe, all4savebytesexact and actual derivedprestige175; actualStock/fullsavedsemantics/presentation/engine gaps remain",
+      "outcome": "incomplete",
+      "review": "pending",
+      "evidence": {
+        "audit": {
+          "path": "local/verify/issue53-car-refresh-20261102/same-build-roundtrip-review-v2/audit.json",
+          "sha256": "40eff8217051c55c54196600f1333761d80ccfd1a690ea81dd3e06be21b304eb"
+        },
+        "prior_fixture_load": {
+          "path": "local/verify/issue53-car-refresh-20261102/actual-load-v2-review/audit.json",
+          "sha256": "4bc6c020bce0bdcd097e3b6711a21a4f2baeb08a8d022ba70f8ebc486443a697"
+        }
+      },
+      "assertions": [
+        {
+          "evidence": "audit",
+          "pointer": "/all_four_save_files_byte_identical",
+          "equals": true
+        },
+        {
+          "evidence": "audit",
+          "pointer": "/status",
+          "equals": "native_same_build_owned_car_bytes_roundtrip_observed"
+        }
+      ]
+    },
+    {
+      "id": "issue53-subtree-removal-typed-failure",
+      "deliverable": "3",
+      "sequence": 20,
+      "scope": "US16 mountedsubtree preservation/reinstall/repair andpublicVMcallback focused checks; meaningful oldfailure/control andtypedindex/finalizationfailure; actualmanipulationJourney/hostslot unsupported",
+      "outcome": "incomplete",
+      "review": "pending",
+      "evidence": {
+        "audit": {
+          "path": "local/verify/issue53-dealer-frontier-20261102/subtree-remove-typed-final.json",
+          "sha256": "fe661b034a13df433247b3b0032ab8cb82acaa4eadeb6a4f11221e4d5f6a37a0"
+        },
+        "green": {
+          "path": "local/verify/issue53-dealer-frontier-20261102/subtree-detach-error-green.json",
+          "sha256": "9fc9a5571e9ffa2e0aff373ddada8c1c2eb35b02ac3369dd9a19357ff6e38abf"
+        },
+        "red": {
+          "path": "local/verify/issue53-dealer-frontier-20261102/subtree-detach-error-red.json",
+          "sha256": "63687fc936d78e317c15c07532cd930cd5ae9599fa214bef7a55c7802470457f"
+        },
+        "jev": {
+          "path": "local/verify/issue53-dealer-frontier-20261102/subtree-detach-final-jev.json",
+          "sha256": "52f1d24213c04dca42dc5bde9b0cedef39418ed6ce0e64aef6cd46cccb1c84e4"
+        }
+      },
+      "assertions": [
+        {
+          "evidence": "green",
+          "pointer": "/passed",
+          "equals": true
+        },
+        {
+          "evidence": "green",
+          "pointer": "/source_preserved",
+          "equals": true
+        }
+      ]
+    },
+    {
+      "id": "issue53-paint-scoped-actual-load",
+      "deliverable": "3",
+      "sequence": 21,
+      "scope": "US18/US29 actual native before/after samefixture load; correct firstmatching texturetable replacement; focused omission controls and root independentreview; remaining panels/roof and pairedStockpresentation unverified",
+      "outcome": "incomplete",
+      "review": "pending",
+      "evidence": {
+        "visual": {
+          "path": "local/verify/parity-goal-20261102-092437/factory-depth-first/issue53-native-paint-review-v3/audit.json",
+          "sha256": "1aa50b5fcddeb5219d7421f0e47b79ca26f20747ee7579e54adbcd3bf4e8a5db"
+        },
+        "review": {
+          "path": "local/verify/issue53-reconciliation-20261102/paint-independent-resolution-v1/review.json",
+          "sha256": "18565b64aee0c30eddab5b8288de8b952922bb26642f4383cd4568a05ec224ab"
+        },
+        "green": {
+          "path": "local/verify/issue53-reconciliation-20261102/paint-scope-final-v5/result.json",
+          "sha256": "80fe609427e32facd29841a251b89751b5968777957180004419e808baa817f1"
+        },
+        "negative": {
+          "path": "local/verify/issue53-reconciliation-20261102/paint-scene-omission-v1/result.json",
+          "sha256": "ed24a8c5677a9fa3c8871f9aaf64e3cf08868a04d9ad38d92ff3b81ba8756aff"
+        },
+        "jev": {
+          "path": "local/verify/issue53-reconciliation-20261102/paint-firstmatch-review-v1/gate.json",
+          "sha256": "e3592bb7fba8db0a6d5fc36fd30f5a1a32aa7a6d9716c96c0f7b5a113eb85be9"
+        }
+      },
+      "assertions": [
+        {
+          "evidence": "review",
+          "pointer": "/equal",
+          "equals": true
+        }
+      ]
+    },
+    {
+      "id": "issue53-control-writer-batch-owned",
+      "deliverable": "5",
+      "sequence": 4,
+      "scope": "ActualC owned exporter controlledlatency/recovery/allrecords andABI checks only; root source/receipt review supports actualStockattempt; no replay or wholeD5acceptance",
+      "outcome": "incomplete",
+      "review": "pending",
+      "evidence": {
+        "audit": {
+          "path": "local/verify/issue53-reference-provenance-v2-20261102/control-writer-qualified-audit-v3.json",
+          "sha256": "73a590e2c5fa245c5b704a11d0e9ee0a4e41c5c8049df1a1ff2a64418b0543d2"
+        },
+        "result": {
+          "path": "local/verify/issue53-native-clock-abi-v3-20261102/control-writer-prepaid-v3/result.json",
+          "sha256": "d0dee4f543dd5443fa5deca7cbab2d214e7d9b5a78e8974c520d1c100df30a8f"
+        },
+        "checks": {
+          "path": "local/verify/issue53-native-clock-abi-v3-20261102/control-writer-prepaid-v3/factory-checks.json",
+          "sha256": "ef0ca6e35cfc8336cf29db6c7734c8a13d73141bff1c5fd139bd545ec38f5ab6"
+        },
+        "jev": {
+          "path": "local/verify/issue53-reference-provenance-v2-20261102/control-writer-jev-review-v3.json",
+          "sha256": "0acc4ce8c01edfd73e3f7ecbe5530613fe5422092b29e04531d60a90e24f9c0e"
+        }
+      },
+      "assertions": [
+        {
+          "evidence": "result",
+          "pointer": "/execution_finished",
+          "equals": true
+        },
+        {
+          "evidence": "result",
+          "pointer": "/artifact_finalization",
+          "equals": "verified"
+        },
+        {
+          "evidence": "checks",
+          "pointer": "/cases/writer-fast",
+          "equals": true
+        },
+        {
+          "evidence": "checks",
+          "pointer": "/cases/writer-old",
+          "equals": true
+        },
+        {
+          "evidence": "checks",
+          "pointer": "/cases/writer-fail",
+          "equals": true
+        }
+      ]
+    },
+    {
+      "id": "issue53-dyno-combustion-first-port",
+      "deliverable": "3",
+      "sequence": 22,
+      "scope": "US17 first portable combustion implementation executes seven differential inputs withsanitizers; nativeintegration/originaloracle/newerversion reconciliation pending; unverified product",
+      "outcome": "incomplete",
+      "review": "pending",
+      "evidence": {
+        "port": {
+          "path": "local/verify/issue53-reconciliation-20261102/dyno-port-first-v1/result.json",
+          "sha256": "41350bfffc11e74f9cd181bda1705478011b6fd92973442778adc030266b7682"
+        },
+        "raw": {
+          "path": "local/verify/issue53-car-refresh-20261102/dyno-core-rea.json",
+          "sha256": "13448a1053d485355b180d346dcf92cc53cd60dd867dcd6d2b7f26a92ae962ad"
+        },
+        "posts": {
+          "path": "local/verify/issue53-car-refresh-20261102/dyno-core-posts.json",
+          "sha256": "a5078d5edafb3ca835c994db37bdf1dfa99780943ed76f695f1fac4ccaf91b91"
+        },
+        "decoder": {
+          "path": "local/verify/issue53-car-refresh-20261102/dyno-core-decoder-v3/audit.json",
+          "sha256": "4dd93ac47c2ef64e434d7e6ebfaf1eaf8d171a1b64327f1678d44380554d4632"
+        }
+      },
+      "assertions": [
+        {
+          "evidence": "port",
+          "pointer": "/exit",
+          "equals": 0
+        },
+        {
+          "evidence": "port",
+          "pointer": "/source_equal",
+          "equals": true
+        },
+        {
+          "evidence": "port",
+          "pointer": "/parity_verified",
+          "equals": false
+        }
+      ]
+    },
+    {
+      "id": "issue53-dyno-native-newer-and-load",
+      "deliverable": "3",
+      "sequence": 23,
+      "scope": "US17 production Dyno integration and native semantic regression; governing newer original conditional helper repeats; comparison still differs; actual saved-car load preserves four files but does not invoke Dyno",
+      "outcome": "incomplete",
+      "review": "pending",
+      "evidence": {
+        "native": {
+          "path": "local/verify/issue53-car-refresh-20261102/dyno-native-clear-v1/result.json",
+          "sha256": "fabba0f9c9c15e89e4a49e5de9d3accb1aed7e608d6a1982b7f0c6fdf85390e8"
+        },
+        "oracle": {
+          "path": "local/verify/issue53-native-clock-abi-v3-20261102/dyno-newer-original-v1/dyno-audit.json",
+          "sha256": "54ba486f244b20fa0cd9649c1b33980e68734782a374f2e028ca446079e98253"
+        },
+        "comparison": {
+          "path": "local/verify/issue53-car-refresh-20261102/dyno-newer-compare-v1/audit.json",
+          "sha256": "139e954e8f71e3b6b4561cba6e803171455c7e94064464a25c851acd34e2f5a5"
+        },
+        "load": {
+          "path": "local/verify/native-background-tests/attempt-z_x05__f/flag/issue53-native-dyno-load-review-v1/audit.json",
+          "sha256": "36114fa0be99bef08d6243d505c538efef7d34c010a5464c4db7aa2e9b6322ee"
+        }
+      },
+      "assertions": [
+        {
+          "evidence": "native",
+          "pointer": "/execution_passed",
+          "equals": true
+        },
+        {
+          "evidence": "native",
+          "pointer": "/parity_verified",
+          "equals": false
+        },
+        {
+          "evidence": "comparison",
+          "pointer": "/exact",
+          "equals": false
+        },
+        {
+          "evidence": "load",
+          "pointer": "/save_files_equal",
+          "equals": true
+        },
+        {
+          "evidence": "load",
+          "pointer": "/dyno_calls",
+          "equals": []
+        }
+      ]
+    },
+    {
+      "id": "issue53-car-private-config-controls",
+      "deliverable": "3",
+      "sequence": 24,
+      "scope": "US17/US19 per-instance Car scalar and gear transfer with omission-red/restored-green starter behavior; native torque tables/contributions/posthelper and whole-game acceptance unfinished",
+      "outcome": "incomplete",
+      "review": "pending",
+      "evidence": {
+        "control": {
+          "path": "local/verify/native-background-tests/attempt-z_x05__f/flag/issue53-car-variable-controls-v1/result.json",
+          "sha256": "da8ad3379df45619b75d5b1a9a7bcc20f815e9dec3d01c54adeb6b989de5c2bc"
+        }
+      },
+      "assertions": [
+        {
+          "evidence": "control",
+          "pointer": "/execution_passed",
+          "equals": true
+        },
+        {
+          "evidence": "control",
+          "pointer": "/parity_verified",
+          "equals": false
+        },
+        {
+          "evidence": "control",
+          "pointer": "/stages/fault-test/actual_exit",
+          "equals": 8
+        },
+        {
+          "evidence": "control",
+          "pointer": "/stages/restored-test/actual_exit",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "id": "issue53-car-native-engine-binding",
+      "deliverable": "3",
+      "sequence": 25,
+      "scope": "US17/US19 actual native model binding into per-Car torque tables and drivetrain; two omission failures with restored sanitizer tests; no whole-game or paired acceptance",
+      "outcome": "incomplete",
+      "review": "pending",
+      "evidence": {
+        "control": {
+          "path": "local/verify/native-background-tests/attempt-z_x05__f/flag/issue53-car-engine-binding-controls-v1/result.json",
+          "sha256": "c902e8c4d9ecbefcfea5f06ed134256dae8090f8d6d4c3c9bf62116e0c13bf02"
+        }
+      },
+      "assertions": [
+        {
+          "evidence": "control",
+          "pointer": "/execution_passed",
+          "equals": true
+        },
+        {
+          "evidence": "control",
+          "pointer": "/parity_verified",
+          "equals": false
+        },
+        {
+          "evidence": "control",
+          "pointer": "/stages/binding-fault-test/actual_exit",
+          "equals": 8
+        },
+        {
+          "evidence": "control",
+          "pointer": "/stages/empty-curve-fault-test/actual_exit",
+          "equals": 8
+        }
+      ]
     }
   ]
 }
