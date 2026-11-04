@@ -59,6 +59,26 @@ def plan_test(pattern, build_dir='build', build=True):
     return steps
 
 
+def plan_configure(preset):
+    if not re.fullmatch(r'[A-Za-z0-9_.-]+', preset):
+        raise ValueError('a CMake preset name is required')
+    return [pooled({'cpu': 1, 'host-memory': 2, 'build-writer': 1},
+                   ['cmake', '--preset', preset])]
+
+
+def plan_setup(skip_brew=False):
+    """Explicit installation only; doctor and lint never install dependencies."""
+    environment = ROOT / '.venv'
+    steps = []
+    if not skip_brew:
+        steps.append(['brew', 'bundle', '--file', str(ROOT / 'Brewfile')])
+    steps += [[sys.executable, '-m', 'venv', str(environment)],
+              [str(environment / 'bin/python'), '-m', 'pip', 'install',
+               '--requirement', str(ROOT / 'requirements-dev.txt')],
+              ['git', 'config', '--local', 'core.hooksPath', '.githooks']]
+    return steps
+
+
 def corpus_commands(check_sh):
     """Python suites exactly as the integration gate invokes them (no drift)."""
     found = re.compile(r'(?:tests|tools/parity)/[^\s]*test[^\s]*\.py')
@@ -416,6 +436,27 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--dry-run', action='store_true', help='print the commands instead of running them')
     sub = parser.add_subparsers(dest='lane', required=True)
+    p = sub.add_parser('setup', help='explicitly install development dependencies and the local hook')
+    p.add_argument('--skip-brew', action='store_true', help='install Python dependencies and hook only')
+    p = sub.add_parser('doctor', help='read-only tool versions, dependencies and database diagnosis')
+    p.add_argument('--build-dir', default='build')
+    p.add_argument('--json', action='store_true')
+    p = sub.add_parser('configure', help='configure a CMake preset under shared build admission')
+    p.add_argument('--preset', default='ninja-release')
+    p = sub.add_parser('lint', help='check staged, committed or explicit working source without rewriting')
+    selection = p.add_mutually_exclusive_group()
+    selection.add_argument('--staged', action='store_true')
+    selection.add_argument('--base')
+    selection.add_argument('--paths', nargs='+')
+    p.add_argument('--tidy', action='store_true', help='also run deep native analysis with exact compile commands')
+    p.add_argument('--build-dir', default='build')
+    p.add_argument('--translation-unit', action='append', default=[])
+    p = sub.add_parser('format', help='explicitly format selected working files; never stage files')
+    p.add_argument('paths', nargs='+')
+    p = sub.add_parser('portable', help='pooled, asset-free native CI tests; does not replace the full gate')
+    p.add_argument('--build-dir', default='build')
+    p.add_argument('--no-build', action='store_true')
+    p.add_argument('--test-label', default='^portable$')
     p = sub.add_parser('test', help='build once then run tests matching a regular expression')
     p.add_argument('pattern')
     p.add_argument('--no-build', action='store_true')
@@ -446,6 +487,40 @@ def main(argv=None):
     p.add_argument('--artifact-links', choices=('reject', 'count'), default='reject')
     args = parser.parse_args(argv)
     try:
+        if args.lane == 'setup':
+            return execute(plan_setup(args.skip_brew), args.dry_run)
+        if args.lane == 'doctor':
+            command = [sys.executable, '-I', str(ROOT / 'tools/devtools.py'),
+                       '--build-dir', args.build_dir]
+            if args.json:
+                command.append('--json')
+            return execute([command], args.dry_run)
+        if args.lane == 'configure':
+            return execute(plan_configure(args.preset), args.dry_run)
+        if args.lane in ('lint', 'format'):
+            command = [sys.executable, '-I', str(ROOT / 'tools/guardrails.py')]
+            if args.lane == 'format':
+                command += ['--format', '--paths', *args.paths]
+            else:
+                if args.paths:
+                    command += ['--paths', *args.paths]
+                elif args.base:
+                    command += ['--base', args.base]
+                else:
+                    command.append('--staged')
+                command += ['--build-dir', args.build_dir]
+                if args.tidy:
+                    command.append('--tidy')
+                for unit in args.translation_unit:
+                    command += ['--translation-unit', unit]
+            return execute([command], args.dry_run)
+        if args.lane == 'portable':
+            check_pattern(args.test_label)
+            command = [sys.executable, '-I', str(ROOT / 'tools/portable_checks.py'),
+                       '--build-dir', args.build_dir, '--test-label', args.test_label]
+            if args.no_build:
+                command.append('--no-build')
+            return execute([command], args.dry_run)
         if args.lane in ('evidence-index', 'trace-inspect'):
             script = args.lane.replace('-', '_') + '.py'
             return execute([[sys.executable, '-I', str(HERE / script), *args.args]], args.dry_run)
