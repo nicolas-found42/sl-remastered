@@ -13,6 +13,7 @@
       "binaryDir": "${sourceDir}/build",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
+        "SLRR_ENABLE_SANITIZERS": "OFF",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
         "CMAKE_JOB_POOLS": "compile_pool=6;link_pool=2",
         "CMAKE_JOB_POOL_COMPILE": "compile_pool",
