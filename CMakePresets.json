@@ -10,7 +10,7 @@
       "name": "ninja-release",
       "displayName": "Ninja release",
       "generator": "Ninja",
-      "binaryDir": "${sourceDir}/build/preset-release",
+      "binaryDir": "${sourceDir}/build",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
@@ -27,22 +27,52 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug"
       }
+    },
+    {
+      "name": "ninja-sanitize",
+      "inherits": "ninja-debug",
+      "displayName": "Ninja sanitizer diagnostics (not parity/release)",
+      "binaryDir": "${sourceDir}/build-sanitize",
+      "cacheVariables": {
+        "SLRR_ENABLE_SANITIZERS": "ON"
+      }
     }
   ],
   "buildPresets": [
-    { "name": "release", "configurePreset": "ninja-release" },
-    { "name": "debug", "configurePreset": "ninja-debug" }
+    {
+      "name": "release",
+      "configurePreset": "ninja-release"
+    },
+    {
+      "name": "debug",
+      "configurePreset": "ninja-debug"
+    },
+    {
+      "name": "sanitize",
+      "configurePreset": "ninja-sanitize"
+    }
   ],
   "testPresets": [
     {
       "name": "release",
       "configurePreset": "ninja-release",
-      "output": { "outputOnFailure": true }
+      "output": {
+        "outputOnFailure": true
+      }
     },
     {
       "name": "debug",
       "configurePreset": "ninja-debug",
-      "output": { "outputOnFailure": true }
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "sanitize",
+      "configurePreset": "ninja-sanitize",
+      "output": {
+        "outputOnFailure": true
+      }
     }
   ]
 }
