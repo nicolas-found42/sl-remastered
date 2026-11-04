@@ -10,6 +10,7 @@ from pathlib import Path
 import re
 import shlex
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -93,6 +94,14 @@ def canonical_source(name):
     return path
 
 
+def format_source(name):
+    path = canonical_source(name)
+    identity = path.stat()
+    if not stat.S_ISREG(identity.st_mode) or identity.st_nlink != 1:
+        raise ValueError(f'{name}: formatting requires a single-link regular file')
+    return path
+
+
 def protected(name):
     if name == 'ref' or name.startswith('ref/'):
         raise ValueError(f'protected ref/ change: {name}')
@@ -103,7 +112,8 @@ def selected_changes(args):
         names = list(dict.fromkeys(tracked_name(path) for path in args.paths))
         for name in names:
             protected(name)
-        return [(name, canonical_source(name).read_bytes(), None) for name in names]
+        reader = format_source if args.format else canonical_source
+        return [(name, reader(name).read_bytes(), None) for name in names]
     command = ['git', '--literal-pathspecs', 'diff', '--name-status', '-z', '--no-renames']
     command += ['--cached'] if args.staged else [args.base, 'HEAD']
     command += ['--']
@@ -377,7 +387,7 @@ def deep_check(changes, args, revision):
 
 def format_paths(changes):
     for name, content, _ in changes:
-        path = canonical_source(name)
+        path = format_source(name)
         indexed = (
             subprocess.run(
                 ['git', '--literal-pathspecs', 'ls-files', '--error-unmatch', '--', name],
@@ -422,10 +432,10 @@ def format_paths(changes):
         result = run(command, input=content, capture_output=True)
         outputs.append((name, path, content, result.stdout))
     for name, path, content, formatted in outputs:
-        if canonical_source(name).read_bytes() != content:
+        if format_source(name).read_bytes() != content:
             raise ValueError(f'{name}: file changed during formatting or is a symlink')
     for name, path, _, formatted in outputs:
-        path.write_bytes(formatted)
+        format_source(name).write_bytes(formatted)
         print(f'formatted working file: {name}; index unchanged')
 
 

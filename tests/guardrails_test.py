@@ -272,6 +272,23 @@ class GuardrailTest(unittest.TestCase):
             )
             self.assertEqual(target.read_bytes(), before)
 
+    def test_hardlink_cannot_format_protected_bytes(self):
+        protected = self.write('ref/precious.cpp', 'int main(){return 0;}\n')
+        alias = self.root / 'alias.cpp'
+        os.link(protected, alias)
+        before = protected.read_bytes()
+        identity = protected.stat().st_ino
+        rejected = self.check('--paths', 'alias.cpp', '--format')
+        self.assertEqual(rejected.returncode, 1, rejected.stdout + rejected.stderr)
+        self.assertIn('single-link regular file', rejected.stderr)
+        self.assertEqual(protected.read_bytes(), before)
+        self.assertEqual(alias.read_bytes(), before)
+        self.assertEqual(protected.stat().st_ino, identity)
+        self.assertEqual(alias.stat().st_ino, identity)
+        normal = self.write('normal.cpp', 'int main(){return 0;}\n')
+        self.assert_pass(self.check('--paths', 'normal.cpp', '--format'))
+        self.assertEqual(normal.read_text(), 'int main() { return 0; }\n')
+
     def test_deep_lint_refuses_untracked_repository_header_until_staged(self):
         source = self.write(
             'tracked.cpp', '#include "untracked.hpp"\nint use() { return number; }\n'
