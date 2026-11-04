@@ -1,0 +1,16 @@
+required-version = "0.17.0"
+target-version = "py311"
+line-length = 100
+force-exclude = true
+fix = false
+extend-exclude = [
+  "ref", "local", "build", "build-*", ".scratch", ".venv",
+  "docs/evidence", "docs/deck",
+]
+
+[lint]
+select = ["E9", "F63", "F7", "F82"]
+
+[format]
+quote-style = "single"
+docstring-code-format = false

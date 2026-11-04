@@ -1,0 +1,9 @@
+{
+  "schema": 1,
+  "llvm_major": 23,
+  "ruff": "0.17.0",
+  "shellcheck": "0.11.0",
+  "python_minimum": [3, 11],
+  "cmake_minimum": [3, 20],
+  "sdl_minimum": [3, 4, 0]
+}

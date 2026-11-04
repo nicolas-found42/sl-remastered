@@ -1,0 +1,9 @@
+# Explicit source checkout policy; do not normalize private evidence or fixtures.
+/tools/**/*.py text eol=lf
+/tests/*.py text eol=lf
+/tools/**/*.sh text eol=lf
+/experiments/**/*.sh text eol=lf
+/.githooks/* text eol=lf
+/.github/workflows/*.yml text eol=lf
+/docs/evidence/** -text
+/docs/deck/** -text

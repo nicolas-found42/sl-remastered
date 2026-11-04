@@ -8,3 +8,6 @@ local/
 /.agents/
 .DS_Store
 __pycache__/
+/.venv/
+/.ruff_cache/
+/CMakeUserPresets.json

@@ -1,0 +1,3 @@
+# Used by local virtual environments and hosted CI. Update with the tool manifest.
+ruff==0.17.0
+Pillow==13.0.0
