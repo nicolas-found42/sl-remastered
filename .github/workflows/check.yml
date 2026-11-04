@@ -13,31 +13,51 @@ permissions:
   contents: read
 jobs:
   portable:
-    runs-on: macos-14
+    # Explicit ARM64 image; macos-14 retired on 2026-11-02.
+    runs-on: macos-15
+    timeout-minutes: 30
+    concurrency:
+      group: portable-${{ github.workflow }}-${{ github.ref }}
+      cancel-in-progress: true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548 # v6.1.0
+        with:
+          python-version: '3.13'
       - name: Install build and lint tools
-        run: brew install llvm ninja sdl3 jpeg libpng
-      - name: Configure compilation database
-        run: python3 -I tools/parity/resource_pool.py --cpu 1 --host-memory 2 --build-writer 1 -- cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
-      - name: Check changed source
+        run: |
+          brew bundle --file Brewfile
+          echo "SLRR_LLVM_PREFIX=$(brew --prefix llvm)" >> "$GITHUB_ENV"
+          python3 -m pip install -r requirements-dev.txt
+      - name: Check all Python source
+        run: python3 -m ruff check tools tests
+      - name: Record developer toolchain
+        run: python3 -I tools/parity/dev.py doctor --json
+      - name: Check workflow expressions and shell
+        run: actionlint
+      - name: Resolve changed-source baseline
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: |
-          llvm_prefix="$(brew --prefix llvm)"
-          export PATH="$llvm_prefix/bin:$PATH"
           base="$BASE_SHA"
           if [ -z "$base" ] || ! git cat-file -e "$base^{commit}" 2>/dev/null; then
-            base="$(git hash-object -t tree /dev/null)"
+            base="$(git hash-object -w -t tree /dev/null)"
           fi
-          python3 -I tools/guardrails.py --base "$base"
+          echo "CHECK_BASE=$base" >> "$GITHUB_ENV"
+      - name: Check changed source (fast)
+        run: python3 -I tools/guardrails.py --base "$CHECK_BASE"
+      - name: Portable C++ tests and compilation database
+        run: python3 -I tools/portable_checks.py
+      - name: Analyze changed C++ and affected header translation units
+        run: python3 -I tools/guardrails.py --base "$CHECK_BASE" --tidy --build-dir build --translation-unit @all
       - name: Portable tooling controls
         run: |
-          llvm_prefix="$(brew --prefix llvm)"
-          export PATH="$llvm_prefix/bin:$PATH"
           python3 -I tests/guardrails_test.py
+          python3 -I tests/devtools_test.py
+          python3 -I tests/portable_checks_test.py
           python3 -I tools/parity/test_experiment_result.py
           python3 -I tools/parity/test_capacity.py
           python3 -I tools/parity/test_jev_packet.py
@@ -48,8 +68,9 @@ jobs:
     if: github.event_name == 'workflow_dispatch' && inputs.private_gate
     runs-on: [self-hosted, macOS, ARM64, sl-private-resources]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           clean: false
+          persist-credentials: false
       - name: Complete integration gate
         run: tools/check.sh
