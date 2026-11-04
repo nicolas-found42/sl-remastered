@@ -4,6 +4,8 @@ cd "$(dirname "$0")/.."
 # Automated probes keep rendering and scripted input without activating Cocoa.
 export SLRR_PROBE_BACKGROUND="${SLRR_PROBE_BACKGROUND:-1}"
 python3 -I tests/guardrails_test.py
+python3 -I tests/devtools_test.py
+python3 -I tests/portable_checks_test.py
 python3 -I tools/parity/resource_pool.py --cpu 2 --host-memory 2 --timeout 90 -- python3 -I tests/test_release_bundle.py
 python3 -I tools/parity/resource_pool.py --cpu 2 --host-memory 2 --timeout 90 -- python3 -I tests/test_release_stage.py
 python3 -I tools/parity/resource_pool.py --cpu 2 --host-memory 2 --timeout 90 -- python3 -I tests/test_release_distribution.py
