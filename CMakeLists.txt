@@ -805,5 +805,7 @@ target_link_options(probe_script_test PRIVATE -fsanitize=address,undefined)
 add_test(NAME probe_script_unit COMMAND probe_script_test)
 
 add_executable(assertions_enabled_test tests/assertions_enabled_test.cpp)
+target_compile_options(assertions_enabled_test PRIVATE -fsanitize=address,undefined -fno-sanitize-recover=undefined)
+target_link_options(assertions_enabled_test PRIVATE -fsanitize=address,undefined)
 add_test(NAME assertions_enabled_unit COMMAND assertions_enabled_test)
 include(cmake/DeveloperChecks.cmake)
