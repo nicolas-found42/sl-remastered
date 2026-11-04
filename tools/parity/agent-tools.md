@@ -4,6 +4,49 @@ Run these commands from the repository root. They extend `dev.py`; the full
 integration gate remains `tools/check.sh`. Local evidence and game assets stay
 local. Commands print reports to stdout unless an output directory is specified.
 
+## Command selection
+
+Use Python 3.11+ from the project environment (`source .venv/bin/activate` after
+setup). Run `python3 -I tools/parity/dev.py --help` for lane options. Commands
+below are run from the repository root; replace bracketed placeholders.
+
+| When | Command | Done when |
+| --- | --- | --- |
+| New checkout, or dependency/tool policy changed | `python3 -I tools/parity/dev.py setup` then `source .venv/bin/activate` | Dependencies install and the local hook is configured. Use `setup --skip-brew` when native tools are already provisioned. |
+| Start a session, or diagnose a tool/version problem | `python3 -I tools/parity/dev.py doctor` | Required tool checks pass. A missing database means configure before deep native lint. |
+| New native build, or CMake/preset/dependency changes | `python3 -I tools/parity/dev.py configure` | The chosen build tree has current compilation commands. Default is Release in `build`. |
+| After a behavior change | `python3 -I tools/parity/dev.py test '<test-regex>'` | The target builds and matching tests pass; an empty selection fails. Requires the selected tests' real prerequisites. |
+| Inspect unstaged source checks | `python3 -I tools/parity/dev.py lint --paths <files...>` | Selected working files pass. Native files are checked in full in this mode. |
+| New files or intentional whole-file style cleanup | `python3 -I tools/parity/dev.py format <files...>` | Review the working diff, then stage the intended changes. Formatting never stages files. For ordinary legacy edits, fix the reported edited range without unrelated cleanup. |
+| Before a commit | Stage intended files, then `python3 -I tools/parity/dev.py lint` | Actual index bytes pass fast checks. The hook repeats this check; it does not run clang-tidy. |
+| Before completing a native source/header change | `python3 -I tools/parity/dev.py lint --staged --tidy --build-dir build --translation-unit @all` | Exact compile variants and actual header dependencies pass deep analysis. Stage matching dependencies/configuration first. An explicit real includer can replace `@all`. |
+| Validate an asset-free clone or the public native CI slice | `python3 -I tools/parity/dev.py portable` | All selected portable tests pass. This is a small Release slice, separate from the complete gate. |
+| Diagnose a repeatable test failure | `python3 -I tools/parity/dev.py repro <exact-test-name> --runs 3` | Inspect exit codes and verdict signatures. Repeated failure remains red. |
+| Run ordered Python suites independently | `python3 -I tools/parity/dev.py corpus` | Every suite succeeds in gate order. This is not a replacement for a failed complete invocation. |
+| Finish implementation/review with private prerequisites available | `python3 -I tools/parity/dev.py gate` | One complete invocation succeeds. Otherwise report the failed stage, actual failures and unexecuted stages separately. |
+| Check a resumed handoff or an evidence claim | `python3 -I tools/parity/dev.py evidence-index tools/parity/session-evidence.json --markdown` | All bindings/assertions validate; missing private evidence remains unverified. |
+
+Normal sequence: read the task and preserve existing edits → diagnose/configure
+as needed → edit and run focused tests → stage intended files and run fast lint →
+run deep lint for native changes → run the applicable portable/corpus checks →
+run the complete gate and report its actual result. Commit/push only when asked.
+Use `--dry-run` before the lane name to inspect a plan without executing it.
+
+For Debug or sanitizer diagnostics, configure the corresponding preset and use
+its build directory for deep lint. `portable` always configures the Release
+preset, even with a custom `--build-dir`; `--no-build` tests an already configured
+and built tree. For example, after `configure --preset ninja-sanitize`:
+
+```sh
+python3 -I tools/parity/resource_pool.py --cpu 2 --host-memory 6 --build-writer 1 -- \
+  cmake --build --preset sanitize --target portable-tests --parallel 2
+python3 -I tools/parity/dev.py portable --build-dir build-sanitize --no-build
+```
+
+Ordinary `test`, `repro` and `perf` lanes use the canonical Release `build` tree.
+Capture/Stock work must follow the specialized sections below; none of the
+commands above authorizes resuming a paused product goal or widening acceptance.
+
 ## Experiment stages
 
 `python3 -I tools/parity/dev.py experiment manifest.json NEW_OUTPUT_DIRECTORY`
@@ -32,17 +75,51 @@ write sandbox; commands must keep outputs within their declared tree.
 
 ## Local and CI guardrails
 
-Install for a new checkout with `git config --local core.hooksPath .githooks`.
-The hook checks the actual staged Python syntax and C/C++ formatting. C/C++ lint
-also requires working bytes to match staged bytes and a CMake compilation database
-at `build/compile_commands.json`; run the normal configure step first. Install
-LLVM's `clang-format` and `clang-tidy` on PATH (Homebrew LLVM is detected locally).
-Checks use `.clang-format` and `.clang-tidy`, promote lint warnings to errors,
-and never format files automatically. Stage selected changes normally; the hook
-does not stage or rewrite unrelated work.
+`python3 -I tools/parity/dev.py setup` explicitly installs the Brewfile inventory,
+creates `.venv`, installs pinned `requirements-dev.txt` and sets the local hook
+path to `.githooks`. Activate that environment before running commands. Use
+`setup --skip-brew` for Python/hook setup only. Python 3.11+ is required; hosted
+CI selects 3.13. `doctor [--json] [--build-dir PATH]` reports actual tool versions,
+SDK/compiler identity and compilation-database coverage without installing,
+configuring or launching anything. The Brewfile is not a native dependency lock;
+`tools/devtools.json` checks the chosen lint tool family.
 
-`.github/workflows/check.yml` runs changed-source checks and portable tooling
-controls on macOS. The full private-resource job is an explicit workflow dispatch
+`dev.py configure [--preset ninja-release|ninja-debug|ninja-sanitize]` holds shared
+build admission. Release uses `build`, Debug `build/preset-debug`, and optional
+full-library sanitizer diagnostics `build-sanitize`. Keep sanitizer artifacts
+separate from parity/performance/release builds. Use ignored CMakeUserPresets.json
+for local overrides. Formatter/tidy resolution prefers `SLRR_LLVM_PREFIX`, then
+the same Homebrew LLVM installation, before PATH; it does not swap the compiler.
+
+`dev.py lint` checks staged bytes by default. Use `--base REV` for committed
+changes, or `--paths FILE...` for explicit working files. Fast checks cover AST
+plus pinned Ruff error rules, ShellCheck with the actual shell dialect, and
+native formatting. New native files and explicit working-path checks require
+full formatting; staged/committed edits check edited ranges to avoid rewriting
+unrelated historical debt. The hook uses
+these fast checks without a configured build or automatic file writes.
+
+`dev.py lint --staged --tidy --build-dir build --translation-unit @all` adds deep
+analysis. A header needs explicit real includers (or `@all` to inspect configured
+TUs). Exact compile commands and actual compiler dependencies are checked; staged
+or HEAD analysis refuses differing tracked source/configuration/dependency bytes.
+Foreign-toolchain sources need their real database, not guessed native flags.
+This is not a full isolated Git-index build. CI runs fast and deep checks as
+separate named steps. Diagnostics and missing tools fail explicitly.
+
+`dev.py format FILE...` is an explicit working-file write for native/Python
+formatters, never staging. It refuses conflicting partial staging or aliases.
+Python formatting remains opt-in; Ruff lint applies independently. `.editorconfig`
+and narrow `.gitattributes` source rules avoid normalizing retained evidence.
+
+`dev.py portable` builds only the audited asset-free `portable-tests` target and
+runs serial `portable` CTests with no-match refusal and named failed/unexecuted
+stages. Its smaller build budget fits the hosted ARM64 runner without changing
+the local pool capacity, disk reserve, full test order or acceptance criteria.
+Hosted CI uses supported macOS 15 ARM64, pinned action revisions, Python/Ruff,
+workflow/shell checks, this native slice and separate deep analysis. Local
+validation does not prove a remote workflow run.
+The full private-resource job remains an explicit workflow dispatch
 to a runner labeled `sl-private-resources` with the same private prerequisites as
 the local full gate. Provision game/reference resources locally on that runner;
 the workflow does not upload or fetch them. Remote execution is separate from
