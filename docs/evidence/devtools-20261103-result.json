@@ -1,0 +1,290 @@
+{
+  "schema": 1,
+  "scope": "Authorized developer-tool implementation and validation; Full Port product work remains paused",
+  "base_head": "d38d405ff7666e462411d21bbad7cb3563763d84",
+  "research_complete_before_implementation": true,
+  "research_notes": [
+    "docs/research/devtools-cpp-build-20261103.md",
+    "docs/research/devtools-python-shell-20261103.md",
+    "docs/research/devtools-game-ci-20261103.md"
+  ],
+  "implementation_sources": {
+    ".clangd": {
+      "sha256": "197d0886f4f3a37dbf6d543c42d173d63acc7fbb343f23d42b2d77b74292613a",
+      "bytes": 43
+    },
+    ".editorconfig": {
+      "sha256": "136dcf138f61e42d427dd390c9f2bf688ed5320917b03fad78ee80c6c13fdfc8",
+      "bytes": 354
+    },
+    ".gitattributes": {
+      "sha256": "c8c2704f0fd76c51e3b8af3d375dcc4e2219ba693e29f2ff74bb69d19fc2f968",
+      "bytes": 299
+    },
+    ".github/workflows/check.yml": {
+      "sha256": "527c850b1edc9ad0c3ddf2a7490f74d6977b39a13cee576712259c7853439590",
+      "bytes": 2997
+    },
+    ".gitignore": {
+      "sha256": "5534ad26863b659222f6b462c7aa4a354054d5835826c7fb72ca14096820e957",
+      "bytes": 136
+    },
+    "Brewfile": {
+      "sha256": "97255e8e2241c3f7a57ffc19f45f5d4de4f462d015c9d01c6f1ebf6bbce816eb",
+      "bytes": 193
+    },
+    "CMakeLists.txt": {
+      "sha256": "4c09d61c980205b4a455b7be2678507b52974b76065f133df3e2b9d62d183da3",
+      "bytes": 56201
+    },
+    "CMakePresets.json": {
+      "sha256": "81a546b0ba5ec21b14cb6d5e89f978e99cdca13b0bdcb7d403027e5e714b9c5b",
+      "bytes": 1795
+    },
+    "README.md": {
+      "sha256": "f10270967317a1fcb7ea0093adb51fb4f7207b178442662319e902dbd51ebeb5",
+      "bytes": 6091
+    },
+    "cmake/DeveloperChecks.cmake": {
+      "sha256": "e2617633746ff055a8768fd028902cf9cdaf1423f27ff8e715b3ca60239b7c5b",
+      "bytes": 1644
+    },
+    "docs/research/devtools-cpp-build-20261103.md": {
+      "sha256": "9cea249a741b305e45ce1288f8d3828866906f4186cadea014644e1ac0cd2108",
+      "bytes": 12360
+    },
+    "docs/research/devtools-game-ci-20261103.md": {
+      "sha256": "6f99c26083cdedbce5138f295507c036a00e0d1760428f937398550431dbc86b",
+      "bytes": 15403
+    },
+    "docs/research/devtools-implementation-20261103.md": {
+      "sha256": "97a9f247ec156aa98aef538b0fe59515c9acb2e7b6c9f83b4d70b9cd2625fa51",
+      "bytes": 5456
+    },
+    "docs/research/devtools-python-shell-20261103.md": {
+      "sha256": "72aa4898f1c52c36344d798b404d073302c38e64ce03c5b7b3dbe00667b221f9",
+      "bytes": 12635
+    },
+    "requirements-dev.txt": {
+      "sha256": "382de9cab881c161e0b31ca1255d4e60de12d269da5daa512bb0ae5841d8d2c6",
+      "bytes": 111
+    },
+    "ruff.toml": {
+      "sha256": "1b45651c9a7f0edd9eebd0c44d0d39006a0aff4c6f299e78a96523a18917b555",
+      "bytes": 323
+    },
+    "tests/assertions_enabled_test.cpp": {
+      "sha256": "9ef4f6a6c2d330ae986fe38e30cf7b206d61ee1687d0ad25a083ef108c231ef3",
+      "bytes": 220
+    },
+    "tests/devtools_test.py": {
+      "sha256": "6ece2ef131dbb45a347e8db07e78c91194519ab4a0dea62d308f803dfdec8f8b",
+      "bytes": 2491
+    },
+    "tests/guardrails_test.py": {
+      "sha256": "57ce257b756f03795e0414a0fec69c8243d3aa5747bcad86d59ac17542cc5bb6",
+      "bytes": 15320
+    },
+    "tests/portable_checks_test.py": {
+      "sha256": "254e1877638d826066e5df442b3dc00e93fe7bef24943a0d5a1c4d0f26877a28",
+      "bytes": 2531
+    },
+    "tools/check.sh": {
+      "sha256": "c91bf04ff536078204d52001038341c5d259ba40408591fabb0f36970644fd18",
+      "bytes": 5309
+    },
+    "tools/devtools.json": {
+      "sha256": "f4f1f98a4caec73a9bae73e6a04bd4601c1cc080cd320f0cbc8135771cfa8794",
+      "bytes": 169
+    },
+    "tools/devtools.py": {
+      "sha256": "09cd53fb5a2a1128377e43055514d96a9942369e9e8e0057e3265c259f8d0dcc",
+      "bytes": 7367
+    },
+    "tools/guardrails.py": {
+      "sha256": "0dc8695edfc2724ef39db4cafcb2b135bb4c30705ff0f6af7c92cfae4f5de2f1",
+      "bytes": 18686
+    },
+    "tools/parity/agent-tools.md": {
+      "sha256": "8602c51ce9a44560cd16b6015e54a086bdd3b6b7b8a96eb5d35770a0a3219bc6",
+      "bytes": 11870
+    },
+    "tools/parity/dev.py": {
+      "sha256": "7b28b068a885ec4d6c7e18cee399db9434d9c55353a0c613b53ede57e73f6ab1",
+      "bytes": 32283
+    },
+    "tools/portable_checks.py": {
+      "sha256": "cc0d7db3f4c824ef91fba6801439580a8cca7efe6b0d39c68f2452498da390a1",
+      "bytes": 3021
+    }
+  },
+  "retained": {
+    "gate.log": {
+      "path": "local/verify/issue53-resume-20261103-v1/devtools-20261103/gate.log",
+      "sha256": "f921bff7826c96a9acde82cd7a7ebd37c4d1e74518a3e67b17715076ec8e44d2",
+      "bytes": 96049
+    },
+    "gate-final.log": {
+      "path": "local/verify/issue53-resume-20261103-v1/devtools-20261103/gate-final.log",
+      "sha256": "1823c9dc326e6ce7a07d05d31fd1d92e82d863a0eccce09862a86621b3dc9f2b",
+      "bytes": 16473
+    },
+    "no-ref-portable.log": {
+      "path": "local/verify/issue53-resume-20261103-v1/devtools-20261103/no-ref-portable.log",
+      "sha256": "632260d129d4ab529d873f742a2c7075ddc12536c852fb2c7ee897b9f44c41d4",
+      "bytes": 2831
+    },
+    "no-ref-portable-final.log": {
+      "path": "local/verify/issue53-resume-20261103-v1/devtools-20261103/no-ref-portable-final.log",
+      "sha256": "4aac49a22d01d7fdc84d18c122da46c535c66b49332217f87758246fa6b4a48f",
+      "bytes": 2843
+    },
+    "sanitize-final.log": {
+      "path": "local/verify/issue53-resume-20261103-v1/devtools-20261103/sanitize-final.log",
+      "sha256": "e6eb2204b3f265ed9ac9fb5f1423a66e573573c8019f1dbf9fd374097e3d7d37",
+      "bytes": 794
+    },
+    "doctor-final.json": {
+      "path": "local/verify/issue53-resume-20261103-v1/devtools-20261103/doctor-final.json",
+      "sha256": "e813d9c483ddd612a9c0177d06f7e5441260cfebcd0836ab6ee67ba19507dece",
+      "bytes": 7024
+    },
+    "venv-doctor.json": {
+      "path": "local/verify/issue53-resume-20261103-v1/devtools-20261103/venv-doctor.json",
+      "sha256": "3f3d71a077796a2af11a60e19ac7c18a327ace10c5a23355d96eec07ca004b11",
+      "bytes": 7071
+    },
+    "instrumentation-controls.py": {
+      "path": "local/verify/issue53-resume-20261103-v1/devtools-20261103/instrumentation-controls.py",
+      "sha256": "0743d74d0e344b5d4609d404414e00e81a11f7cce94f71f52c734f7ef3d35442",
+      "bytes": 1373
+    },
+    "instrumentation-controls.log": {
+      "path": "local/verify/issue53-resume-20261103-v1/devtools-20261103/instrumentation-controls.log",
+      "sha256": "5f4205779f62b371a9bf1880d273d4dcb4b9116756c0c27a96493a73410649da",
+      "bytes": 295
+    },
+    "deep-lint.log": {
+      "path": "local/verify/issue53-resume-20261103-v1/devtools-20261103/deep-lint.log",
+      "sha256": "ac7b4cb9a896533e9f4ed610f54bec8750a130f2e91676b2c9cf4e316edd9223",
+      "bytes": 162
+    },
+    "deep-lint-final.log": {
+      "path": "local/verify/issue53-resume-20261103-v1/devtools-20261103/deep-lint-final.log",
+      "sha256": "ac7b4cb9a896533e9f4ed610f54bec8750a130f2e91676b2c9cf4e316edd9223",
+      "bytes": 162
+    },
+    "fast-lint.log": {
+      "path": "local/verify/issue53-resume-20261103-v1/devtools-20261103/fast-lint.log",
+      "sha256": "0d1edec49f7f76c69ee9ae5b42682fdf6d4fc62fd0c59866ce421db59a025df9",
+      "bytes": 203
+    },
+    "fast-lint-final.log": {
+      "path": "local/verify/issue53-resume-20261103-v1/devtools-20261103/fast-lint-final.log",
+      "sha256": "0d1edec49f7f76c69ee9ae5b42682fdf6d4fc62fd0c59866ce421db59a025df9",
+      "bytes": 203
+    },
+    "dev.log": {
+      "path": "local/verify/issue53-resume-20261103-v1/devtools-20261103/dev.log",
+      "sha256": "f1d86d4c568aff845c1cd777de8525b0ec1a9fa23f4b0e3672c653d1ea4dfd13",
+      "bytes": 120
+    },
+    "ci-python-controls.log": {
+      "path": "local/verify/issue53-resume-20261103-v1/devtools-20261103/ci-python-controls.log",
+      "sha256": "2cf08d97ffaa793dd4a428f397a8a37c075e537c3e41629f20f82850da9d46f6",
+      "bytes": 520
+    },
+    "implementation_snapshot": {
+      "path": "local/verify/issue53-resume-20261103-v1/devtools-20261103/implementation-snapshot.tar.gz",
+      "sha256": "4d9d78d99da2c01664830b97a64817d4a20ed96bbf87ef119b4df775f8dab974",
+      "bytes": 58178
+    }
+  },
+  "sanitizer_files": {
+    "compile_commands.json": {
+      "path": "local/verify/issue53-resume-20261103-v1/devtools-20261103/sanitize-compile_commands.json.gz",
+      "sha256": "dabda3b6613de38c3294f2ce9598bcef3a88e1587a544697714702d2d7331dd9",
+      "decoded_sha256": "d47b1fba975eb9612ef80dad9bb7b9fd8d0b410ed197b526c7a554c8ae23d75f",
+      "decoded_bytes": 768658
+    },
+    "CMakeCache.txt": {
+      "path": "local/verify/issue53-resume-20261103-v1/devtools-20261103/sanitize-CMakeCache.txt.gz",
+      "sha256": "a77a18ef3a00ad25a79eb296aaeaa935e06d60e8af89d7a1442d271e605a45ee",
+      "decoded_sha256": "338ddd5f4f428c7741b1ee31623a29e85dbff3267c43c64f38b60b09764ac825",
+      "decoded_bytes": 19900
+    },
+    "Testing/Temporary/LastTest.log": {
+      "path": "local/verify/issue53-resume-20261103-v1/devtools-20261103/sanitize-LastTest.log.gz",
+      "sha256": "34a69305b44cce4fb22411a76e82447643bbf6c2dc5097a0e6646119bdedf6fd",
+      "decoded_sha256": "af275c9acd4db9d1bdf0d54f568f7f4c5f3c7d6818c55069caf7e3bdca5b3e2e",
+      "decoded_bytes": 2779
+    }
+  },
+  "checks": {
+    "guardrail_real_tool_tests": 14,
+    "doctor_tests": 3,
+    "portable_helper_tests": 2,
+    "dev_lane_tests": 21,
+    "additional_hosted_python_tests": [
+      9,
+      6,
+      5,
+      5,
+      5
+    ],
+    "fresh_no_reference_native_tests": 4,
+    "sanitizer_native_tests": 4,
+    "instrumented_sl_data_compile_commands": 116,
+    "disabled_assert_control_exit": 1,
+    "instrumented_library_UB_control_exit": -6,
+    "setup_skip_brew_exit": 0,
+    "venv_doctor_ok": true,
+    "ruff_exit": 0,
+    "actionlint_exit": 0,
+    "fast_lint_exit": 0,
+    "deep_assertion_target_lint_exit": 0
+  },
+  "full_gate": {
+    "exit_code": 8,
+    "ctest_passed": 128,
+    "ctest_total": 130,
+    "failed": [
+      "car_world_step_unit",
+      "object_world_step_unit"
+    ],
+    "post_ctest_stages": "unexecuted",
+    "new_game_failures": false,
+    "scope": "Assertions now live in all C++ test targets; original parked-car and object speed/sleep failures remain, no assertions weakened."
+  },
+  "reviews": {
+    "standards": "Two findings resolved: hardlink formatting alias and missing default sanitizer flags on assertion test. Final reviewer confirmed no remaining findings.",
+    "spec": "No blocking findings; scoped sanitizer and hardlink fixes confirmed.",
+    "jev": {
+      "action": "escalate",
+      "safe_to_apply": 0.35,
+      "composite": 0.6314999999999998,
+      "facts_verified": 3,
+      "facts_contradicted": 0,
+      "facts_unsupported": 0,
+      "automatic_fact_acceptances": 1,
+      "binding": {
+        "path": "local/verify/issue53-resume-20261103-v1/devtools-20261103/jev-final.json",
+        "sha256": "57f9c537f5e70b36aaa734948ab3964a231ea32eb6e3458e0adff49044595430"
+      },
+      "resolution": "No concrete defect rationale supplied by rubric. Parent mechanically rechecked command flags, src-file diff exclusion and raw exit/test counts; independent Standards/Spec reviewers confirmed their findings resolved and no remaining findings. No unchanged reroll or automatic approval claimed."
+    }
+  },
+  "not_executed": [
+    "remote GitHub Actions",
+    "Homebrew dependency installation (tools already present)",
+    "private game capture or replay",
+    "signed/notarized release or clean-host acceptance"
+  ],
+  "private_ref_and_runtime_sources_changed": false,
+  "full_game_goal_status": "paused",
+  "release_complete": false,
+  "retained_result": {
+    "path": "local/verify/issue53-resume-20261103-v1/devtools-20261103/result.json",
+    "sha256": "1bd6c0e511c2b74b08e0d5960ccbbda255840c3ec0cce5a7afbe45b3c89a88fc"
+  }
+}

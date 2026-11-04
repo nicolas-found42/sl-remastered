@@ -3564,6 +3564,144 @@
           "equals": false
         }
       ]
+    },
+    {
+      "id": "devtools-research-and-developer-lanes-20261103",
+      "deliverable": "7",
+      "sequence": 1,
+      "scope": "All3teamresearchcompletedbeforeimplementation. New staged-safe native/Python/shellchecks, setup/doctor/configure/format and actual4test no-ref portablelane; isolatedsanitizer/alltestassertpolicy validated. No whole-game/paired/performance acceptance or productresume.",
+      "outcome": "incomplete",
+      "review": "escalated",
+      "evidence": {
+        "result": {
+          "path": "docs/evidence/devtools-20261103-result.json",
+          "sha256": "ed81b782b8dc1566aa9ec18e471f456d2d0d4abb5be785bb8cbca8ad6400ebba"
+        }
+      },
+      "assertions": [
+        {
+          "evidence": "result",
+          "pointer": "/research_complete_before_implementation",
+          "equals": true
+        },
+        {
+          "evidence": "result",
+          "pointer": "/checks/guardrail_real_tool_tests",
+          "equals": 14
+        },
+        {
+          "evidence": "result",
+          "pointer": "/checks/fresh_no_reference_native_tests",
+          "equals": 4
+        },
+        {
+          "evidence": "result",
+          "pointer": "/checks/sanitizer_native_tests",
+          "equals": 4
+        },
+        {
+          "evidence": "result",
+          "pointer": "/full_gate/exit_code",
+          "equals": 8
+        },
+        {
+          "evidence": "result",
+          "pointer": "/full_gate/ctest_passed",
+          "equals": 128
+        },
+        {
+          "evidence": "result",
+          "pointer": "/full_gate/ctest_total",
+          "equals": 130
+        },
+        {
+          "evidence": "result",
+          "pointer": "/full_gate/failed",
+          "equals": [
+            "car_world_step_unit",
+            "object_world_step_unit"
+          ]
+        },
+        {
+          "evidence": "result",
+          "pointer": "/full_game_goal_status",
+          "equals": "paused"
+        },
+        {
+          "evidence": "result",
+          "pointer": "/release_complete",
+          "equals": false
+        }
+      ]
+    },
+    {
+      "id": "devtools-assertions-live-full-gate-20261103",
+      "deliverable": "8",
+      "sequence": 16,
+      "scope": "Current fullgate exits8:128/130CTest withassertionsenabled; samecarparked/objectsettling failures,postCTestunexecuted.14guardrail/3doctor/2helper/21dev/30CI-Python and4no-ref/4sanitizer tests pass; independent scopedfindingsresolved; Jev lowconfidenceescalation retained. FullPortpaused.",
+      "outcome": "failed",
+      "review": "escalated",
+      "evidence": {
+        "result": {
+          "path": "docs/evidence/devtools-20261103-result.json",
+          "sha256": "ed81b782b8dc1566aa9ec18e471f456d2d0d4abb5be785bb8cbca8ad6400ebba"
+        }
+      },
+      "assertions": [
+        {
+          "evidence": "result",
+          "pointer": "/research_complete_before_implementation",
+          "equals": true
+        },
+        {
+          "evidence": "result",
+          "pointer": "/checks/guardrail_real_tool_tests",
+          "equals": 14
+        },
+        {
+          "evidence": "result",
+          "pointer": "/checks/fresh_no_reference_native_tests",
+          "equals": 4
+        },
+        {
+          "evidence": "result",
+          "pointer": "/checks/sanitizer_native_tests",
+          "equals": 4
+        },
+        {
+          "evidence": "result",
+          "pointer": "/full_gate/exit_code",
+          "equals": 8
+        },
+        {
+          "evidence": "result",
+          "pointer": "/full_gate/ctest_passed",
+          "equals": 128
+        },
+        {
+          "evidence": "result",
+          "pointer": "/full_gate/ctest_total",
+          "equals": 130
+        },
+        {
+          "evidence": "result",
+          "pointer": "/full_gate/failed",
+          "equals": [
+            "car_world_step_unit",
+            "object_world_step_unit"
+          ]
+        },
+        {
+          "evidence": "result",
+          "pointer": "/full_game_goal_status",
+          "equals": "paused"
+        },
+        {
+          "evidence": "result",
+          "pointer": "/release_complete",
+          "equals": false
+        }
+      ]
     }
   ]
 }
