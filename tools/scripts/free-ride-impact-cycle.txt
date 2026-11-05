@@ -1,0 +1,37 @@
+# Free Ride wall impact / separation / renewed-impact cycle through the real
+# Main Menu and readiness waits. The automatic transmission reaches reverse
+# only through neutral: every brake/reverse press follows a ~2.5 s all-pedals
+# release that drops the gear to 0, and the held brake then revs and selects
+# reverse (stock FUN_0044d720 automatic).
+0 wait splash 30
+0 keydown Escape
+0 wait menu 30
+0 keyup Escape
+0 clickn 0.65625 0.264583333
+0 wait driving 60
+0 shot @run/ready.bmp
+0.1 sdl_keydown Up
+# impact #1: throttle down the straight into the wall at x~-345
+14 sdl_keyup Up
+14.3 shot @run/impact1.bmp
+# neutral gap (gear drops to 0), then reverse away from the wall
+16.8 sdl_keydown Down
+23 sdl_keyup Down
+23.3 shot @run/separated1.bmp
+# neutral gap, renewed impact #2
+25.8 sdl_keydown Up
+34 sdl_keyup Up
+34.3 shot @run/impact2.bmp
+# neutral gap, reverse again
+36.8 sdl_keydown Down
+43 sdl_keyup Down
+43.3 shot @run/separated2.bmp
+# neutral gap, renewed impact #3
+45.8 sdl_keydown Up
+54 sdl_keyup Up
+54.3 shot @run/impact3.bmp
+# neutral gap, reverse, then stop
+56.8 sdl_keydown Down
+62 sdl_keyup Down
+63 shot @run/stopped.bmp
+63.5 quit
