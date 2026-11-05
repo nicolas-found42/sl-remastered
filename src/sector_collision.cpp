@@ -161,9 +161,9 @@ bool SectorCollisionManager::process(ResourceWorld &resources,
     for (size_t axis : {size_t(0), size_t(2)}) {
       for (int side : {-1, 1}) {
         float oldEnd = source->bounds.values[axis] +
-                       side * source->bounds.values[axis + 3];
+                       static_cast<float>(side) * source->bounds.values[axis + 3];
         float newEnd =
-            a.bounds->values[axis] + side * a.bounds->values[axis + 3];
+            a.bounds->values[axis] + static_cast<float>(side) * a.bounds->values[axis + 3];
         if (oldEnd == newEnd)
           continue;
         float limit = newEnd + (newEnd - oldEnd) * 5.0f +
@@ -178,7 +178,7 @@ bool SectorCollisionManager::process(ResourceWorld &resources,
               target->hasBounds ? target->bounds : *b.bounds;
           for (int targetSide : {-1, 1}) {
             float endpoint = targetBounds.values[axis] +
-                             targetSide * targetBounds.values[axis + 3];
+                             static_cast<float>(targetSide) * targetBounds.values[axis + 3];
             if ((newEnd > oldEnd && endpoint >= newEnd && endpoint < limit) ||
                 (newEnd < oldEnd && endpoint <= newEnd && endpoint > limit))
               effects_.push_back(std::make_unique<Effect>(EffectKind::Load,

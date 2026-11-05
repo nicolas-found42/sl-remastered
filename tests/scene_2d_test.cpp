@@ -273,7 +273,7 @@ int main() {
     CHECK(bound);
     for (int i = 0; i <= 20; ++i)
       for (int j = 0; j <= 20 - i; ++j) {
-        const float weights[] = {i / 20.0f, j / 20.0f, (20 - i - j) / 20.0f};
+        const float weights[] = {static_cast<float>(i) / 20.0f, static_cast<float>(j) / 20.0f, static_cast<float>(20 - i - j) / 20.0f};
         for (size_t axis = 0; axis < 2; ++axis) {
           float affine = 0, weighted = 0, denominator = 0;
           for (size_t k = 0; k < 3; ++k) {

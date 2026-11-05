@@ -33,6 +33,7 @@ python3 -I tests/startup_constructor_test.py
 python3 -I tests/native_run_paths_test.py
 python3 -I tests/native_background_test.py
 python3 -I tests/run_log_test.py
+python3 -I tests/incident_test.py --probe build/diagnostic_operations_test --startup-probe build/startup_probe
 python3 -I tests/run_screenshot_test.py
 python3 -I tests/diagnose_merge_test.py
 python3 -I tests/cartrace_check_test.py

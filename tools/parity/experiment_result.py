@@ -8,6 +8,11 @@ import argparse
 import importlib.util
 import sys
 import subprocess
+import datetime
+import hashlib
+import os
+import time
+import uuid
 from pathlib import Path
 
 
@@ -20,6 +25,32 @@ class Experiment:
             raise ValueError('stage names must be nonempty strings')
         self.stages = {}
         self.failures = []
+        self.started = time.monotonic()
+        self.context = {'attempt_id': uuid.uuid4().hex,
+                        'started_utc': datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                        'pid': os.getpid(), 'python_version': list(sys.version_info[:3]),
+                        'runner_sha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest()}
+        self.journal = None
+        self.telemetry_failures = 0
+
+    def observe(self, event, stage=None, exit_code=None):
+        if self.journal is None:
+            return
+        row = {'schema': 1, 'attempt_id': self.context['attempt_id'], 'event': event,
+               'stage': stage, 'exit_code': exit_code,
+               'utc': datetime.datetime.now(datetime.timezone.utc).isoformat(),
+               'elapsed_seconds': time.monotonic() - self.started}
+        try:
+            fd = os.open(self.journal, os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600)
+            try:
+                raw = (json.dumps(row) + '\n').encode()
+                if os.write(fd, raw) != len(raw):
+                    raise OSError('short diagnostic journal write')
+                os.fsync(fd)
+            finally:
+                os.close(fd)
+        except OSError:
+            self.telemetry_failures += 1
 
     def run(self, lease, name, command, *, expected_exit=0, **limits):
         if name not in self.required or name in self.stages:
@@ -29,20 +60,28 @@ class Experiment:
         row = {'command': list(command), 'expected_exit': expected_exit,
                'actual_exit': None, 'completed': False}
         self.stages[name] = row
+        stage = self.required.index(name)
+        self.observe('begin', stage)
+        started = time.monotonic()
         try:
             result = lease.run(command, **limits)
             row.update(actual_exit=result.returncode, completed=True)
+            self.observe('end', stage, result.returncode)
             return result
         except BaseException as error:
             row['error'] = type(error).__name__ + ': ' + str(error)
+            self.observe('interrupted', stage)
             raise
+        finally:
+            row['elapsed_seconds'] = time.monotonic() - started
 
     def report(self):
         missing = [name for name in self.required if name not in self.stages]
         passed = not self.failures and not missing and all(
             row['completed'] and row['actual_exit'] == row['expected_exit']
             for row in self.stages.values())
-        return {'schema': 1, 'required_stages': list(self.required),
+        return {'schema': 1, **self.context, 'seconds': time.monotonic() - self.started,
+                'telemetry_failures': self.telemetry_failures, 'required_stages': list(self.required),
                 'stages': self.stages, 'missing_stages': missing,
                 'supervision_failures': self.failures,
                 'execution_passed': passed, 'parity_verified': False}
@@ -114,7 +153,7 @@ def main(argv=None):
             raise ValueError('canonical output parent required')
         if any(part in ('ref', '.git') for part in args.output.parts):
             raise ValueError('protected output path')
-        args.output.mkdir(parents=False, exist_ok=False)
+        args.output.mkdir(mode=0o700, parents=False, exist_ok=False)
         created = True
         spec = importlib.util.spec_from_file_location('experiment_pool',
                                                      Path(__file__).with_name('resource_pool.py'))
@@ -122,6 +161,14 @@ def main(argv=None):
         spec.loader.exec_module(pool)
         budget = pool.ArtifactBudget([args.output.resolve()], 8 * 1024 * 1024,
                                      link_policy=args.artifact_links)
+        # Persist context before admission/execution: a killed launcher may never
+        # reach finish(). Names, argv and environment stay out of this journal.
+        with (args.output / 'attempt.json').open('x', encoding='utf-8') as stream:
+            json.dump(experiment.context, stream)
+            stream.flush()
+            os.fsync(stream.fileno())
+        experiment.journal = args.output / 'stages.jsonl'
+        experiment.observe('attempt_started')
         with pool.ResourcePool(pressure=pool.Pressure()).acquire(
                 {'cpu': 1, 'host_memory': 2, 'build_writer': 1}, timeout=30) as lease:
             for index, stage in enumerate(stages):

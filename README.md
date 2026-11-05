@@ -6,7 +6,7 @@ The [Full Port specification](docs/specs/full-port-1.0.0.md) defines the product
 
 ## Set up development
 
-Use an Apple Silicon Mac with Xcode Command Line Tools, Homebrew and Python 3.11 or newer. CMake 3.20+, Ninja, SDL3 **3.4.0+**, JPEG and PNG are required. CI selects Python 3.13; the environment report records the interpreter/compiler/SDK actually used. Ruff and Pillow are pinned in `requirements-dev.txt`; the selected LLVM family and ShellCheck version are checked against `tools/devtools.json`.
+Use an Apple Silicon Mac with Xcode Command Line Tools, Homebrew and Python 3.11 or newer. CMake 3.20+, Ninja, SDL3 **3.4.0+**, JPEG, PNG and FFmpeg development libraries are required. CI selects Python 3.13; the environment report records the interpreter/compiler/SDK actually used. Ruff and Pillow are pinned in `requirements-dev.txt`; the selected LLVM family and ShellCheck version are checked against `tools/devtools.json`.
 
 ```sh
 # Explicit installation: Homebrew dependencies, project venv and Git hook.
@@ -44,6 +44,8 @@ The canonical Release database is `build/compile_commands.json`, also used by `.
 With the private references provisioned, run `python3 -I tools/parity/dev.py gate`. It runs `tools/check.sh`: native ARM64 build, serial tests, tooling controls and corpus comparisons. It prints `check: ok` only on complete success. A failure leaves later stages unexecuted; separately passing checks cannot repair that invocation. Test assertions remain enabled in Release. The stock-handler Ghidra test runs when the initialized local Ghidra project is present.
 
 Use [the command guide](tools/parity/agent-tools.md) for targeted tests, repro, corpus, evidence inspection and admission limits. Keep private native/Stock captures on their specialized adapters, with the existing foreground/audio, storage, deadline and cleanup policies. No formatter or lint command starts those captures.
+
+Use [the retained-failure runbook and coverage inventory](docs/observability.md) to investigate a failure that cannot be reproduced. `tools/incident.py` reads bounded history by UTC interval, run, native operation or retained UI request, and reports missing or incomplete evidence explicitly.
 
 To inspect a texture, run `build/ptx_view ref/raw/frontend/textures/GPS_FrameRaceSetup.ptx` after the check. Press Escape to close the viewer. This is a diagnostic, not the game menu.
 

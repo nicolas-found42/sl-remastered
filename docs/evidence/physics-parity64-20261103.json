@@ -1,0 +1,905 @@
+{
+  "schema": 1,
+  "scope": "Conditional original constructor/synthetic2048floor oracle; sector/resource dispatcher substituted. No retail discovery, whole-game parity, settling or completion acceptance.",
+  "comparisons": {
+    "stock_port64": {
+      "sources": [
+        {
+          "path": "/Users/nicolas/Documents/github/sl-remastered/local/verify/native-background-tests/attempt-z_x05__f/flag/issue53-full-floor-original-init-v3/capture-38478308ac/work/first-0.jsonl",
+          "sha256": "0f2f1182998764ecd055c4d3ed939fb429244f3403ff72941a7c28bd39c143ef",
+          "body_records": 258
+        },
+        {
+          "path": "/Users/nicolas/Documents/github/sl-remastered/local/verify/native-background-tests/attempt-z_x05__f/flag/issue53-new-candidate-parity64-v1/run.log",
+          "sha256": "e5e976ab609c72ca0977476eb27791ee7e4e0f11e8f5c8d7564b254051216239",
+          "body_records": 258
+        }
+      ],
+      "steps": 64,
+      "bodies": 2,
+      "equal": false,
+      "differing_body_records": 26,
+      "first_difference": {
+        "key": [
+          "step-final",
+          57,
+          0
+        ],
+        "left_line": 308,
+        "right_line": 279,
+        "current": 0,
+        "left_flags": 5,
+        "right_flags": 5,
+        "words": [
+          {
+            "offset": 0,
+            "left": 1075198365,
+            "right": 1075203679
+          },
+          {
+            "offset": 1,
+            "left": 1050074817,
+            "right": 1050124555
+          },
+          {
+            "offset": 2,
+            "left": 1042048530,
+            "right": 1041963496
+          },
+          {
+            "offset": 3,
+            "left": 3192418388,
+            "right": 3174233076
+          },
+          {
+            "offset": 4,
+            "left": 1046916694,
+            "right": 1043446886
+          },
+          {
+            "offset": 5,
+            "left": 1044934819,
+            "right": 1026749727
+          },
+          {
+            "offset": 16,
+            "left": 1065331879,
+            "right": 1065327237
+          },
+          {
+            "offset": 17,
+            "left": 3176034889,
+            "right": 3177432156
+          },
+          {
+            "offset": 18,
+            "left": 984005419,
+            "right": 986382109
+          },
+          {
+            "offset": 20,
+            "left": 1028551245,
+            "right": 1029948512
+          },
+          {
+            "offset": 21,
+            "left": 1065310541,
+            "right": 1065301257
+          },
+          {
+            "offset": 22,
+            "left": 3176035131,
+            "right": 3177432396
+          },
+          {
+            "offset": 24,
+            "left": 984001325,
+            "right": 986378017
+          },
+          {
+            "offset": 25,
+            "left": 1028551487,
+            "right": 1029948752
+          },
+          {
+            "offset": 26,
+            "left": 1065331878,
+            "right": 1065327236
+          },
+          {
+            "offset": 28,
+            "left": 3224951248,
+            "right": 3213359603
+          },
+          {
+            "offset": 29,
+            "left": 3019236638,
+            "right": 3028461173
+          },
+          {
+            "offset": 30,
+            "left": 3224951248,
+            "right": 3213359614
+          },
+          {
+            "offset": 37,
+            "left": 1020171488,
+            "right": 1021571712
+          },
+          {
+            "offset": 39,
+            "left": 1020171246,
+            "right": 1021571472
+          },
+          {
+            "offset": 40,
+            "left": 1065342545,
+            "right": 1065340222
+          }
+        ]
+      },
+      "scope": "Complete ordered constructor/initial/final body snapshots only; two 53-word buffers starting at current=0. No intermediate contact causality or game parity."
+    },
+    "stock_repeat64": {
+      "sources": [
+        {
+          "path": "/Users/nicolas/Documents/github/sl-remastered/local/verify/native-background-tests/attempt-z_x05__f/flag/issue53-full-floor-original-init-v3/capture-38478308ac/work/first-0.jsonl",
+          "sha256": "0f2f1182998764ecd055c4d3ed939fb429244f3403ff72941a7c28bd39c143ef",
+          "body_records": 258
+        },
+        {
+          "path": "/Users/nicolas/Documents/github/sl-remastered/local/verify/native-background-tests/attempt-z_x05__f/flag/issue53-full-floor-original-init-v3/capture-38478308ac/work/repeat-0.jsonl",
+          "sha256": "0f2f1182998764ecd055c4d3ed939fb429244f3403ff72941a7c28bd39c143ef",
+          "body_records": 258
+        }
+      ],
+      "steps": 64,
+      "bodies": 2,
+      "equal": true,
+      "differing_body_records": 0,
+      "first_difference": null,
+      "scope": "Complete ordered constructor/initial/final body snapshots only; two 53-word buffers starting at current=0. No intermediate contact causality or game parity."
+    },
+    "stock_batch_control64": {
+      "sources": [
+        {
+          "path": "/Users/nicolas/Documents/github/sl-remastered/local/verify/native-background-tests/attempt-z_x05__f/flag/issue53-full-floor-original-init-v3/capture-38478308ac/work/first-0.jsonl",
+          "sha256": "0f2f1182998764ecd055c4d3ed939fb429244f3403ff72941a7c28bd39c143ef",
+          "body_records": 258
+        },
+        {
+          "path": "/Users/nicolas/Documents/github/sl-remastered/local/verify/native-background-tests/attempt-z_x05__f/flag/issue53-full-floor-original-init-v3/capture-38478308ac/work/control-32.jsonl",
+          "sha256": "95d7c626ecfab5bae838ba2c6e483af503e51932b2a9eafe27bc049364b79115",
+          "body_records": 258
+        }
+      ],
+      "steps": 64,
+      "bodies": 2,
+      "equal": true,
+      "differing_body_records": 0,
+      "first_difference": null,
+      "scope": "Complete ordered constructor/initial/final body snapshots only; two 53-word buffers starting at current=0. No intermediate contact causality or game parity."
+    },
+    "port_step40_observer": {
+      "sources": [
+        {
+          "path": "/Users/nicolas/Documents/github/sl-remastered/local/verify/native-background-tests/attempt-z_x05__f/flag/issue53-new-candidate-parity64-v1/run-baseline.log",
+          "sha256": "862e4deddb734e674d0780befca4b2c8a28a397d426459d4859e3fa359c4e94d",
+          "body_records": 258
+        },
+        {
+          "path": "/Users/nicolas/Documents/github/sl-remastered/local/verify/native-background-tests/attempt-z_x05__f/flag/issue53-new-candidate-parity64-v1/run.log",
+          "sha256": "e5e976ab609c72ca0977476eb27791ee7e4e0f11e8f5c8d7564b254051216239",
+          "body_records": 258
+        }
+      ],
+      "steps": 64,
+      "bodies": 2,
+      "equal": true,
+      "differing_body_records": 0,
+      "first_difference": null,
+      "scope": "Complete ordered constructor/initial/final body snapshots only; two 53-word buffers starting at current=0. No intermediate contact causality or game parity."
+    },
+    "port_step57_observer": {
+      "sources": [
+        {
+          "path": "/Users/nicolas/Documents/github/sl-remastered/local/verify/native-background-tests/attempt-z_x05__f/flag/issue53-new-candidate-parity64-v1/run-baseline.log",
+          "sha256": "862e4deddb734e674d0780befca4b2c8a28a397d426459d4859e3fa359c4e94d",
+          "body_records": 258
+        },
+        {
+          "path": "/Users/nicolas/Documents/github/sl-remastered/local/verify/native-background-tests/attempt-z_x05__f/flag/issue53-step57-port-v1/run.log",
+          "sha256": "0ed6c2bea81345f5dc094e1a4a9ae1099d604fcd2e4ecb756b91004391a229ee",
+          "body_records": 258
+        }
+      ],
+      "steps": 64,
+      "bodies": 2,
+      "equal": true,
+      "differing_body_records": 0,
+      "first_difference": null,
+      "scope": "Complete ordered constructor/initial/final body snapshots only; two 53-word buffers starting at current=0. No intermediate contact causality or game parity."
+    }
+  },
+  "stock_step57_observer": {
+    "sources": [
+      {
+        "path": "/Users/nicolas/Documents/github/sl-remastered/local/verify/native-background-tests/attempt-z_x05__f/flag/issue53-full-floor-original-init-v3/capture-38478308ac/work/first-0.jsonl",
+        "sha256": "0f2f1182998764ecd055c4d3ed939fb429244f3403ff72941a7c28bd39c143ef",
+        "body_records": 258
+      },
+      {
+        "path": "/Users/nicolas/Documents/github/sl-remastered/local/verify/issue53-native-clock-abi-v3-20261102/issue53-step57-stock-v2/capture-1a375730c9/work/first-0.jsonl",
+        "sha256": "c26ad33a0d67cdb955410af6415015afa24bee1e95c8766c6ac5a312aff55886",
+        "body_records": 234
+      }
+    ],
+    "complete58_body_records": 234,
+    "prefix_of_baseline64_equal": true
+  },
+  "first_step57_response": {
+    "stock": {
+      "type": "contact-input",
+      "phase": "before-first-response",
+      "step": 57,
+      "ordinal": 1,
+      "face": 1061,
+      "state": 7,
+      "priority_word": 1065353216,
+      "world_dt_word": 1015580809,
+      "corrections": 0,
+      "raw": [
+        9835176,
+        10160868,
+        10160856,
+        0,
+        0,
+        7,
+        0,
+        1,
+        1,
+        87728,
+        1,
+        87760,
+        91640,
+        97752,
+        92640,
+        0,
+        97840,
+        97776,
+        0,
+        102440,
+        98064,
+        0,
+        0,
+        3196059648,
+        3196059648,
+        1048576000,
+        1074137084,
+        0,
+        1053802508,
+        0,
+        1065353216,
+        0,
+        1074137084,
+        1016295960,
+        1053802508,
+        1016295952,
+        0,
+        1058642330,
+        1045220557,
+        1,
+        1088314363,
+        1137265640,
+        1140185825,
+        1065353216
+      ],
+      "body_feature": {
+        "owner": "box",
+        "index": 10,
+        "kind": 1,
+        "raw": 102440,
+        "anchor_index": 4,
+        "anchor": [
+          3196059648,
+          3196059648,
+          1048576000
+        ]
+      },
+      "triangle_feature": {
+        "owner": "triangle",
+        "index": 0,
+        "kind": 3,
+        "raw": 98064,
+        "anchor_index": 2120,
+        "anchor": [
+          1073741824,
+          0,
+          0
+        ]
+      }
+    },
+    "port": {
+      "type": "port-contact-input",
+      "ordinal": 1,
+      "resting": true,
+      "processed": false,
+      "constraint": false,
+      "dt": [
+        1015580809
+      ],
+      "corrections": 0,
+      "contact": [
+        3196059648,
+        3196059648,
+        1048576000,
+        1074137084,
+        0,
+        1053802508,
+        0,
+        1065353216,
+        0,
+        1016295952,
+        1058642330,
+        1045220557,
+        1088314363,
+        0,
+        0
+      ]
+    },
+    "stock_contact15": [
+      3196059648,
+      3196059648,
+      1048576000,
+      1074137084,
+      0,
+      1053802508,
+      0,
+      1065353216,
+      0,
+      1016295952,
+      1058642330,
+      1045220557,
+      1088314363,
+      1137265640,
+      1140185825
+    ],
+    "different_contact15_offsets": [
+      13,
+      14
+    ],
+    "body_inputs": [
+      {
+        "index": 0,
+        "all106_state_words_equal": true
+      },
+      {
+        "index": 1,
+        "all106_state_words_equal": true
+      },
+      {
+        "index": 2,
+        "all106_state_words_equal": true
+      }
+    ]
+  },
+  "step57_response_sequence": {
+    "stock": [
+      {
+        "ordinal": 1,
+        "face": 1061,
+        "state": 7,
+        "corrections": 0
+      },
+      {
+        "ordinal": 2,
+        "face": 997,
+        "state": 6,
+        "corrections": 1
+      },
+      {
+        "ordinal": 3,
+        "face": 1061,
+        "state": 7,
+        "corrections": 2
+      },
+      {
+        "ordinal": 4,
+        "face": 1061,
+        "state": 7,
+        "corrections": 3
+      },
+      {
+        "ordinal": 5,
+        "face": 1061,
+        "state": 7,
+        "corrections": 4
+      },
+      {
+        "ordinal": 6,
+        "face": 1061,
+        "state": 7,
+        "corrections": 5
+      },
+      {
+        "ordinal": 7,
+        "face": 1061,
+        "state": 7,
+        "corrections": 6
+      },
+      {
+        "ordinal": 8,
+        "face": 1061,
+        "state": 7,
+        "corrections": 7
+      },
+      {
+        "ordinal": 9,
+        "face": 1061,
+        "state": 7,
+        "corrections": 8
+      },
+      {
+        "ordinal": 10,
+        "face": 1061,
+        "state": 7,
+        "corrections": 9
+      },
+      {
+        "ordinal": 11,
+        "face": 1061,
+        "state": 7,
+        "corrections": 10
+      }
+    ],
+    "port": [
+      {
+        "ordinal": 1,
+        "resting": true,
+        "processed": false,
+        "corrections": 0
+      },
+      {
+        "ordinal": 2,
+        "resting": true,
+        "processed": false,
+        "corrections": 1
+      },
+      {
+        "ordinal": 3,
+        "resting": true,
+        "processed": false,
+        "corrections": 2
+      },
+      {
+        "ordinal": 4,
+        "resting": true,
+        "processed": false,
+        "corrections": 3
+      },
+      {
+        "ordinal": 5,
+        "resting": true,
+        "processed": false,
+        "corrections": 4
+      },
+      {
+        "ordinal": 6,
+        "resting": true,
+        "processed": false,
+        "corrections": 5
+      },
+      {
+        "ordinal": 7,
+        "resting": true,
+        "processed": false,
+        "corrections": 6
+      },
+      {
+        "ordinal": 8,
+        "resting": true,
+        "processed": false,
+        "corrections": 7
+      },
+      {
+        "ordinal": 9,
+        "resting": true,
+        "processed": false,
+        "corrections": 8
+      },
+      {
+        "ordinal": 10,
+        "resting": true,
+        "processed": false,
+        "corrections": 9
+      },
+      {
+        "ordinal": 11,
+        "resting": true,
+        "processed": false,
+        "corrections": 10
+      },
+      {
+        "ordinal": 12,
+        "resting": true,
+        "processed": false,
+        "corrections": 11
+      },
+      {
+        "ordinal": 13,
+        "resting": true,
+        "processed": false,
+        "corrections": 12
+      },
+      {
+        "ordinal": 14,
+        "resting": true,
+        "processed": false,
+        "corrections": 13
+      },
+      {
+        "ordinal": 15,
+        "resting": true,
+        "processed": false,
+        "corrections": 14
+      },
+      {
+        "ordinal": 16,
+        "resting": true,
+        "processed": false,
+        "corrections": 15
+      },
+      {
+        "ordinal": 17,
+        "resting": true,
+        "processed": false,
+        "corrections": 16
+      },
+      {
+        "ordinal": 18,
+        "resting": true,
+        "processed": false,
+        "corrections": 17
+      },
+      {
+        "ordinal": 19,
+        "resting": true,
+        "processed": false,
+        "corrections": 18
+      },
+      {
+        "ordinal": 20,
+        "resting": false,
+        "processed": true,
+        "corrections": 19
+      },
+      {
+        "ordinal": 21,
+        "resting": true,
+        "processed": false,
+        "corrections": 20
+      }
+    ]
+  },
+  "source_bindings": {
+    "local/verify/native-background-tests/attempt-z_x05__f/flag/issue53-new-candidate-parity64-v1/producer.json": "98dbefab6f20802c78ff9d03d0dba59f35834f2d3566ec6b0a4432601789c0e4",
+    "local/verify/native-background-tests/attempt-z_x05__f/flag/issue53-new-candidate-parity64-v1/library.json": "f5bd0b16a5bcf2d1d28282ec8cbfc8d13fd5d6912aff96d2f329f26056bfef40",
+    "local/verify/native-background-tests/attempt-z_x05__f/flag/issue53-new-candidate-parity64-v1/native.cpp": "a776d6e4d42c2c8a5961ccf6826e0c80c701a55c93d41e9a1fd9bceb1d606a2e",
+    "local/verify/native-background-tests/attempt-z_x05__f/flag/issue53-new-candidate-parity64-v1/geometry.cpp": "c16531109abe470e059b1bb1287135ecdd07e2bb2e1b18cfaca4ec561c8b86fd",
+    "local/verify/native-background-tests/attempt-z_x05__f/flag/issue53-new-candidate-parity64-v1/friction.cpp": "9655e0647b2f4ba602a763e8d57c1dc0b995b2a10415ca2194bf526215184cd3",
+    "local/verify/native-background-tests/attempt-z_x05__f/flag/issue53-new-candidate-parity64-v1/prepaid-audit-binding.json": "75fcee35adb2cf5b3c8ccbe9f165a8dbcea1acc99170f872d9ea1e421c9ddc08",
+    "local/verify/native-background-tests/attempt-z_x05__f/flag/issue53-step57-port-v1/bindings.json": "e5f868ff56664d0497cfb56322c28d5dedaba51e150de3cc8d8e0747df45b72f",
+    "local/verify/native-background-tests/attempt-z_x05__f/flag/issue53-step57-port-v1/executable.json": "c2b68a869938407121bfc1cd796c4fc6fa24db193b578ef0fc414e036679bd44",
+    "local/verify/native-background-tests/attempt-z_x05__f/flag/issue53-step57-port-v1/result.json": "b6ebd69012fd5a12137d07aafd762cbd03aa4e683c516f3889743cb209b392cf",
+    "local/verify/native-background-tests/attempt-z_x05__f/flag/issue53-step57-port-v1/prepaid-audit.json": "e6f2539f7e5274efeb06a38c1237c01018d728d6b2b8c19249393b7ce2e2906b",
+    "local/verify/issue53-native-clock-abi-v3-20261102/issue53-step57-stock-v2/build.json": "e08f1994356c6ce10cee6cfb2227b24a0d2e3eb1523fdcaa53fe45f27f8b9abd",
+    "local/verify/issue53-native-clock-abi-v3-20261102/issue53-step57-stock-v2/compile-result.json": "312c02cb5909dba3f494ee9324223f1839c5f0f65df002bf67cdd06d5fb6c4b6",
+    "local/verify/issue53-native-clock-abi-v3-20261102/issue53-step57-stock-v2/prepaid-audit.json": "cccf4735a05ea966a2013407ed6ae3a8298fc07e9a28f467b797cef88262e901",
+    "local/verify/issue53-native-clock-abi-v3-20261102/issue53-step57-stock-v2/capture-1a375730c9/result.json": "bfc99ceaaeeb9bda0d5286b12253d3df27d45552aa645044754d9f4f992766ef",
+    "tools/parity/trace_inspect.py": "bc58dae6bcb3a0672377177484272a12a4040670530a23354048a6bda3b2528e",
+    "tools/parity/test_trace_inspect.py": "04311004b52d78d88e3cd642f62ab730f93e48b694da1660e03009ec2d6e0d63",
+    "local/verify/issue53-native-clock-abi-v3-20261102/issue53-step57-stock-v3/driver.py": "6b1712fb0a3661e63e2507c2d4832e70c4f1417440c4e8d303867b1650e41c43",
+    "local/verify/issue53-native-clock-abi-v3-20261102/issue53-step57-stock-v3/build.json": "a014fa54127ea2da6655dde6797999821a5688bb0925eb575f925e1116c3213d",
+    "local/verify/issue53-native-clock-abi-v3-20261102/issue53-step57-stock-v3/compile-result.json": "25426fd464d9f42cc85a414289bd2158a02abc589410bbce5d78f5253671076c",
+    "local/verify/issue53-native-clock-abi-v3-20261102/issue53-step57-stock-v3/prepaid-audit.json": "f300f24f284ed45314571542f49945dd0412905e2a8709e2e15ee65443d4f77f",
+    "local/verify/issue53-native-clock-abi-v3-20261102/issue53-step57-stock-v3/capture-ba5d5a0a1c/result.json": "2c038984ffca385db98366db5806b2ad26932a716538af36e4378754b289e65a",
+    "local/verify/issue53-native-clock-abi-v3-20261102/issue53-step57-stock-v3/world-loop.inc": "44d1a9f0baabbc6b433a03fb293e085ffa99ed9026a7942db977da11c6d53ae2",
+    "local/census/all.c": "abc503a2166b4575df41baf338805c6ca7fba477606b05caa9c7817735ad415d",
+    "local/verify/issue53-reconciliation-20261102/abi-discovery-v1/world-assembly.json": "53b1f67ff5e0705931122d71285dd7a3f9c079ae97bcabdfd9f8fdaf1e867747",
+    "local/verify/native-background-tests/attempt-z_x05__f/flag/issue53-phase-split-port64-v1/driver.py": "8fe933257f73a5dd4f2156535bc4f4b4c87d3c216e3002868320402660853205",
+    "local/verify/native-background-tests/attempt-z_x05__f/flag/issue53-phase-split-port64-v1/bindings.json": "9ef141c21bcdbae93122f56499aa3e7158316279daf2a3b203c1057e37f24926",
+    "local/verify/native-background-tests/attempt-z_x05__f/flag/issue53-phase-split-port64-v1/executable.json": "38f428b8ac592139fc1afb6906d5427babc79c0dd7c09a65eb785f8cfe047c5c",
+    "local/verify/native-background-tests/attempt-z_x05__f/flag/issue53-phase-split-port64-v1/result.json": "df921564b4513e7877e0d552a9bfe0dcaeb3e15e13216aaccd16a6b749523519",
+    "local/verify/native-background-tests/attempt-z_x05__f/flag/issue53-phase-split-port64-v1/prepaid-audit.json": "b5f5fd5311b2d83b1c54017703e801b69719bd17cc30d12dabe92e38ce82242c",
+    "local/verify/native-background-tests/attempt-z_x05__f/flag/issue53-phase-split-port64-v1/native.cpp": "0adee54db5d12f53b6058d94ff5249d487c024956b73ad4bda1d674ad0114ee0",
+    "local/verify/native-background-tests/attempt-z_x05__f/flag/issue53-phase-split-port900-v1/driver.py": "c36af376e821132330fdc34b220b6804d09d4cfe5f56838f4634b6786f4a79d3",
+    "local/verify/native-background-tests/attempt-z_x05__f/flag/issue53-phase-split-port900-v1/bindings.json": "3d54560505091dda948e68205b55b1f668734230959a8b6d6bd475f905f01b8a",
+    "local/verify/native-background-tests/attempt-z_x05__f/flag/issue53-phase-split-port900-v1/executable.json": "76b4b91191d01230fcac6d080d466685235a40c6e561e682f1c5a4c823f92a9b",
+    "local/verify/native-background-tests/attempt-z_x05__f/flag/issue53-phase-split-port900-v1/result.json": "563eb9edcd0cb2b89e3e98825788066aec020b90b359130ee27293d179ad7f0c",
+    "local/verify/native-background-tests/attempt-z_x05__f/flag/issue53-phase-split-port900-v1/prepaid-audit.json": "e8581d137ec8f7b39354d513e5fd010c5f4443ce3945cc4b01d125f7c34df200",
+    "local/verify/native-background-tests/attempt-z_x05__f/flag/issue53-phase-split-port900-v1/native.cpp": "c2feb85e4af6e30f6bf4fc5768b48865543788fa789ea58334d5aae5778e57d2",
+    "local/verify/issue53-native-clock-abi-v3-20261102/issue53-full-floor900-stock-v1/driver.py": "85feae744c2188d21e2c3e33dedf787c81329260aa83edf844a3770cb848459b",
+    "local/verify/issue53-native-clock-abi-v3-20261102/issue53-full-floor900-stock-v1/build.json": "1e1dcf4d5ac30c28117f095699ff2ddec30fcf4b3a05bd4acc483bc6e8438cc6",
+    "local/verify/issue53-native-clock-abi-v3-20261102/issue53-full-floor900-stock-v1/compile-result.json": "f4bbb8327a07b2ac1caaa2e367e1533201a7922ceeffb6346ebcc0e710c6fa85",
+    "local/verify/issue53-native-clock-abi-v3-20261102/issue53-full-floor900-stock-v1/world-loop.inc": "0bae0bf5261ac5cdea72da804903bb4b0b471493ef3a00f66a88634dee04016b",
+    "local/verify/issue53-native-clock-abi-v3-20261102/issue53-full-floor900-stock-v1/capture-8c41dc6b7d/result.json": "d2053f0aad55761e17862f547bcef8da66bf4a5a38670853aa94dfc1a227457d",
+    "local/verify/issue53-native-clock-abi-v3-20261102/issue53-full-floor900-stock-v1/capture-8c41dc6b7d/work/first-0.stderr": "a4b86e533c87fa786fd95a5826811fc7e26e0728c6ad0f594eadb04d37803de4",
+    "local/verify/issue53-bundle-20261102/issue53-original900-scoped-v1/driver.py": "2943845c1a9a45ba762bd5bc801c7c0973073e0027c1b0fc5f985a57f866ca0d",
+    "local/verify/issue53-bundle-20261102/issue53-original900-scoped-v1/proposal.json": "19462d7ec79bfb91245fba8e82071209a8c608cfabdec5324e1fdced4f7410be",
+    "local/verify/issue53-bundle-20261102/issue53-original900-scoped-v1/build.json": "012e3996b61115fda2f1bedc50e76f6f7a0d8d16f0a062ff7beca6612fd833eb",
+    "local/verify/issue53-bundle-20261102/issue53-original900-scoped-v1/compile-result.json": "64c16a1b726d4755eaf2f26de8e0c24331f8a3fbae6d349721d405cf3faf6ac7",
+    "local/verify/issue53-bundle-20261102/issue53-original900-scoped-v1/world-loop.inc": "affdbfa241a11df0d1edfa6913dac0791244eae258731fe889503181e832cb50",
+    "local/verify/issue53-bundle-20261102/issue53-original900-scoped-v1/prepaid-audit.json": "c6fb7d03fbcc23a97693fb73fe5b8059ccf2b61813e534447da2a03bbc72a56a",
+    "local/verify/issue53-bundle-20261102/issue53-original900-scoped-v1/capture-3f8c048a09/result.json": "986ad7ae861cd903e17fea86cd7ddf9b4879bdd6daa3027a66090e193026bb62",
+    "local/verify/issue53-bundle-20261102/issue53-original900-scoped-v1/capture-3f8c048a09/work/first-0.jsonl": "dd868ccdf4386fefcf011d345e163ea620d17e41c522dad8024218f682bd722c",
+    "src/object_physics.cpp": "154b9865eb4baabd16b5564297ccc3e1b1a246c42135d9df1cb4443d58f08799",
+    "docs/physics-evidence.md": "f336c5c3f05cad47aca0c32b3a4eb4b59279886982eab5ef623164ef5e977161"
+  },
+  "known_metadata_defects": [
+    "Port diagnostic_scope.complete_steps says41 while guarded complete keyset establishes64.",
+    "Original full-floor v3 wrapper execution_finished=false retained; independent raw three-case exits0 and preservation observations do not rewrite wrapper."
+  ],
+  "limitations": [
+    "First contact output accumulators normalForce/frictionForce differ; no repair inference from those accumulated diagnostics.",
+    "Current production car registry is being repaired concurrently; step57Port uses frozen original library verified before/after link, not later current production."
+  ],
+  "reproduction": "python3 -I tools/parity/dev.py trace-inspect LEFT --body-series RIGHT --steps 64; exact LEFT/RIGHT paths are recorded in each comparison sources.",
+  "tests": "python3 -I tools/parity/test_trace_inspect.py:12tests pass, including missing/duplicate/reordered/unknown phase,wrongbuffer,boolidentifier,wordwidth,flagchange,filereplacement,malformedrecord and dimensionbounds controls.",
+  "stock_step57_result_observer": {
+    "comparison_to_prior_observer": {
+      "sources": [
+        {
+          "path": "/Users/nicolas/Documents/github/sl-remastered/local/verify/issue53-native-clock-abi-v3-20261102/issue53-step57-stock-v2/capture-1a375730c9/work/first-0.jsonl",
+          "sha256": "c26ad33a0d67cdb955410af6415015afa24bee1e95c8766c6ac5a312aff55886",
+          "body_records": 234
+        },
+        {
+          "path": "/Users/nicolas/Documents/github/sl-remastered/local/verify/issue53-native-clock-abi-v3-20261102/issue53-step57-stock-v3/capture-ba5d5a0a1c/work/first-0.jsonl",
+          "sha256": "6bda06fd8cb2ffa9449a40dc76f37f8eba6336b82ba67078d7a9bb81fe53f3a1",
+          "body_records": 234
+        }
+      ],
+      "steps": 58,
+      "bodies": 2,
+      "equal": true,
+      "differing_body_records": 0,
+      "first_difference": null,
+      "scope": "Complete ordered constructor/initial/final body snapshots only; two 53-word buffers starting at current=0. No intermediate contact causality or game parity."
+    },
+    "world_inputs": [
+      {
+        "type": "corrector-world-input",
+        "ordinal": 1,
+        "iteration": 1,
+        "settled": 0
+      },
+      {
+        "type": "corrector-world-input",
+        "ordinal": 2,
+        "iteration": 2,
+        "settled": 1
+      },
+      {
+        "type": "corrector-world-input",
+        "ordinal": 3,
+        "iteration": 3,
+        "settled": 0
+      },
+      {
+        "type": "corrector-world-input",
+        "ordinal": 4,
+        "iteration": 4,
+        "settled": 0
+      },
+      {
+        "type": "corrector-world-input",
+        "ordinal": 5,
+        "iteration": 5,
+        "settled": 0
+      },
+      {
+        "type": "corrector-world-input",
+        "ordinal": 6,
+        "iteration": 6,
+        "settled": 0
+      },
+      {
+        "type": "corrector-world-input",
+        "ordinal": 7,
+        "iteration": 7,
+        "settled": 0
+      },
+      {
+        "type": "corrector-world-input",
+        "ordinal": 8,
+        "iteration": 8,
+        "settled": 0
+      },
+      {
+        "type": "corrector-world-input",
+        "ordinal": 9,
+        "iteration": 9,
+        "settled": 0
+      },
+      {
+        "type": "corrector-world-input",
+        "ordinal": 10,
+        "iteration": 10,
+        "settled": 0
+      },
+      {
+        "type": "corrector-world-input",
+        "ordinal": 11,
+        "iteration": 11,
+        "settled": 0
+      }
+    ],
+    "results": [
+      {
+        "type": "corrector-result",
+        "ordinal": 1,
+        "result": 1
+      },
+      {
+        "type": "corrector-result",
+        "ordinal": 2,
+        "result": 1
+      },
+      {
+        "type": "corrector-result",
+        "ordinal": 3,
+        "result": 1
+      },
+      {
+        "type": "corrector-result",
+        "ordinal": 4,
+        "result": 2
+      },
+      {
+        "type": "corrector-result",
+        "ordinal": 5,
+        "result": 2
+      },
+      {
+        "type": "corrector-result",
+        "ordinal": 6,
+        "result": 2
+      },
+      {
+        "type": "corrector-result",
+        "ordinal": 7,
+        "result": 2
+      },
+      {
+        "type": "corrector-result",
+        "ordinal": 8,
+        "result": 2
+      },
+      {
+        "type": "corrector-result",
+        "ordinal": 9,
+        "result": 2
+      },
+      {
+        "type": "corrector-result",
+        "ordinal": 10,
+        "result": 2
+      },
+      {
+        "type": "corrector-result",
+        "ordinal": 11,
+        "result": 2
+      }
+    ]
+  },
+  "causal_finding": "Original first sweep returns1 at iteration1; iteration2 starts pending correction with settled1. Baseline Port gathering admits new pending candidates before identifying retained wakes, so their prediction invalidation can trigger an extra retained sweep and suppress pending correction. First corrector result itself is not the mismatch.",
+  "phase_split_production64": {
+    "sources": [
+      {
+        "path": "/Users/nicolas/Documents/github/sl-remastered/local/verify/native-background-tests/attempt-z_x05__f/flag/issue53-full-floor-original-init-v3/capture-38478308ac/work/first-0.jsonl",
+        "sha256": "0f2f1182998764ecd055c4d3ed939fb429244f3403ff72941a7c28bd39c143ef",
+        "body_records": 258
+      },
+      {
+        "path": "/Users/nicolas/Documents/github/sl-remastered/local/verify/native-background-tests/attempt-z_x05__f/flag/issue53-phase-split-port64-v1/run.log",
+        "sha256": "f045c8712dbf2f4ec1975698b1532eebaecac9591cbe4b61bfdc4466ac02673f",
+        "body_records": 258
+      }
+    ],
+    "steps": 64,
+    "bodies": 2,
+    "equal": true,
+    "differing_body_records": 0,
+    "first_difference": null,
+    "scope": "Complete ordered constructor/initial/final body snapshots only; two 53-word buffers starting at current=0. No intermediate contact causality or game parity."
+  },
+  "repair_boundary": "Phase split removes the step57 boundary divergence: all258body snapshots match Stock throughstep63final. Original900step settling assertion still fails (speed.468). No completion or long-run parity claim.",
+  "extended900_attempt": {
+    "requested_steps": 900,
+    "stock_execution_finished": false,
+    "stock_case_exit": 90,
+    "stock_gap": "discovery-bound",
+    "complete_stock_steps": 196,
+    "trailing_stock_phase": [
+      "step-initial",
+      196
+    ],
+    "available_body_records": 788,
+    "available_snapshots_equal": true,
+    "full900_inspection_refusal": "incomplete body phase set",
+    "stock_source": {
+      "path": "local/verify/issue53-native-clock-abi-v3-20261102/issue53-full-floor900-stock-v1/capture-8c41dc6b7d/work/first-0.jsonl",
+      "sha256": "5763e1a09c89582df3d092ec60327445fef74a92b0c0513d4ed9e2996cbf2731"
+    },
+    "port_source": {
+      "path": "/Users/nicolas/Documents/github/sl-remastered/local/verify/native-background-tests/attempt-z_x05__f/flag/issue53-phase-split-port900-v1/trace.jsonl",
+      "sha256": "e0ae31146843ee13121dbc30887736b3dad638f8b30a83363d7d25f50089da39",
+      "body_records": 3602
+    },
+    "outer_final_retention_report": "unexecuted after failed capture; postcapture prepaid_preserved true does not establish outer success",
+    "no_bound_increase": true,
+    "scope": "Existing256totaldiscoverycall limit stops original constructor/syntheticfullfloor run; no complete900comparison or settling acceptance."
+  },
+  "scoped900_complete_comparison": {
+    "sources": [
+      {
+        "path": "/Users/nicolas/Documents/github/sl-remastered/local/verify/issue53-bundle-20261102/issue53-original900-scoped-v1/capture-3f8c048a09/work/first-0.jsonl",
+        "sha256": "dd868ccdf4386fefcf011d345e163ea620d17e41c522dad8024218f682bd722c",
+        "body_records": 3602
+      },
+      {
+        "path": "/Users/nicolas/Documents/github/sl-remastered/local/verify/native-background-tests/attempt-z_x05__f/flag/issue53-phase-split-port900-v1/trace.jsonl",
+        "sha256": "e0ae31146843ee13121dbc30887736b3dad638f8b30a83363d7d25f50089da39",
+        "body_records": 3602
+      }
+    ],
+    "steps": 900,
+    "bodies": 2,
+    "equal": true,
+    "differing_body_records": 0,
+    "first_difference": null,
+    "scope": "Complete ordered constructor/initial/final body snapshots only; two 53-word buffers starting at current=0. No intermediate contact causality or game parity."
+  },
+  "scoped900_terminal": {
+    "body_index": 1,
+    "body_identity": "aggregate root (native mapping tree[0])",
+    "current": 0,
+    "flags": 9,
+    "velocity_words": [
+      1031989300,
+      3202726082,
+      3186823188
+    ],
+    "omega_words": [
+      1075208481,
+      3219582708,
+      1067317568
+    ],
+    "speed_float32": 0.46848776936531067,
+    "omega_squared_float32": 10.29918098449707,
+    "root_y_word": 1050238194,
+    "scope_limits": {
+      "type": "scope_limits",
+      "requested_steps": 900,
+      "mandatory_body_records": 3602,
+      "discovery_total": 1308,
+      "discovery_per_step_limit": 20,
+      "discovery_total_limit": 18000,
+      "candidate_rows": 256,
+      "candidate_row_limit": 256
+    },
+    "original_settling_assertions_changed": false
+  },
+  "fixture_audit_limits": [
+    "All106statewords and flags/current match in this single complete900Stock/Port pair. This does not establish exact constructor metadata or retail discovery.",
+    "Stock900 root speed0.46848776936531067 and omegaSq10.29918098449707 do not satisfy original Port test settling/sleep assertions; those assertions are preserved.",
+    "Activity outside106, fullworld/shape metadata and independent900repeat are pending newobserver; do not infer their equality.",
+    "Frozen production source binding has three uncommitted sources unavailable as exact current/index/HEAD bytes:car_world_step.cpp,physics_contact_geometry.cpp,world_model.hpp. Executable/linkedlibrary identities retained, but fullhistoricalsource reconstruction is unqualified. A stable current-source rerun is mandatory.",
+    "Childproto flags Stock1025 vsPort1024 and prior observed groundfriction Stock0.6 vsPort1 differ; contact friction0.6 and body trajectories agree. Sleepingcar/staticrock are present onlyinPortfixture, outside the drop interaction.",
+    "Sector/resource dispatcher is substituted with all2048syntheticfloorfaces. Authenticretail sector/material discovery and fullgame acceptance remain missing.",
+    "Aggregate root constructor setup differs: Port object_physics.cpp creates mass1 ShapeType::Mesh(6), dimensions0/0/0; original synthetic oracle creates mass1/typeBox(5), dimensions1/1/1 before common aggregation. Equal106states do not prove aggregate shape/broadphase equivalence.",
+    "Original oracle explicitly sets x87cw007f and checks it unchanged. This matches retained observedWinegraphics-thread mode, but actual physics-worker and Windows controlword remain unqualified.",
+    "Successful900Stock comparison has one complete original run; independent900observer/repeat is authorized but not yet executed. First64repeat/control and failed900prefix support onlytheir observed coverage."
+  ],
+  "report_status": "Frozen bounded audit for parent review; later observer/repeat evidence belongs in separate ordered report."
+}

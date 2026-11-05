@@ -686,7 +686,7 @@ NativeResult renderRefSetFlare(const std::vector<VmValue> &args,
     const auto *textureState = nativeResourceState(textureObject, arena);
     if (!textureState)
       return std::string{"RenderRef.setFlare: invalid flare resource"};
-    flare.textureId = textureState->words[2];
+    flare.textureId = static_cast<int32_t>(textureState->words[2]);
   }
   flare.wordE0 = std::get<int32_t>(args[1]);
   flare.atD4 = std::get<float>(args[2]);

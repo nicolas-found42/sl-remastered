@@ -13,6 +13,61 @@ flow = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(flow)
 
 
+class PassiveVisionTest(unittest.TestCase):
+    def test_cadence_cap_and_original_binding(self):
+        with tempfile.TemporaryDirectory() as name:
+            out = Path(name)
+            clock = [0.0]
+            captures = []
+            def capture(stage, deadline):
+                self.assertEqual(deadline, 1000)
+                captures.append(clock[0])
+                image = f'passive-{len(captures)}.png'
+                (out / image).write_bytes(b'passive only')
+                return {'image': image, 'wall_time_ns': 123}
+            with mock.patch.object(flow.time, 'monotonic', side_effect=lambda: clock[0]):
+                observer = flow.PassiveVisionFrames(out, capture, lambda: 1000)
+                request = {'request_id': 'original', 'image': 'original.png', 'expires_monotonic': 1000}
+                before = dict(request)
+                review = {}
+                observer.poll(request, review)
+                self.assertEqual(captures, [])
+                for tick in range(1, 101):
+                    clock[0] = tick
+                    observer.poll(request, review)
+                self.assertEqual(captures, list(range(3, 73, 3)))
+                self.assertEqual(request, before)
+                self.assertEqual(len(review['passive_frames']), 24)
+                status = json.loads((out / 'career-vision-passive.json').read_text())
+                self.assertEqual(status['bound_image'], 'original.png')
+                self.assertFalse(status['latest_passive']['authorizes_input'])
+                self.assertEqual(status['latest_passive']['image_sha256'],
+                                 hashlib.sha256(b'passive only').hexdigest())
+
+    def test_deadline_reserve_and_failed_capture_disable(self):
+        with tempfile.TemporaryDirectory() as name:
+            clock = [3.0]
+            capture = mock.Mock(side_effect=TimeoutError('bounded capture failed'))
+            with mock.patch.object(flow.time, 'monotonic', side_effect=lambda: clock[0]):
+                observer = flow.PassiveVisionFrames(Path(name), capture, lambda: 100)
+                request = {'request_id': 'one', 'image': 'original.png', 'expires_monotonic': 10}
+                review = {}
+                clock[0] = 6
+                observer.poll(request, review)
+                capture.assert_not_called()  # Only four seconds remain.
+                request['expires_monotonic'] = 100
+                observer.remaining = lambda: 4
+                observer.poll(request, review)
+                capture.assert_not_called()  # Global deadline has the same reserve.
+                observer.remaining = lambda: 100
+                observer.poll(request, review)
+                clock[0] = 30
+                observer.poll(request, review)
+                capture.assert_called_once()
+                self.assertIn('TimeoutError', review['passive_frames'][0]['error'])
+                self.assertFalse(review['passive_frames'][0]['authorizes_input'])
+
+
 class CareerFrontierTest(unittest.TestCase):
     def test_intro_review_requires_exact_card_and_no_arbitrary_key_or_coordinate(self):
         request = {'phase': 'dealer-open', 'action': 'Open purchase', 'request_id': 'fixture',
@@ -33,7 +88,7 @@ class CareerFrontierTest(unittest.TestCase):
 
     def run_vision_controller(self, wrong_phase=False, wait_first=False, corrupt_retained=False,
                               wrong_receipt=False, ocr_balance=4419, introduction=False, intro_auto=False,
-                              blank_dealer_title=False):
+                              blank_dealer_title=False, wait_all=False, response_delay=0, passive_failure=False):
         self.vision_clicks = []
         self.guest_keys = []
         intro_pending = introduction
@@ -42,13 +97,16 @@ class CareerFrontierTest(unittest.TestCase):
             result = {'actions': []}
             responded = set()
             calls = 0
+            clock = [0.]
             def remaining():
                 nonlocal calls, intro_pending
                 calls += 1
                 pending = out / 'career-vision-pending.json'
                 if pending.exists():
                     request = json.loads(pending.read_text())
-                    if request['request_id'] not in responded:
+                    self.assertLessEqual(request['expires_monotonic'] - request['created_monotonic'], 10.000000001)
+                    if (request['request_id'] not in responded
+                            and clock[0] >= request['created_monotonic'] + response_delay):
                         responded.add(request['request_id'])
                         phase = request['phase']
                         point = [518, 470] if phase == 'purchase-cancel' else [278, 470]
@@ -68,7 +126,7 @@ class CareerFrontierTest(unittest.TestCase):
                             response.update(client=point, observed_offer=flow.EXPECTED_OFFER, reason='')
                         if wrong_phase:
                             response['phase'] = 'wrong-phase'
-                        if wait_first and len(responded) == 1:
+                        if wait_all or (wait_first and len(responded) == 1):
                             observation = 'observed_offer'
                             response.pop('observed_card', None)
                             response.update(action='wait', client=None, **{observation: None},
@@ -76,13 +134,15 @@ class CareerFrontierTest(unittest.TestCase):
                             if intro_auto:
                                 intro_pending = False
                         (out / request['response']).write_text(json.dumps(response))
-                return max(0, 200 - calls)
+                return max(0, 200 - clock[0])
             def capture(stage):
                 (out / (stage + '.png')).write_bytes(('unit fixture only: ' + stage).encode())
                 (out / (stage + '-ocr')).mkdir(exist_ok=True)
                 return {'image': stage + '.png', 'menu': {'MAIN MENU': True},
                         'dialog': {'name_title': False, 'cancel_button': False},
                         'wall_time_ns': flow.time.time_ns()}
+            if passive_failure:
+                capture.raw = mock.Mock(side_effect=TimeoutError('passive control'))
             def click(label, x, y):
                 self.vision_clicks.append(label)
                 stamp = flow.time.time_ns()
@@ -100,7 +160,8 @@ class CareerFrontierTest(unittest.TestCase):
             def dealer(*_):
                 return {'car_dealer': not intro_pending and not blank_dealer_title,
                         'balance': 20000, 'model': 'Duhen SunStrip 18 DVC'}
-            with mock.patch.object(flow.time, 'sleep'), \
+            with mock.patch.object(flow.time, 'monotonic', side_effect=lambda: clock[0]), \
+                    mock.patch.object(flow.time, 'sleep', side_effect=lambda seconds: clock.__setitem__(0, clock[0] + max(.001, seconds))), \
                     mock.patch.object(flow, 'evaluate_dealer', side_effect=dealer), \
                     mock.patch.object(flow, 'evaluate_balance', return_value=ocr_balance):
                 flow.run('dealer-vision', out, result, guest, capture,
@@ -210,6 +271,25 @@ class CareerFrontierTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'binding differs'):
             self.run_vision_controller(wrong_phase=True)
         self.assertNotIn('Open purchase', self.vision_clicks)
+
+    def test_passive_failure_preserves_delayed_action_response(self):
+        result = self.run_vision_controller(response_delay=4, passive_failure=True)
+        review = result['career']['vision_reviews'][0]
+        self.assertIn('TimeoutError', review['passive_frames'][0]['error'])
+        self.assertEqual(review['response']['action'], 'Open purchase')
+        self.assertEqual(self.vision_clicks.count('Open purchase'), 1)
+
+    def test_response_deadline_exhaustion_cannot_cause_controller_input(self):
+        with self.assertRaisesRegex(TimeoutError, 'expired=3'):
+            self.run_vision_controller(response_delay=11, passive_failure=True)
+        self.assertNotIn('Open purchase', self.vision_clicks)
+        self.assertEqual(self.guest_keys, [])
+
+    def test_three_valid_waits_report_exhaustion_without_input(self):
+        with self.assertRaisesRegex(TimeoutError, 'valid waits=3, introductions=0, expired=0'):
+            self.run_vision_controller(wait_all=True)
+        self.assertNotIn('Open purchase', self.vision_clicks)
+        self.assertEqual(self.guest_keys, [])
 
     def test_vision_wait_recaptures_without_repeating_input(self):
         result = self.run_vision_controller(wait_first=True)

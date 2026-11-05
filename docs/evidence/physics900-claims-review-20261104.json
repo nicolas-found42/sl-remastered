@@ -1,0 +1,100 @@
+{
+  "schema": 1,
+  "scope": "Scoped claims verification only; no product completion approval. Two equality/terminal claims need stronger review; do not reroll the same judgment.",
+  "packet": {
+    "tool": "jev_verify",
+    "arguments": {
+      "claims": [
+        "The guarded comparison reports exact equality of all 3602 ordered body snapshots, each containing 106 state words plus flags and current-buffer identity, through step899-final between the scoped original-constructor synthetic-floor Stock run and frozen phase-split Port900. This is conditional fixture evidence, not retail or whole-game parity.",
+        "The scoped Stock900 and frozen Port900 both end with speed about0.468 and without the asleep flag. This does not satisfy the original object settling assertion.",
+        "The earlier900attempt failed at the inherited256discovery limit after196complete steps; its final outer retention report was unexecuted and it is not a complete900acceptance result.",
+        "The frozen900binary/body-state comparison does not establish exact constructor metadata equality or full source reconstruction: reported root shape/material/flags differences, missing activity/world state and unestablished physics-worker FPU mode remain limitations."
+      ],
+      "evidence": [
+        {
+          "id": "scoped900_complete_comparison",
+          "text": "  \"scoped900_complete_comparison\": {\n    \"sources\": [\n      {\n        \"path\": \"/Users/nicolas/Documents/github/sl-remastered/local/verify/issue53-bundle-20261102/issue53-original900-scoped-v1/capture-3f8c048a09/work/first-0.jsonl\",\n        \"sha256\": \"dd868ccdf4386fefcf011d345e163ea620d17e41c522dad8024218f682bd722c\",\n        \"body_records\": 3602\n      },\n      {\n        \"path\": \"/Users/nicolas/Documents/github/sl-remastered/local/verify/native-background-tests/attempt-z_x05__f/flag/issue53-phase-split-port900-v1/trace.jsonl\",\n        \"sha256\": \"e0ae31146843ee13121dbc30887736b3dad638f8b30a83363d7d25f50089da39\",\n        \"body_records\": 3602\n      }\n    ],\n    \"steps\": 900,\n    \"bodies\": 2,\n    \"equal\": true,\n    \"differing_body_records\": 0,\n    \"first_difference\": null,\n    \"scope\": \"Complete ordered constructor/initial/final body snapshots only; two 53-word buffers starting at current=0. No intermediate contact causality or game parity.\"\n  },\n"
+        },
+        {
+          "id": "scoped900_terminal",
+          "text": "  \"scoped900_terminal\": {\n    \"body_index\": 1,\n    \"body_identity\": \"aggregate root (native mapping tree[0])\",\n    \"current\": 0,\n    \"flags\": 9,\n    \"velocity_words\": [\n      1031989300,\n      3202726082,\n      3186823188\n    ],\n    \"omega_words\": [\n      1075208481,\n      3219582708,\n      1067317568\n    ],\n    \"speed_float32\": 0.46848776936531067,\n    \"omega_squared_float32\": 10.29918098449707,\n    \"root_y_word\": 1050238194,\n    \"scope_limits\": {\n      \"type\": \"scope_limits\",\n      \"requested_steps\": 900,\n      \"mandatory_body_records\": 3602,\n      \"discovery_total\": 1308,\n      \"discovery_per_step_limit\": 20,\n      \"discovery_total_limit\": 18000,\n      \"candidate_rows\": 256,\n      \"candidate_row_limit\": 256\n    },\n    \"original_settling_assertions_changed\": false\n  },\n"
+        },
+        {
+          "id": "extended900_attempt",
+          "text": "  \"extended900_attempt\": {\n    \"requested_steps\": 900,\n    \"stock_execution_finished\": false,\n    \"stock_case_exit\": 90,\n    \"stock_gap\": \"discovery-bound\",\n    \"complete_stock_steps\": 196,\n    \"trailing_stock_phase\": [\n      \"step-initial\",\n      196\n    ],\n    \"available_body_records\": 788,\n    \"available_snapshots_equal\": true,\n    \"full900_inspection_refusal\": \"incomplete body phase set\",\n    \"stock_source\": {\n      \"path\": \"local/verify/issue53-native-clock-abi-v3-20261102/issue53-full-floor900-stock-v1/capture-8c41dc6b7d/work/first-0.jsonl\",\n      \"sha256\": \"5763e1a09c89582df3d092ec60327445fef74a92b0c0513d4ed9e2996cbf2731\"\n    },\n    \"port_source\": {\n      \"path\": \"/Users/nicolas/Documents/github/sl-remastered/local/verify/native-background-tests/attempt-z_x05__f/flag/issue53-phase-split-port900-v1/trace.jsonl\",\n      \"sha256\": \"e0ae31146843ee13121dbc30887736b3dad638f8b30a83363d7d25f50089da39\",\n      \"body_records\": 3602\n    },\n    \"outer_final_retention_report\": \"unexecuted after failed capture; postcapture prepaid_preserved true does not establish outer success\",\n    \"no_bound_increase\": true,\n    \"scope\": \"Existing256totaldiscoverycall limit stops original constructor/syntheticfullfloor run; no complete900comparison or settling acceptance.\"\n  },\n"
+        },
+        {
+          "id": "fixture_audit_limits",
+          "text": "  \"fixture_audit_limits\": [\n    \"All106statewords and flags/current match in this single complete900Stock/Port pair. This does not establish exact constructor metadata or retail discovery.\",\n    \"Stock900 root speed0.46848776936531067 and omegaSq10.29918098449707 do not satisfy original Port test settling/sleep assertions; those assertions are preserved.\",\n    \"Activity outside106, fullworld/shape metadata and independent900repeat are pending newobserver; do not infer their equality.\",\n    \"Frozen production source binding has three uncommitted sources unavailable as exact current/index/HEAD bytes:car_world_step.cpp,physics_contact_geometry.cpp,world_model.hpp. Executable/linkedlibrary identities retained, but fullhistoricalsource reconstruction is unqualified. A stable current-source rerun is mandatory.\",\n    \"Childproto flags Stock1025 vsPort1024 and prior observed groundfriction Stock0.6 vsPort1 differ; contact friction0.6 and body trajectories agree. Sleepingcar/staticrock are present onlyinPortfixture, outside the drop interaction.\",\n    \"Sector/resource dispatcher is substituted with all2048syntheticfloorfaces. Authenticretail sector/material discovery and fullgame acceptance remain missing.\",\n    \"Aggregate root constructor setup differs: Port object_physics.cpp creates mass1 ShapeType::Mesh(6), dimensions0/0/0; original synthetic oracle creates mass1/typeBox(5), dimensions1/1/1 before common aggregation. Equal106states do not prove aggregate shape/broadphase equivalence.\",\n    \"Original oracle explicitly sets x87cw007f and checks it unchanged. This matches retained observedWinegraphics-thread mode, but actual physics-worker and Windows controlword remain unqualified.\",\n    \"Successful900Stock comparison has one complete original run; independent900observer/repeat is authorized but not yet executed. First64repeat/control and failed900prefix support onlytheir observed coverage.\"\n  ],\n"
+        }
+      ]
+    },
+    "bindings": [
+      {
+        "claim": "The guarded comparison reports exact equality of all 3602 ordered body snapshots, each containing 106 state words plus flags and current-buffer identity, through step899-final between the scoped original-constructor synthetic-floor Stock run and frozen phase-split Port900. This is conditional fixture evidence, not retail or whole-game parity.",
+        "evidence_ids": [
+          "scoped900_complete_comparison",
+          "fixture_audit_limits"
+        ]
+      },
+      {
+        "claim": "The scoped Stock900 and frozen Port900 both end with speed about0.468 and without the asleep flag. This does not satisfy the original object settling assertion.",
+        "evidence_ids": [
+          "scoped900_terminal"
+        ]
+      },
+      {
+        "claim": "The earlier900attempt failed at the inherited256discovery limit after196complete steps; its final outer retention report was unexecuted and it is not a complete900acceptance result.",
+        "evidence_ids": [
+          "extended900_attempt"
+        ]
+      },
+      {
+        "claim": "The frozen900binary/body-state comparison does not establish exact constructor metadata equality or full source reconstruction: reported root shape/material/flags differences, missing activity/world state and unestablished physics-worker FPU mode remain limitations.",
+        "evidence_ids": [
+          "fixture_audit_limits"
+        ]
+      }
+    ],
+    "source_bindings": {
+      "scoped900_complete_comparison": {
+        "path": "/Users/nicolas/Documents/github/sl-remastered/docs/evidence/physics-parity64-20261103.json",
+        "sha256": "9212ec738822a1fc55e2cbf9d6dadba6ce329dec62ba7d33af221b31eb370c8f",
+        "start_line": 843,
+        "end_line": 862,
+        "quote": "  \"scoped900_complete_comparison\": {\n    \"sources\": [\n      {\n        \"path\": \"/Users/nicolas/Documents/github/sl-remastered/local/verify/issue53-bundle-20261102/issue53-original900-scoped-v1/capture-3f8c048a09/work/first-0.jsonl\",\n        \"sha256\": \"dd868ccdf4386fefcf011d345e163ea620d17e41c522dad8024218f682bd722c\",\n        \"body_records\": 3602\n      },\n      {\n        \"path\": \"/Users/nicolas/Documents/github/sl-remastered/local/verify/native-background-tests/attempt-z_x05__f/flag/issue53-phase-split-port900-v1/trace.jsonl\",\n        \"sha256\": \"e0ae31146843ee13121dbc30887736b3dad638f8b30a83363d7d25f50089da39\",\n        \"body_records\": 3602\n      }\n    ],\n    \"steps\": 900,\n    \"bodies\": 2,\n    \"equal\": true,\n    \"differing_body_records\": 0,\n    \"first_difference\": null,\n    \"scope\": \"Complete ordered constructor/initial/final body snapshots only; two 53-word buffers starting at current=0. No intermediate contact causality or game parity.\"\n  },\n"
+      },
+      "scoped900_terminal": {
+        "path": "/Users/nicolas/Documents/github/sl-remastered/docs/evidence/physics-parity64-20261103.json",
+        "sha256": "9212ec738822a1fc55e2cbf9d6dadba6ce329dec62ba7d33af221b31eb370c8f",
+        "start_line": 863,
+        "end_line": 892,
+        "quote": "  \"scoped900_terminal\": {\n    \"body_index\": 1,\n    \"body_identity\": \"aggregate root (native mapping tree[0])\",\n    \"current\": 0,\n    \"flags\": 9,\n    \"velocity_words\": [\n      1031989300,\n      3202726082,\n      3186823188\n    ],\n    \"omega_words\": [\n      1075208481,\n      3219582708,\n      1067317568\n    ],\n    \"speed_float32\": 0.46848776936531067,\n    \"omega_squared_float32\": 10.29918098449707,\n    \"root_y_word\": 1050238194,\n    \"scope_limits\": {\n      \"type\": \"scope_limits\",\n      \"requested_steps\": 900,\n      \"mandatory_body_records\": 3602,\n      \"discovery_total\": 1308,\n      \"discovery_per_step_limit\": 20,\n      \"discovery_total_limit\": 18000,\n      \"candidate_rows\": 256,\n      \"candidate_row_limit\": 256\n    },\n    \"original_settling_assertions_changed\": false\n  },\n"
+      },
+      "extended900_attempt": {
+        "path": "/Users/nicolas/Documents/github/sl-remastered/docs/evidence/physics-parity64-20261103.json",
+        "sha256": "9212ec738822a1fc55e2cbf9d6dadba6ce329dec62ba7d33af221b31eb370c8f",
+        "start_line": 817,
+        "end_line": 842,
+        "quote": "  \"extended900_attempt\": {\n    \"requested_steps\": 900,\n    \"stock_execution_finished\": false,\n    \"stock_case_exit\": 90,\n    \"stock_gap\": \"discovery-bound\",\n    \"complete_stock_steps\": 196,\n    \"trailing_stock_phase\": [\n      \"step-initial\",\n      196\n    ],\n    \"available_body_records\": 788,\n    \"available_snapshots_equal\": true,\n    \"full900_inspection_refusal\": \"incomplete body phase set\",\n    \"stock_source\": {\n      \"path\": \"local/verify/issue53-native-clock-abi-v3-20261102/issue53-full-floor900-stock-v1/capture-8c41dc6b7d/work/first-0.jsonl\",\n      \"sha256\": \"5763e1a09c89582df3d092ec60327445fef74a92b0c0513d4ed9e2996cbf2731\"\n    },\n    \"port_source\": {\n      \"path\": \"/Users/nicolas/Documents/github/sl-remastered/local/verify/native-background-tests/attempt-z_x05__f/flag/issue53-phase-split-port900-v1/trace.jsonl\",\n      \"sha256\": \"e0ae31146843ee13121dbc30887736b3dad638f8b30a83363d7d25f50089da39\",\n      \"body_records\": 3602\n    },\n    \"outer_final_retention_report\": \"unexecuted after failed capture; postcapture prepaid_preserved true does not establish outer success\",\n    \"no_bound_increase\": true,\n    \"scope\": \"Existing256totaldiscoverycall limit stops original constructor/syntheticfullfloor run; no complete900comparison or settling acceptance.\"\n  },\n"
+      },
+      "fixture_audit_limits": {
+        "path": "/Users/nicolas/Documents/github/sl-remastered/docs/evidence/physics-parity64-20261103.json",
+        "sha256": "9212ec738822a1fc55e2cbf9d6dadba6ce329dec62ba7d33af221b31eb370c8f",
+        "start_line": 893,
+        "end_line": 903,
+        "quote": "  \"fixture_audit_limits\": [\n    \"All106statewords and flags/current match in this single complete900Stock/Port pair. This does not establish exact constructor metadata or retail discovery.\",\n    \"Stock900 root speed0.46848776936531067 and omegaSq10.29918098449707 do not satisfy original Port test settling/sleep assertions; those assertions are preserved.\",\n    \"Activity outside106, fullworld/shape metadata and independent900repeat are pending newobserver; do not infer their equality.\",\n    \"Frozen production source binding has three uncommitted sources unavailable as exact current/index/HEAD bytes:car_world_step.cpp,physics_contact_geometry.cpp,world_model.hpp. Executable/linkedlibrary identities retained, but fullhistoricalsource reconstruction is unqualified. A stable current-source rerun is mandatory.\",\n    \"Childproto flags Stock1025 vsPort1024 and prior observed groundfriction Stock0.6 vsPort1 differ; contact friction0.6 and body trajectories agree. Sleepingcar/staticrock are present onlyinPortfixture, outside the drop interaction.\",\n    \"Sector/resource dispatcher is substituted with all2048syntheticfloorfaces. Authenticretail sector/material discovery and fullgame acceptance remain missing.\",\n    \"Aggregate root constructor setup differs: Port object_physics.cpp creates mass1 ShapeType::Mesh(6), dimensions0/0/0; original synthetic oracle creates mass1/typeBox(5), dimensions1/1/1 before common aggregation. Equal106states do not prove aggregate shape/broadphase equivalence.\",\n    \"Original oracle explicitly sets x87cw007f and checks it unchanged. This matches retained observedWinegraphics-thread mode, but actual physics-worker and Windows controlword remain unqualified.\",\n    \"Successful900Stock comparison has one complete original run; independent900observer/repeat is authorized but not yet executed. First64repeat/control and failed900prefix support onlytheir observed coverage.\"\n  ],\n"
+      }
+    },
+    "support_verified": false,
+    "submitted": false
+  },
+  "review": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\n  \"tool\": \"jev_verify\",\n  \"model\": \"typesafe/jev-1.14-20261014\",\n  \"provider\": \"openrouter\",\n  \"auto_accept\": 0.8,\n  \"subject_at\": 0.5,\n  \"summary\": {\n    \"verified\": 4,\n    \"contradicted\": 0,\n    \"unsupported\": 0,\n    \"needs_review\": 2\n  },\n  \"results\": [\n    {\n      \"id\": \"claim0\",\n      \"claim\": \"The guarded comparison reports exact equality of all 3602 ordered body snapshots, each containing 106 state words plus flags and current-buffer identity, through step899-final between the scoped original-constructor synthetic-floor Stock run and frozen phase-split Port900. This is conditional fixture evidence, not retail or whole-game parity.\",\n      \"verdict\": \"verified\",\n      \"probabilities\": {\n        \"supports\": 0.68,\n        \"contradicts\": 0.31,\n        \"says_nothing\": 0.01\n      },\n      \"confidence\": 0.52,\n      \"action\": \"review\",\n      \"supporting_evidence\": \"scoped900_complete_comparison\",\n      \"same_subject\": 0.79\n    },\n    {\n      \"id\": \"claim1\",\n      \"claim\": \"The scoped Stock900 and frozen Port900 both end with speed about0.468 and without the asleep flag. This does not satisfy the original object settling assertion.\",\n      \"verdict\": \"verified\",\n      \"probabilities\": {\n        \"supports\": 0.59,\n        \"contradicts\": 0.36,\n        \"says_nothing\": 0.05\n      },\n      \"confidence\": 0.38,\n      \"action\": \"review\",\n      \"supporting_evidence\": \"scoped900_terminal\",\n      \"same_subject\": 0.85\n    },\n    {\n      \"id\": \"claim2\",\n      \"claim\": \"The earlier900attempt failed at the inherited256discovery limit after196complete steps; its final outer retention report was unexecuted and it is not a complete900acceptance result.\",\n      \"verdict\": \"verified\",\n      \"probabilities\": {\n        \"supports\": 0.99,\n        \"contradicts\": 0.01,\n        \"says_nothing\": 0\n      },\n      \"confidence\": 0.98,\n      \"action\": \"auto\",\n      \"supporting_evidence\": \"extended900_attempt\",\n      \"same_subject\": 0.94\n    },\n    {\n      \"id\": \"claim3\",\n      \"claim\": \"The frozen900binary/body-state comparison does not establish exact constructor metadata equality or full source reconstruction: reported root shape/material/flags differences, missing activity/world state and unestablished physics-worker FPU mode remain limitations.\",\n      \"verdict\": \"verified\",\n      \"probabilities\": {\n        \"supports\": 0.99,\n        \"contradicts\": 0.01,\n        \"says_nothing\": 0\n      },\n      \"confidence\": 0.98,\n      \"action\": \"auto\",\n      \"supporting_evidence\": \"fixture_audit_limits\",\n      \"same_subject\": 0.82\n    }\n  ],\n  \"usage\": {\n    \"input_tokens\": 3778,\n    \"output_tokens\": 551\n  }\n}"
+      }
+    ]
+  }
+}

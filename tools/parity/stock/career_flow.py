@@ -280,7 +280,46 @@ def saved_prefix(path, expected_portrait=None, expected_money=20000):
             'limits': ['prefix inspection only; independent whole SDAT audit is still required']}
 
 
+
+class PassiveVisionFrames:
+    """Visibility only: passive frames never replace an action's bound image."""
+
+    def __init__(self, out, capture, remaining):
+        self.out, self.capture, self.remaining = out, capture, remaining
+        self.count = 0
+        self.next_at = time.monotonic() + 3
+
+    def poll(self, request, review):
+        now = time.monotonic()
+        # Reserve the raw capture's bounded guest/encoder time. Never extend
+        # either deadline to obtain an optional screenshot.
+        available = min(self.remaining(), request['expires_monotonic'] - now)
+        if self.capture is None or self.count >= 24 or now < self.next_at or available <= 4:
+            return
+        self.count += 1
+        entry = {'request_id': request['request_id'], 'sequence': self.count,
+                 'started_monotonic': now, 'authorizes_input': False}
+        review.setdefault('passive_frames', []).append(entry)
+        try:
+            row = self.capture('vision-passive', deadline=request['expires_monotonic'])
+            entry.update(frame=row, image_sha256=hashlib.sha256(
+                (self.out / row['image']).read_bytes()).hexdigest())
+        except Exception as error:
+            entry['error'] = type(error).__name__ + ': ' + str(error)
+            # A failed optional capture must not be retried repeatedly.
+            self.capture = None
+        entry['finished_monotonic'] = time.monotonic()
+        self.next_at = entry['finished_monotonic'] + 3
+        status = {'request_id': request['request_id'], 'bound_image': request['image'],
+                  'latest_passive': entry,
+                  'notice': 'Passive frames are visibility only; input requires the original request image binding.'}
+        temporary = self.out / 'career-vision-passive.tmp'
+        temporary.write_text(json.dumps(status, indent=2))
+        temporary.replace(self.out / 'career-vision-passive.json')
+
+
 def run(mode, out, result, guest, capture, click, remaining, detector):
+    passive = PassiveVisionFrames(out, getattr(capture, 'raw', None), remaining)
     evidence = result['career'] = {'mode': mode, 'name': 'SaveProof', 'welcome_dismissed': False}
 
     def observe(stage):
@@ -333,7 +372,7 @@ def run(mode, out, result, guest, capture, click, remaining, detector):
             identity = hashlib.sha256(image.read_bytes()).hexdigest()
             request = {'request_id': hashlib.sha256((phase + identity + str(time.time_ns())).encode()).hexdigest(),
                        'phase': phase, 'action': action, 'image': row['image'], 'image_sha256': identity,
-                       'created_monotonic': created, 'expires_monotonic': created + min(45, remaining()),
+                       'created_monotonic': created, 'expires_monotonic': created + min(10, remaining()),
                        'expected_offer': EXPECTED_OFFER,
                        'fixture_reference': {'image': OFFER_REFERENCE, 'sha256': OFFER_REFERENCE_SHA256},
                        'review_required': 'View this exact fresh frame; respond only if the shown phase, target and offer are unambiguous.'}
@@ -350,6 +389,9 @@ def run(mode, out, result, guest, capture, click, remaining, detector):
             request_path = directory / (stem + '-request.json')
             response_path = directory / (stem + '-response.json')
             request['response'] = str(response_path.relative_to(out))
+            request['passive_status'] = 'career-vision-passive.json'
+            request['passive_notice'] = ('Additional frames cannot authorize input or replace this request image. '
+                                         'Check request_id in passive status; respond against the original binding only.')
             with request_path.open('x') as stream:
                 json.dump(request, stream, indent=2)
             temporary = directory / (stem + '-pending.tmp')
@@ -359,6 +401,7 @@ def run(mode, out, result, guest, capture, click, remaining, detector):
             review = {'request': request, 'frame': row, 'request_file': str(request_path.relative_to(out)),
                       'request_sha256': hashlib.sha256(request_path.read_bytes()).hexdigest()}
             reviews.append(review)
+            passive.next_at = max(passive.next_at, created + 3)
             while remaining() > 0 and time.monotonic() <= request['expires_monotonic']:
                 if response_path.exists() or response_path.is_symlink():
                     consumed = time.monotonic()
@@ -388,10 +431,16 @@ def run(mode, out, result, guest, capture, click, remaining, detector):
                         review['introduction_acknowledged'] = True
                         break
                     return row, response
-                time.sleep(.15)
+                passive.poll(request, review)
+                time.sleep(min(.15, remaining(), max(0, request['expires_monotonic'] - time.monotonic())))
             if not review.get('waited') and not review.get('introduction_acknowledged'):
                 review['expired'] = True
-        raise TimeoutError('vision response not observed: ' + phase)
+        phase_reviews = [review for review in reviews if review['request']['phase'] == phase]
+        waits = sum(bool(review.get('waited')) for review in phase_reviews)
+        intros = sum(bool(review.get('introduction_acknowledged')) for review in phase_reviews)
+        expired = sum(bool(review.get('expired')) for review in phase_reviews)
+        raise TimeoutError(f'vision review budget exhausted or deadline reached: {phase}; '
+                           f'valid waits={waits}, introductions={intros}, expired={expired}')
 
     if mode == 'create':
         click('New Career', 300, 120)

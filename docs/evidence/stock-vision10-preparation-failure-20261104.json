@@ -1,0 +1,149 @@
+{
+  "schema": 1,
+  "scope": "Failed private game preparation, before any gameplay or vision response; no screenshot or input acceptance.",
+  "bindings": {
+    "result.json": {
+      "path": "local/verify/parity-goal-20261102-092437/factory-depth-first/issue53-stock-vision10-purchase-v3/result.json",
+      "sha256": "d4d256c86db3099988d2068756a6ef46f72ac133255d5487789ea2ef82fda2fd",
+      "bytes": 2386
+    },
+    "focus.jsonl": {
+      "path": "local/verify/parity-goal-20261102-092437/factory-depth-first/issue53-stock-vision10-purchase-v3/focus.jsonl",
+      "sha256": "bdba165e554c2ae019cc327dc9b8952e82ca8e4764ceebc8208b08aa95836bbc",
+      "bytes": 3005
+    },
+    "execution.json": {
+      "path": "local/verify/parity-goal-20261102-092437/factory-depth-first/issue53-stock-vision10-purchase-v3/execution.json",
+      "sha256": "01979b050c290e1b819a9cc60d26add5b276f338d10c6c6edced61300708f26b",
+      "bytes": 601
+    }
+  },
+  "result": {
+    "schema": 1,
+    "passed": false,
+    "observer_error": "prepaid observation: child directory scan retry bound",
+    "outer_container_removed": true,
+    "source_preserved": true,
+    "prefix_seed": {
+      "outer_preserved": true
+    },
+    "producer_unchanged": true,
+    "execution_pressure": {
+      "samples": 4,
+      "stopped": false,
+      "last_sample": {
+        "free_disk_bytes": 158233653248,
+        "available_memory_bytes": 16590880768
+      }
+    },
+    "execution_artifacts": {
+      "samples": 5,
+      "stopped": true,
+      "last_sample": {
+        "stage": "periodic",
+        "complete": false,
+        "parent": "/Users/nicolas/Documents/github/sl-remastered/local/verify/parity-goal-20261102-092437/factory-depth-first",
+        "child": "/Users/nicolas/Documents/github/sl-remastered/local/verify/parity-goal-20261102-092437/factory-depth-first/issue53-stock-vision10-purchase-v3",
+        "parent_identity": [
+          16777233,
+          76723994
+        ],
+        "child_identity": [
+          16777233,
+          85366113
+        ],
+        "parent_max": 4294967296,
+        "child_max": 838860800,
+        "scan_seconds": 5,
+        "scan_attempts": [
+          {
+            "number": 1,
+            "complete": false,
+            "reason": "new child directory changed scanning: issue53-stock-vision10-purchase-v3/game/objects/meshes",
+            "elapsed": 0.2298890000092797,
+            "entries_scanned": 2567,
+            "relative_path": "issue53-stock-vision10-purchase-v3/game/objects/meshes"
+          },
+          {
+            "number": 2,
+            "complete": false,
+            "reason": "new child directory changed scanning: issue53-stock-vision10-purchase-v3/game",
+            "elapsed": 0.46701191598549485,
+            "entries_scanned": 5400,
+            "relative_path": "issue53-stock-vision10-purchase-v3/game"
+          },
+          {
+            "number": 3,
+            "complete": false,
+            "reason": "new child directory changed scanning: issue53-stock-vision10-purchase-v3/game/parts/engines",
+            "elapsed": 0.8073952500126325,
+            "entries_scanned": 9847,
+            "relative_path": "issue53-stock-vision10-purchase-v3/game/parts/engines"
+          }
+        ]
+      },
+      "reason": "prepaid observation: child directory scan retry bound"
+    },
+    "storage_source_unchanged": true,
+    "status": "incomplete",
+    "artifact_finalization": "failed",
+    "artifact_error": "prepaid observation: hash deadline bound"
+  },
+  "focus_events": [
+    {
+      "basis": "observed_parent_edge",
+      "identity": {
+        "exe": "/bin/cp",
+        "pgid": 31539,
+        "pid": 32009,
+        "ppid": 31539,
+        "read_ok": true,
+        "start_sec": 1793763885,
+        "start_usec": 722627
+      },
+      "kind": "owned_registered",
+      "monotonic": 389671.018123,
+      "parent": {
+        "exe": "/opt/homebrew/Cellar/python@3.15/3.15.0_1/Frameworks/Python.framework/Versions/3.15/Resources/Python.app/Contents/MacOS/Python",
+        "pgid": 31539,
+        "pid": 31539,
+        "ppid": 31536,
+        "read_ok": true,
+        "start_sec": 1793763879,
+        "start_usec": 928530
+      },
+      "schema": 1,
+      "sequence": 4,
+      "wall_time": 1793763885.7608871
+    },
+    {
+      "child_exit": 143,
+      "duration_seconds": 7.1844079999718815,
+      "interrupted_signal": 15,
+      "kind": "observer_finished",
+      "max_poll_gap_seconds": 0.05579700000816956,
+      "monotonic": 389672.370475,
+      "orphaned_group": false,
+      "polls": 265,
+      "schema": 1,
+      "sequence": 6,
+      "timed_out": false,
+      "wall_time": 1793763887.1132421
+    }
+  ],
+  "frames": 0,
+  "vision_requests": 0,
+  "findings": [
+    "Periodic child scan exhausted its unchanged retry bound while the owned private cp process was modifying game directories.",
+    "The observer stopped its owned process group; the final parent hash scan exceeded its unchanged deadline. Final artifact preservation is failed, not verified.",
+    "Source and producer preservation are reported true; those checks do not replace the failed parent finalization.",
+    "The dedicated reviewer wrote no responses. No game-state frame was produced."
+  ],
+  "prior_admission_only_attempt": {
+    "output": "local/verify/parity-goal-20261102-092437/factory-depth-first/issue53-stock-vision10-passive-v1",
+    "host_tool_exit": 2,
+    "host_tool_output": "run_stock: prepaid admission: hash deadline bound",
+    "output_directory_created": false,
+    "limitation": "Host-tool observation recorded here; no adapter result directory exists."
+  }
+}

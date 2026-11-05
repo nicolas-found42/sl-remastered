@@ -88,7 +88,7 @@ For a missing `result.txt`, the report checks the recorded process ID and start 
 
 New stock input proxy logs distinguish commands issued, queued or dropped buffered events, events returned to DirectInput, and held-down states observed during a read. These observations do not prove that the game acted on an input. Older captures lack those counters and report them as unknown. A completed input script without a verified scene or process exit is reported as unknown, not a successful game run.
 
-During the frame loop, the recorder writes two alternating `flight-0.log` and `flight-1.log` checkpoints at five-second heartbeats. Each completed file contains up to 200 recent events and a sequence number. A temporary file is synced before replacement; an incomplete temporary file is ignored. These are bounded snapshots, so older checkpoints are overwritten and a stalled frame loop cannot capture later activity. `tools/diagnose.sh` merges valid checkpoints with persistent events and the crash tail; equal timestamps and cross-thread order remain approximate.
+During the frame loop, the recorder writes two alternating `flight-0.log` and `flight-1.log` checkpoints at five-second heartbeats. Each completed file contains up to 4,096 recent events and a sequence number. A temporary file is synced before replacement; an incomplete temporary file is ignored. These are bounded snapshots, so older checkpoints are overwritten and a stalled frame loop cannot capture later activity. `tools/diagnose.sh` merges valid checkpoints with persistent events and the crash tail; equal timestamps and cross-thread order remain approximate.
 
 ## Script screenshots
 
@@ -161,3 +161,17 @@ Anomaly tags: `step_failed`, `nonfinite`, `speed_jump` (root speed changes by mo
 Line fields: `tick` (step number, contiguous), `f` (frame), `wall` (monotonic seconds), `wdt` (wall time since the previous step), `dt` and `pt` (step length and physics time), `ok`, `pre`/`post` (root position, velocity, and post angular velocity), `spd`, `asleep`, `ctl` (sampled controls: throttle, brake, clutch, steer, gear, engine rad/s), `wh` (per wheel: `i` index, `w` angular speed, `l` suspension length, `F` suspension force, `cb` contact body held, `wi` tire witness held, `s` selection result this step `S` selected / `R` rejected / `-` no face hit, `t` tire step `o` ok / `r` rejected / `-` no witness, `h` face hits, `cy` contact height, `wy` wheel height, `sl` slip magnitude, `sa` applied steering angle (rad), `ls` longitudinal slip, `aa` slip angle), `col` (`pairs` body/face pairs, `iter` contact passes, `n` contacts per pass, `imp` largest impulse per pass, `worst` largest impulse with its normal, separation and body), and `anom` / `err` when set.
 
 Read it with `python3 -c 'import json; [print(json.loads(l)["tick"]) for l in open("cartrace.jsonl")]'` or `grep -a '"anom"' cartrace.jsonl`.
+
+## Historical queries and recorder health
+
+See [the coverage inventory and investigation runbook](observability.md) for time,
+run and operation retrieval. New records include `telemetry.json` with log loss,
+IO failures and checkpoint status; a missing or stale health record is unknown.
+The run log defaults to a 16 MiB byte cap while stdout/stderr continue draining.
+Failure context is bounded to 64 stack lines of 1,024 characters; loss is counted.
+The existing diagnosis prints nonzero health counters near its verdict.
+
+Typed `op1` save operations join begin/end, parent, FileState lifetime scope and
+handle without storing filenames or contents. Logging setup/write failure is
+best effort and does not grant authority to interrupt normal application work.
+Save-store and path-containment failures remain real application errors.

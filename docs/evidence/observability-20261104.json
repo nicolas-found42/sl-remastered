@@ -1,0 +1,1231 @@
+{
+  "schema": 1,
+  "recorded_at_utc": "2026-11-04T10:43:46.573498+00:00",
+  "scope": "Codebase-wide boundary audit with prioritized shared observability implementation and source-bound local failure controls. Coverage inventory records explicit uninspected/inaccessible areas.",
+  "codebase_wide_complete": false,
+  "product_completion": false,
+  "source_base": "f83063ec4838c93f66db2e9cace7e96f82159af5",
+  "coverage_inventory": {
+    "path": "docs/observability.md",
+    "bytes": 25471,
+    "sha256": "2b317dace1615816b1e6da35fecaeb6a25952d29b7df3cae317abd3d3a5aebad"
+  },
+  "retained_root": "local/verify/observability-20261104-v1",
+  "source_bindings": {
+    "Brewfile": {
+      "path": "Brewfile",
+      "bytes": 213,
+      "sha256": "55ed9d57e71da3ff1ee0f10e59d76aea1c63881e57c2b42180c6451c83b608ac"
+    },
+    "CMakeLists.txt": {
+      "path": "CMakeLists.txt",
+      "bytes": 56641,
+      "sha256": "0f6088fe625e014e9f7ef8ca6919d0308e569fa723fab41f7d905487fc2e54c3"
+    },
+    "README.md": {
+      "path": "README.md",
+      "bytes": 6415,
+      "sha256": "d6f1f2e619f4d2f3de83cb8b10a5cf2f753704e75bc58823a178f81cb30fb531"
+    },
+    ".github/workflows/check.yml": {
+      "path": ".github/workflows/check.yml",
+      "bytes": 3041,
+      "sha256": "b8335b3a4a247e8a26ba1bb04a9e622b1b7bde93aa25102f590079f7dd8083c2"
+    },
+    "src/run_log.hpp": {
+      "path": "src/run_log.hpp",
+      "bytes": 22198,
+      "sha256": "389569b6ed5fdc7a52f00c4d32a5540e418abf287fef7518175eebdc68ecba89"
+    },
+    "src/run_log.cpp": {
+      "path": "src/run_log.cpp",
+      "bytes": 55577,
+      "sha256": "a41eb411c6aa3203ad1fe677f21c59d26798e76f480c498ba431d0b22bd3c563"
+    },
+    "src/file_state.hpp": {
+      "path": "src/file_state.hpp",
+      "bytes": 5771,
+      "sha256": "4672c70d7d30dfd88ba3dc8442ae740bfb17281e826bc0698cf043793469737e"
+    },
+    "src/file_state.cpp": {
+      "path": "src/file_state.cpp",
+      "bytes": 24550,
+      "sha256": "6158509b10285239924c80e1d192d1f851debc1379799ca6724341a24ebe07f2"
+    },
+    "src/game_application.cpp": {
+      "path": "src/game_application.cpp",
+      "bytes": 121513,
+      "sha256": "6973bbd81ac5e327eddac0d18e167989e3f1b53ee74f4a99aa1054838193a560"
+    },
+    "src/game_application_paths.cpp": {
+      "path": "src/game_application_paths.cpp",
+      "bytes": 2578,
+      "sha256": "03862aea052bd8c90570a95d7ede364c04250da1aab54888f18f1f9036ba0347"
+    },
+    "tests/game_application_paths_test.cpp": {
+      "path": "tests/game_application_paths_test.cpp",
+      "bytes": 3770,
+      "sha256": "b1c58af75d35556e6a5253cb7f06f8f59b3c5779fa3a69195b72c7043f23ace4"
+    },
+    "tests/diagnostic_operations_test.cpp": {
+      "path": "tests/diagnostic_operations_test.cpp",
+      "bytes": 5532,
+      "sha256": "077d9d9247dfa377780d8262c7d04d19102e4eaca5f9ddb0a2945422f723d966"
+    },
+    "tests/incident_test.py": {
+      "path": "tests/incident_test.py",
+      "bytes": 13133,
+      "sha256": "c3ddeb5d18486c1a30c02d8392681aab60fea4778c8fecc802ac0b554c32b601"
+    },
+    "tools/incident.py": {
+      "path": "tools/incident.py",
+      "bytes": 23109,
+      "sha256": "29700537653b70b6c35e48300fd054d68cc8cfe7d3b48999f4249f3f2396cd09"
+    },
+    "tools/diagnose.py": {
+      "path": "tools/diagnose.py",
+      "bytes": 47733,
+      "sha256": "6f1b5bf6b1d4db7987563d5ac831b6d7a1db5bca67746408ee4f98475670e331"
+    },
+    "tools/parity/experiment_result.py": {
+      "path": "tools/parity/experiment_result.py",
+      "bytes": 9747,
+      "sha256": "6dc0a28cf4c217f52aed0208100c9595e73d080c24046132b28e0b3b3b48a8ef"
+    },
+    "tools/parity/test_experiment_result.py": {
+      "path": "tools/parity/test_experiment_result.py",
+      "bytes": 6278,
+      "sha256": "bba7edbe31c51e7ebacb0910e17c899aefafde3c1dcd5ae6530c07b52a1d23d3"
+    },
+    "tools/parity/dev.py": {
+      "path": "tools/parity/dev.py",
+      "bytes": 32730,
+      "sha256": "6ec323dc5ae3b0d36ff7509bcf491836a7c1c60b113008a677935fdf315a98dd"
+    },
+    "tools/parity/test_dev.py": {
+      "path": "tools/parity/test_dev.py",
+      "bytes": 14236,
+      "sha256": "563694ec4aca01b426fcca171f18bbaabeb1aefa1002b143ad3ea37c5c830765"
+    },
+    "tools/check.sh": {
+      "path": "tools/check.sh",
+      "bytes": 5420,
+      "sha256": "91e99b8b5db13f9940b9ce5ba1699f570550d1af5b6fa427cf4fecbfc61723d5"
+    },
+    "docs/run-log.md": {
+      "path": "docs/run-log.md",
+      "bytes": 21181,
+      "sha256": "3579fcb4beb1b2b7a13e12d60e69e49a6ab35dc82e2cf86594fbf88142d90159"
+    },
+    "docs/observability.md": {
+      "path": "docs/observability.md",
+      "bytes": 25471,
+      "sha256": "2b317dace1615816b1e6da35fecaeb6a25952d29b7df3cae317abd3d3a5aebad"
+    },
+    "tools/parity/agent-tools.md": {
+      "path": "tools/parity/agent-tools.md",
+      "bytes": 17238,
+      "sha256": "322cb0c0b7addee36dae57f1abaacd8e2a7529c3c46eabfbfc99195fcc981b36"
+    },
+    "build/diagnostic_operations_test": {
+      "path": "build/diagnostic_operations_test",
+      "bytes": 6851512,
+      "sha256": "7767fbee8af0db3727ea745e9a473f3a86eafc90a30ffc6feeae35c464b406d2"
+    }
+  },
+  "changes": [
+    "bounded read-only UTC/run/request/operation/stage retrieval with source hashes and incomplete evidence notices",
+    "typed FileState operation chronology without new paths/save payload",
+    "bounded native log/context, counted loss and atomic health checkpoints",
+    "nonfatal recorder startup/path refusal and partial capture FD rollback",
+    "durable private attempt/stage journal with separate telemetry errors",
+    "developer/CI regression integration, dependency inventory and agent runbook"
+  ],
+  "validation": {
+    "gate": {
+      "exit_code": 8,
+      "ctests_total": 131,
+      "passed": 130,
+      "failed": [
+        "object_world_step_unit"
+      ],
+      "assertion": "tests/object_world_step_test.cpp:240 speed < 0.3",
+      "post_ctest_unexecuted": true,
+      "log": {
+        "path": "local/verify/observability-20261104-v1/gate-v2.log",
+        "bytes": 16288,
+        "sha256": "bf6fbf739b87b481845ad56980ee1a1f13caa3f64f3624369c76021b5f480626"
+      }
+    },
+    "focused_native": {
+      "exit_code": 0,
+      "tests": 6,
+      "log": {
+        "path": "local/verify/observability-20261104-v1/focused-v2.log",
+        "bytes": 1209,
+        "sha256": "2a418169391ac7b99291303a9da3adf2ee2004648d700dfbd5633fa41cd33fe5"
+      }
+    },
+    "incident": {
+      "exit_code": 0,
+      "tests": 14,
+      "skipped": 0,
+      "command": "python3 -I tests/incident_test.py --probe build/diagnostic_operations_test --startup-probe build/startup_probe",
+      "log": {
+        "path": "local/verify/observability-20261104-v1/incident-tests-reviewed.log",
+        "bytes": 2121,
+        "sha256": "30891abf3727ee070838a1b05b3fdcd3ddd120ad74c8878b671162d688af5f96"
+      }
+    },
+    "experiment": {
+      "exit_code": 0,
+      "tests": 11,
+      "log": {
+        "path": "local/verify/observability-20261104-v1/experiment-tests-verbose.log",
+        "bytes": 1440,
+        "sha256": "5927c90a033db01e0789f325e2524477f12f907f7d56d44e3120cefea42d1213"
+      }
+    },
+    "developer": {
+      "exit_code": 0,
+      "tests": 22,
+      "log": {
+        "path": "local/verify/observability-20261104-v1/dev-tests-final2.log",
+        "bytes": 121,
+        "sha256": "7ac83e89ed651baea838dc4427910fc98ab66c4118c8a766fa9070b46a0e93a2"
+      }
+    },
+    "diagnose": {
+      "exit_code": 0,
+      "tests": 24,
+      "log": {
+        "path": "local/verify/observability-20261104-v1/diagnose-tests-v2.log",
+        "bytes": 123,
+        "sha256": "20ddb70b5f6e3eef886c3895a30080fa9fcd7f46c0dac98016ff7020799e6149"
+      }
+    },
+    "portable": {
+      "exit_code": 0,
+      "tests": 4,
+      "log": {
+        "path": "local/verify/observability-20261104-v1/portable-final.log",
+        "bytes": 902,
+        "sha256": "fc67084a47bb8cd04d84271be0dcd0330ee9f8a48175e234ed7b19228d2457e0"
+      }
+    },
+    "deep_lint": {
+      "exit_code": 0,
+      "selected_sources": 58,
+      "final_native_followup_sources": 2,
+      "logs": [
+        {
+          "path": "local/verify/observability-20261104-v1/deep-lint-focused.log",
+          "bytes": 10492,
+          "sha256": "b88ab679a4c9624475f00489adc7e983c118aca5cb0f678653c23aba00df0fc1"
+        },
+        {
+          "path": "local/verify/observability-20261104-v1/deep-lint-v2.log",
+          "bytes": 262,
+          "sha256": "83bd4061283291fdf48980006235a59a2bc3e631eb5b953c7bff3355bbbd22d5"
+        }
+      ],
+      "limits": "Initial broad @all invocation terminated before completion; retained separately. Successful explicit real-includer pass and final changed-source followup used existing compile database."
+    },
+    "fast_lint": {
+      "exit_code": 0,
+      "log": {
+        "path": "local/verify/observability-20261104-v1/fast-lint-final.log",
+        "bytes": 432,
+        "sha256": "38c6e90964fc649d1e9d0f01038c3637240a2cac6e8748c9d117db8fccbe2d2a"
+      }
+    },
+    "ruff": {
+      "exit_code": 0,
+      "log": {
+        "path": "local/verify/observability-20261104-v1/ruff-delivery.log",
+        "bytes": 19,
+        "sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18"
+      }
+    },
+    "actionlint": {
+      "exit_code": 0,
+      "log": {
+        "path": "local/verify/observability-20261104-v1/actionlint-delivery.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    },
+    "fresh_configure": {
+      "exit_code": 0,
+      "command": "cmake --preset ninja-release -B /private/tmp/sl-observability-clean-config-20261104",
+      "log": {
+        "path": "local/verify/observability-20261104-v1/clean-config.log",
+        "bytes": 1269,
+        "sha256": "f8767d40cbd70e76b985b87c65a50780be2f67f276f840ec49fcf342ec3fe0c8"
+      }
+    },
+    "installed_dependencies": {
+      "exit_code": 0,
+      "command": "brew bundle check --file Brewfile --no-upgrade",
+      "log": {
+        "path": "local/verify/observability-20261104-v1/brew-final.log",
+        "bytes": 43,
+        "sha256": "a518485582861c31dc5bd77e8866379ad440c3188dc42fca653ef850cb9446d8"
+      },
+      "installed_or_upgraded": false
+    },
+    "negative_controls": {
+      "paths_child_exit": -6,
+      "fd_child_exit": -6,
+      "expected_assertion_failures": true,
+      "receipts": [
+        {
+          "path": "local/verify/observability-20261104-v1/paths-negative-control-final.json",
+          "bytes": 1913,
+          "sha256": "db6b4bf7e42415f9437b01fbeade90884aab2b4835b118366eaffe2cda7e09b0"
+        },
+        {
+          "path": "local/verify/observability-20261104-v1/fd-negative-control.json",
+          "bytes": 1596,
+          "sha256": "e50bbd80a49cc56be06836289d19e1ec89bf43125c65fde9624f74f69b93c53f"
+        }
+      ]
+    },
+    "native_controls": {
+      "path": "local/verify/observability-20261104-v1/controls-v2.json",
+      "bytes": 5579,
+      "sha256": "16057f0aeac16cb0cbad08ec749e03dbb68239d9cc5f032ba869e7942823381a"
+    },
+    "console_controls": {
+      "path": "local/verify/observability-20261104-v1/controls.json",
+      "bytes": 5409,
+      "sha256": "38e6e0a81e6e9eb4bf0e2ec472fa41db873f1f474a57f5d9b269140e04a98eb7"
+    }
+  },
+  "historical_observations": {
+    "native_discovery": {
+      "records_returned": 250,
+      "failed_results_in_returned_subset": 152,
+      "incomplete": true,
+      "reason": "20000-entry bound; never a complete history inventory"
+    },
+    "exact_native": {
+      "path": "local/verify/observability-20261104-v1/historical-native-exact.json",
+      "bytes": 1867,
+      "sha256": "f6457819b9b8a34b92f3be1ca1872b89b43871559eb5c6d886567c13ac4d75be"
+    },
+    "ui_request": {
+      "receipt": {
+        "path": "local/verify/observability-20261104-v1/stock-review.json.gz",
+        "bytes": 805,
+        "sha256": "a35076771da4af143aa2a286234a5a06a31ad293b99d3c2f300139a6a6191aba"
+      },
+      "id": "28c72b5b7466a438d07df217be7de1c96b4252f54e6d0c7cc1ad52b62556ab37",
+      "expired": true,
+      "response_consumed": false,
+      "response_file_at_query": false,
+      "cause": "unknown"
+    },
+    "github": {
+      "run": 41746502239,
+      "url": "https://github.com/nicolas-found42/sl-remastered/actions/runs/41746502239",
+      "head_sha": "f83063ec4838c93f66db2e9cace7e96f82159af5",
+      "failure": "FFMPEG_INCLUDE_DIR/libavformat/avformat.h missing at configure",
+      "later_steps": "skipped",
+      "visible_private_runners": 0,
+      "new_revision_run": "unexecuted",
+      "metadata": {
+        "path": "local/verify/observability-20261104-v1/github-metadata.json",
+        "bytes": 7145,
+        "sha256": "7775af0aa0cffb4c71f7602537e3f96a4c69e26c882c25e34420acee48233081"
+      }
+    }
+  },
+  "review": {
+    "state": "escalated",
+    "automatic_approval": false,
+    "resolution": {
+      "path": "local/verify/observability-20261104-v1/review-resolution.json",
+      "bytes": 2378,
+      "sha256": "a31e799a815f1dc8fbcf6e65ddd4b5f048509ab4c8d4715c723107b00cad0259"
+    },
+    "raw_receipts": {
+      "path": "local/verify/observability-20261104-v1/review-receipts.json.gz",
+      "bytes": 5013,
+      "sha256": "b3bd11366db9ecd4dd36754fe5ec235c916277a6245cdbfc486f68c3ab1c7171"
+    }
+  },
+  "retention": {
+    "new_reservation_bytes": 1048576,
+    "logical_bytes_before_report": 721764,
+    "policy_limits_changed": false,
+    "existing_evidence_deleted": false,
+    "note": "No time-based deletion added; shared retention policy remains authoritative. New instrumentation cannot recover unretained history."
+  },
+  "remaining": [
+    "Full integration gate still fails original object-settling assertion; later stages not executed in that invocation.",
+    "Individual shipped AI/race branches and heterogeneous older utility internals remain uninspected.",
+    "No universal async owner/attempt identity across every loader/media callback.",
+    "No complete build-input attestation; launch-source observations are not executable provenance.",
+    "Whole-game timing/performance, power loss and simultaneous total recorder-store failure unqualified.",
+    "Apple/model-service history inaccessible, CI retention settings unknown; no new remote workflow or private runner execution.",
+    "Legacy evidence lacks new health/operation fields; absence remains unknown."
+  ],
+  "artifact_bindings": {
+    "review-receipts.json.gz": {
+      "path": "local/verify/observability-20261104-v1/review-receipts.json.gz",
+      "bytes": 5013,
+      "sha256": "b3bd11366db9ecd4dd36754fe5ec235c916277a6245cdbfc486f68c3ab1c7171"
+    },
+    "baseline-old_game_application_paths.cpp.gz": {
+      "path": "local/verify/observability-20261104-v1/baseline-old_game_application_paths.cpp.gz",
+      "bytes": 792,
+      "sha256": "3622f18db0b5ffae103e918dc00b9d72816ffd3ee62470d1ba2291d00aa10687"
+    },
+    "source-snapshot.tar.gz": {
+      "path": "local/verify/observability-20261104-v1/source-snapshot.tar.gz",
+      "bytes": 81484,
+      "sha256": "14981e321bcfbf77cfeb38c108ebee26e0177a1bb0c67303fef87188eb70b349"
+    },
+    "final-source-bindings.json": {
+      "path": "local/verify/observability-20261104-v1/final-source-bindings.json",
+      "bytes": 4175,
+      "sha256": "15fde33e53217948607b66fc845e57e41ef04dbb263eb5a525311f25419c2a74"
+    },
+    "control-v2-hold-query.json": {
+      "path": "local/verify/observability-20261104-v1/control-v2-hold-query.json",
+      "bytes": 7775,
+      "sha256": "41b51feecdf292e5c626aeb493c717e497533c0b19b07b647bb7774aa9de81c4"
+    },
+    "github-failed.log.gz": {
+      "path": "local/verify/observability-20261104-v1/github-failed.log.gz",
+      "bytes": 7153,
+      "sha256": "a507bc6c4e73883c2b3a312f054f2cc30ebce2e61d461810abadd17dabe4fe89"
+    },
+    "controls.json": {
+      "path": "local/verify/observability-20261104-v1/controls.json",
+      "bytes": 5409,
+      "sha256": "38e6e0a81e6e9eb4bf0e2ec472fa41db873f1f474a57f5d9b269140e04a98eb7"
+    },
+    "control-hold-query.json": {
+      "path": "local/verify/observability-20261104-v1/control-hold-query.json",
+      "bytes": 7677,
+      "sha256": "9e51a8964bbdb564fb43128de512fb470f652274da794f7fef2786f4c12390a1"
+    },
+    "control-v2-normal-query.json": {
+      "path": "local/verify/observability-20261104-v1/control-v2-normal-query.json",
+      "bytes": 7553,
+      "sha256": "38bc97634ebf217e4d64d908395c01e6c3f7bf69deb64b09cfb457d50ee51873"
+    },
+    "deep-lint-focused.log": {
+      "path": "local/verify/observability-20261104-v1/deep-lint-focused.log",
+      "bytes": 10492,
+      "sha256": "b88ab679a4c9624475f00489adc7e983c118aca5cb0f678653c23aba00df0fc1"
+    },
+    "baseline-fd_negative_control.py.gz": {
+      "path": "local/verify/observability-20261104-v1/baseline-fd_negative_control.py.gz",
+      "bytes": 869,
+      "sha256": "d39a97d0341bcf6ba97e5537323c852d333073b8d8497ed73fd9ac73aab3a215"
+    },
+    "experiment-tests-verbose.log": {
+      "path": "local/verify/observability-20261104-v1/experiment-tests-verbose.log",
+      "bytes": 1440,
+      "sha256": "5927c90a033db01e0789f325e2524477f12f907f7d56d44e3120cefea42d1213"
+    },
+    "paths-negative-control-final.json": {
+      "path": "local/verify/observability-20261104-v1/paths-negative-control-final.json",
+      "bytes": 1913,
+      "sha256": "db6b4bf7e42415f9437b01fbeade90884aab2b4835b118366eaffe2cda7e09b0"
+    },
+    "review-resolution.json": {
+      "path": "local/verify/observability-20261104-v1/review-resolution.json",
+      "bytes": 2378,
+      "sha256": "a31e799a815f1dc8fbcf6e65ddd4b5f048509ab4c8d4715c723107b00cad0259"
+    },
+    "focused-final.log": {
+      "path": "local/verify/observability-20261104-v1/focused-final.log",
+      "bytes": 1305,
+      "sha256": "2a1f78d12c21e0ebca715eae31ed8b8895232640c40d8cd3fc4560acc3181546"
+    },
+    "review-packet.json.gz": {
+      "path": "local/verify/observability-20261104-v1/review-packet.json.gz",
+      "bytes": 35397,
+      "sha256": "6777a1d860b9b5e372499bf42ac1b5ead67ceaebf776e4529a707a610104bf17"
+    },
+    "control-console-timeout-query.json": {
+      "path": "local/verify/observability-20261104-v1/control-console-timeout-query.json",
+      "bytes": 2707,
+      "sha256": "809ed4fd4be9498b229f2e8170db7a6a73320f98d137f99a44d86508eed46719"
+    },
+    "terminated-wide-deep-check.json": {
+      "path": "local/verify/observability-20261104-v1/terminated-wide-deep-check.json",
+      "bytes": 414,
+      "sha256": "b8bd579f56da09a437167aeb278123d9f50cdce158378cc5ccc0a4ef0928450e"
+    },
+    "control-normal-query.json": {
+      "path": "local/verify/observability-20261104-v1/control-normal-query.json",
+      "bytes": 7452,
+      "sha256": "6d1e94c4e35821102ecd9d7743eedc7ba8284c43a0f0cc3666435feed1bc7a85"
+    },
+    "stock-review.json.gz": {
+      "path": "local/verify/observability-20261104-v1/stock-review.json.gz",
+      "bytes": 805,
+      "sha256": "a35076771da4af143aa2a286234a5a06a31ad293b99d3c2f300139a6a6191aba"
+    },
+    "experiment-tests-final.log": {
+      "path": "local/verify/observability-20261104-v1/experiment-tests-final.log",
+      "bytes": 110,
+      "sha256": "cac2e99ff04dc02feea410adfb85178338a4fe276a5bb21fe0c7de10ac35e395"
+    },
+    "control-io-query.json": {
+      "path": "local/verify/observability-20261104-v1/control-io-query.json",
+      "bytes": 7500,
+      "sha256": "ea656f2fa90bc8455c5d095bf02bcf55d209bbb6867a84b60701435c42ba332b"
+    },
+    "control-v2-capture-fault-query.json": {
+      "path": "local/verify/observability-20261104-v1/control-v2-capture-fault-query.json",
+      "bytes": 7740,
+      "sha256": "8d5a0d7d58a7eb8905bd8fa0c27c576b943ba571f5c8795b64dc0985207a64b2"
+    },
+    "ruff-delivery.log": {
+      "path": "local/verify/observability-20261104-v1/ruff-delivery.log",
+      "bytes": 19,
+      "sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18"
+    },
+    "github-metadata.json": {
+      "path": "local/verify/observability-20261104-v1/github-metadata.json",
+      "bytes": 7145,
+      "sha256": "7775af0aa0cffb4c71f7602537e3f96a4c69e26c882c25e34420acee48233081"
+    },
+    "compile-context.json": {
+      "path": "local/verify/observability-20261104-v1/compile-context.json",
+      "bytes": 25011,
+      "sha256": "8fbea7ea8cf9e32407f08be98da26643cd407c613a54475e2b62df3cbca90da0"
+    },
+    "gate-v2.log": {
+      "path": "local/verify/observability-20261104-v1/gate-v2.log",
+      "bytes": 16288,
+      "sha256": "bf6fbf739b87b481845ad56980ee1a1f13caa3f64f3624369c76021b5f480626"
+    },
+    "control-cap-query.json": {
+      "path": "local/verify/observability-20261104-v1/control-cap-query.json",
+      "bytes": 5218,
+      "sha256": "50cc1c36282e7b9548ff0df65042aee42f9da4edf2a2f88c447bc45815a28771"
+    },
+    "focused-v2.log": {
+      "path": "local/verify/observability-20261104-v1/focused-v2.log",
+      "bytes": 1209,
+      "sha256": "2a418169391ac7b99291303a9da3adf2ee2004648d700dfbd5633fa41cd33fe5"
+    },
+    "doctor.json": {
+      "path": "local/verify/observability-20261104-v1/doctor.json",
+      "bytes": 7072,
+      "sha256": "0bb490d819e4afc6303c27c36ca4ae14b21a370ac1d4a6a96597c5db19b64d92"
+    },
+    "brew-final.log": {
+      "path": "local/verify/observability-20261104-v1/brew-final.log",
+      "bytes": 43,
+      "sha256": "a518485582861c31dc5bd77e8866379ad440c3188dc42fca653ef850cb9446d8"
+    },
+    "deep-lint-v2.log": {
+      "path": "local/verify/observability-20261104-v1/deep-lint-v2.log",
+      "bytes": 262,
+      "sha256": "83bd4061283291fdf48980006235a59a2bc3e631eb5b953c7bff3355bbbd22d5"
+    },
+    "incident-tests-reviewed.log": {
+      "path": "local/verify/observability-20261104-v1/incident-tests-reviewed.log",
+      "bytes": 2121,
+      "sha256": "30891abf3727ee070838a1b05b3fdcd3ddd120ad74c8878b671162d688af5f96"
+    },
+    "fd-negative-control.json": {
+      "path": "local/verify/observability-20261104-v1/fd-negative-control.json",
+      "bytes": 1596,
+      "sha256": "e50bbd80a49cc56be06836289d19e1ec89bf43125c65fde9624f74f69b93c53f"
+    },
+    "diagnose-tests-v2.log": {
+      "path": "local/verify/observability-20261104-v1/diagnose-tests-v2.log",
+      "bytes": 123,
+      "sha256": "20ddb70b5f6e3eef886c3895a30080fa9fcd7f46c0dac98016ff7020799e6149"
+    },
+    "native-history.json.gz": {
+      "path": "local/verify/observability-20261104-v1/native-history.json.gz",
+      "bytes": 48375,
+      "sha256": "a57afcf6521c7d6c31ce8d5958f85b984965eb663b0b0d481c960b890b3e5d97"
+    },
+    "initial-control-refusal.json": {
+      "path": "local/verify/observability-20261104-v1/initial-control-refusal.json",
+      "bytes": 569,
+      "sha256": "37ed0033227a5d29990db949db0fb251a5029711e762510bfbf96397f4f52b1e"
+    },
+    "capture-fault-red2.log": {
+      "path": "local/verify/observability-20261104-v1/capture-fault-red2.log",
+      "bytes": 127,
+      "sha256": "770895d4ef4237d1b694bb17b070e170a8e470ea21fb87e750751d7252e4435a"
+    },
+    "control-console-failure-query.json": {
+      "path": "local/verify/observability-20261104-v1/control-console-failure-query.json",
+      "bytes": 2623,
+      "sha256": "b111defe48be851d8f973c9129e9716b647e1adbad4aaac8a3155008b41ff88f"
+    },
+    "task-patch.json": {
+      "path": "local/verify/observability-20261104-v1/task-patch.json",
+      "bytes": 1002,
+      "sha256": "6e72ff384d5e9253305b0c9166efee5ef857d92250014bbcfbd87f7f6bd1eecd"
+    },
+    "control-stream-query.json": {
+      "path": "local/verify/observability-20261104-v1/control-stream-query.json",
+      "bytes": 7522,
+      "sha256": "c9dd285c3aea4c11d90ebdff1d18f60fa3eaae6d228653b773c2104fbf601736"
+    },
+    "native-history-final.json.gz": {
+      "path": "local/verify/observability-20261104-v1/native-history-final.json.gz",
+      "bytes": 48472,
+      "sha256": "00f7c032579f93f01c68a6aac3f8a6083872d3f63175d7ef62b2739628bf9163"
+    },
+    "source-bindings.json": {
+      "path": "local/verify/observability-20261104-v1/source-bindings.json",
+      "bytes": 1507,
+      "sha256": "a7286d89ecc6c20691748fd497ccb7e4e3bd88bf28166f8651dcbe02665daa34"
+    },
+    "actionlint-delivery.log": {
+      "path": "local/verify/observability-20261104-v1/actionlint-delivery.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "control-v2-cap-query.json": {
+      "path": "local/verify/observability-20261104-v1/control-v2-cap-query.json",
+      "bytes": 5319,
+      "sha256": "4c672abb1d9f3ffb1827f4b8401f029ce498ce2bc4ef06c814e09b3f1437fa94"
+    },
+    "portable-final.log": {
+      "path": "local/verify/observability-20261104-v1/portable-final.log",
+      "bytes": 902,
+      "sha256": "fc67084a47bb8cd04d84271be0dcd0330ee9f8a48175e234ed7b19228d2457e0"
+    },
+    "historical-queries.json": {
+      "path": "local/verify/observability-20261104-v1/historical-queries.json",
+      "bytes": 846,
+      "sha256": "4bd567f96dc8446bc2606e64814b56a9e1de468f283756a4628f777f7fc404f4"
+    },
+    "preservation-before-metadata.json": {
+      "path": "local/verify/observability-20261104-v1/preservation-before-metadata.json",
+      "bytes": 3085,
+      "sha256": "d46df764234592cc8df0a325cfc6fbbab836130a81d7f934be88916091e63f1b"
+    },
+    "dev-tests-final2.log": {
+      "path": "local/verify/observability-20261104-v1/dev-tests-final2.log",
+      "bytes": 121,
+      "sha256": "7ac83e89ed651baea838dc4427910fc98ab66c4118c8a766fa9070b46a0e93a2"
+    },
+    "control-v2-io-query.json": {
+      "path": "local/verify/observability-20261104-v1/control-v2-io-query.json",
+      "bytes": 7601,
+      "sha256": "cd6a685d072b5ec317f0dda0aa6ea0cfdae0c8096cca27ce7ada6894cfb46fe9"
+    },
+    "fast-lint-final.log": {
+      "path": "local/verify/observability-20261104-v1/fast-lint-final.log",
+      "bytes": 432,
+      "sha256": "38c6e90964fc649d1e9d0f01038c3637240a2cac6e8748c9d117db8fccbe2d2a"
+    },
+    "ruff-final.log": {
+      "path": "local/verify/observability-20261104-v1/ruff-final.log",
+      "bytes": 19,
+      "sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18"
+    },
+    "incident-tests-v3.log": {
+      "path": "local/verify/observability-20261104-v1/incident-tests-v3.log",
+      "bytes": 113,
+      "sha256": "603cdcfc5135e246901d7012715f30393af2032b5284ad35cb1234ec29bf1814"
+    },
+    "control-v2-stream-query.json": {
+      "path": "local/verify/observability-20261104-v1/control-v2-stream-query.json",
+      "bytes": 7623,
+      "sha256": "4f747fc2243d4755aa66f3ee7227d1274ef00ddbd16a037b281adeadae84a874"
+    },
+    "initial-control-driver.py": {
+      "path": "local/verify/observability-20261104-v1/initial-control-driver.py",
+      "bytes": 4887,
+      "sha256": "3b82dee3fe1a140717e222a402551ee972132b34d6cf9e01e69664001474e6f9"
+    },
+    "baseline-negative_control.py.gz": {
+      "path": "local/verify/observability-20261104-v1/baseline-negative_control.py.gz",
+      "bytes": 841,
+      "sha256": "b257eed10658de137de3ce4123f7edcfe89fa52e2b58bf71b3abad633f6263f0"
+    },
+    "github-log-binding.json": {
+      "path": "local/verify/observability-20261104-v1/github-log-binding.json",
+      "bytes": 349,
+      "sha256": "d491cc16b5e6f44e758da72f72e23e330f3b6787ae5c9257e1bbe4a82b029507"
+    },
+    "task.patch.gz": {
+      "path": "local/verify/observability-20261104-v1/task.patch.gz",
+      "bytes": 33439,
+      "sha256": "f9ead4ca8b918a84838aacd8bb79998cdfe3be8ce8d8e5985c867f29c652a155"
+    },
+    "clean-config.log": {
+      "path": "local/verify/observability-20261104-v1/clean-config.log",
+      "bytes": 1269,
+      "sha256": "f8767d40cbd70e76b985b87c65a50780be2f67f276f840ec49fcf342ec3fe0c8"
+    },
+    "controls-v2.json": {
+      "path": "local/verify/observability-20261104-v1/controls-v2.json",
+      "bytes": 5579,
+      "sha256": "16057f0aeac16cb0cbad08ec749e03dbb68239d9cc5f032ba869e7942823381a"
+    },
+    "negative-control.json": {
+      "path": "local/verify/observability-20261104-v1/negative-control.json",
+      "bytes": 1913,
+      "sha256": "db6b4bf7e42415f9437b01fbeade90884aab2b4835b118366eaffe2cda7e09b0"
+    },
+    "actionlint.log": {
+      "path": "local/verify/observability-20261104-v1/actionlint.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "gate.log": {
+      "path": "local/verify/observability-20261104-v1/gate.log",
+      "bytes": 41063,
+      "sha256": "e9b654aec05bc8f44d56249fbd25745fe153977a5b2211d0e82cb0cae35d5f2c"
+    },
+    "baseline-run_log.cpp.gz": {
+      "path": "local/verify/observability-20261104-v1/baseline-run_log.cpp.gz",
+      "bytes": 14337,
+      "sha256": "c053e1afabefc7556f8de7c5e0152d5250f690a978eb4818eb3579dd9af8086a"
+    },
+    "claim-audit.json": {
+      "path": "local/verify/observability-20261104-v1/claim-audit.json",
+      "bytes": 610,
+      "sha256": "9833000b2f430d5a0ffebca1c1e8eba9a91f18370d2ad342a7cebdfa7590f4c9"
+    },
+    "historical-native-exact.json": {
+      "path": "local/verify/observability-20261104-v1/historical-native-exact.json",
+      "bytes": 1867,
+      "sha256": "f6457819b9b8a34b92f3be1ca1872b89b43871559eb5c6d886567c13ac4d75be"
+    },
+    "control-v2-normal/fixture/save/game/private-player-token": {
+      "path": "local/verify/observability-20261104-v1/control-v2-normal/fixture/save/game/private-player-token",
+      "bytes": 24,
+      "sha256": "ffada58bbc5616085007946dacadf5fe85cef41e2159ad6713260dff8985683d"
+    },
+    "control-v2-normal/runs/20261104T095848Z-57550/meta.txt": {
+      "path": "local/verify/observability-20261104-v1/control-v2-normal/runs/20261104T095848Z-57550/meta.txt",
+      "bytes": 1546,
+      "sha256": "5ff0b3c3e7fec22652c986e20922d14dab5f02ada0a7ff683482a6fa5d6b57fc"
+    },
+    "control-v2-normal/runs/20261104T095848Z-57550/result.txt": {
+      "path": "local/verify/observability-20261104-v1/control-v2-normal/runs/20261104T095848Z-57550/result.txt",
+      "bytes": 65,
+      "sha256": "00f4ba21118049f2daf7efcea108b11819f9096d070a158edb8881fef30b3599"
+    },
+    "control-v2-normal/runs/20261104T095848Z-57550/counters.txt": {
+      "path": "local/verify/observability-20261104-v1/control-v2-normal/runs/20261104T095848Z-57550/counters.txt",
+      "bytes": 261,
+      "sha256": "dc69ab770e7009f28b89540a64989e1793c6568a961248c434c94f5e31fa0cb0"
+    },
+    "control-v2-normal/runs/20261104T095848Z-57550/run.log": {
+      "path": "local/verify/observability-20261104-v1/control-v2-normal/runs/20261104T095848Z-57550/run.log",
+      "bytes": 1019,
+      "sha256": "268a4320ad15361957d1948ddc77b9e6445a84d3a659706212567ab4320c8218"
+    },
+    "control-v2-normal/runs/20261104T095848Z-57550/input.txt": {
+      "path": "local/verify/observability-20261104-v1/control-v2-normal/runs/20261104T095848Z-57550/input.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "control-v2-normal/runs/20261104T095848Z-57550/telemetry.json": {
+      "path": "local/verify/observability-20261104-v1/control-v2-normal/runs/20261104T095848Z-57550/telemetry.json",
+      "bytes": 280,
+      "sha256": "3b312b68021abbd9e266ace14f7ee76fc47b1a3d7afd5d43409bd48083686680"
+    },
+    "control-v2-normal/runs/20261104T095848Z-57550/gaps.txt": {
+      "path": "local/verify/observability-20261104-v1/control-v2-normal/runs/20261104T095848Z-57550/gaps.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "control-v2-normal/runs/20261104T095848Z-57550/flight-1.log": {
+      "path": "local/verify/observability-20261104-v1/control-v2-normal/runs/20261104T095848Z-57550/flight-1.log",
+      "bytes": 1049,
+      "sha256": "843bb4557e0dfc7ae64748bfa2ea373ee0e99f3a6139bb5fcd816eed42e5718b"
+    },
+    "control-v2-capture-fault/fixture/save/game/private-player-token": {
+      "path": "local/verify/observability-20261104-v1/control-v2-capture-fault/fixture/save/game/private-player-token",
+      "bytes": 24,
+      "sha256": "ffada58bbc5616085007946dacadf5fe85cef41e2159ad6713260dff8985683d"
+    },
+    "control-v2-capture-fault/runs/20261104T095848Z-57575/meta.txt": {
+      "path": "local/verify/observability-20261104-v1/control-v2-capture-fault/runs/20261104T095848Z-57575/meta.txt",
+      "bytes": 1560,
+      "sha256": "5462912d12b621940b9d5dc20be1448658a40ce5f53e0c3d8911afd32a80484c"
+    },
+    "control-v2-capture-fault/runs/20261104T095848Z-57575/result.txt": {
+      "path": "local/verify/observability-20261104-v1/control-v2-capture-fault/runs/20261104T095848Z-57575/result.txt",
+      "bytes": 65,
+      "sha256": "ad870de920b71363b1ba34824fe418393f9a5c5f2f67d5cea9dea62c740b4df7"
+    },
+    "control-v2-capture-fault/runs/20261104T095848Z-57575/counters.txt": {
+      "path": "local/verify/observability-20261104-v1/control-v2-capture-fault/runs/20261104T095848Z-57575/counters.txt",
+      "bytes": 261,
+      "sha256": "dc69ab770e7009f28b89540a64989e1793c6568a961248c434c94f5e31fa0cb0"
+    },
+    "control-v2-capture-fault/runs/20261104T095848Z-57575/run.log": {
+      "path": "local/verify/observability-20261104-v1/control-v2-capture-fault/runs/20261104T095848Z-57575/run.log",
+      "bytes": 1019,
+      "sha256": "b0134f28a77fd0be47c35b2b69b8c661ccd39cfe0960e011b5dc54adc8888da5"
+    },
+    "control-v2-capture-fault/runs/20261104T095848Z-57575/input.txt": {
+      "path": "local/verify/observability-20261104-v1/control-v2-capture-fault/runs/20261104T095848Z-57575/input.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "control-v2-capture-fault/runs/20261104T095848Z-57575/telemetry.json": {
+      "path": "local/verify/observability-20261104-v1/control-v2-capture-fault/runs/20261104T095848Z-57575/telemetry.json",
+      "bytes": 281,
+      "sha256": "75ede09dc11f93f43b3591f344d66d8e847a9f2b15078036231501e1a006770f"
+    },
+    "control-v2-capture-fault/runs/20261104T095848Z-57575/gaps.txt": {
+      "path": "local/verify/observability-20261104-v1/control-v2-capture-fault/runs/20261104T095848Z-57575/gaps.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "control-v2-capture-fault/runs/20261104T095848Z-57575/flight-1.log": {
+      "path": "local/verify/observability-20261104-v1/control-v2-capture-fault/runs/20261104T095848Z-57575/flight-1.log",
+      "bytes": 1049,
+      "sha256": "bc48cbd7fa661093146ed7e85d4f9d0759e439b24cebc200066254a343e4eedd"
+    },
+    "control-v2-cap/fixture/save/game/private-player-token": {
+      "path": "local/verify/observability-20261104-v1/control-v2-cap/fixture/save/game/private-player-token",
+      "bytes": 24,
+      "sha256": "ffada58bbc5616085007946dacadf5fe85cef41e2159ad6713260dff8985683d"
+    },
+    "control-v2-cap/runs/20261104T095848Z-57554/meta.txt": {
+      "path": "local/verify/observability-20261104-v1/control-v2-cap/runs/20261104T095848Z-57554/meta.txt",
+      "bytes": 1535,
+      "sha256": "8d922e875b4c21f888ce4c3e1aab04cb578dd995a0ae0c10eb0fe5fc8b988b25"
+    },
+    "control-v2-cap/runs/20261104T095848Z-57554/result.txt": {
+      "path": "local/verify/observability-20261104-v1/control-v2-cap/runs/20261104T095848Z-57554/result.txt",
+      "bytes": 65,
+      "sha256": "4412e3efa5826ba92afe5beb246408e9e2bcfaeb315522fd82a580f5f536604d"
+    },
+    "control-v2-cap/runs/20261104T095848Z-57554/counters.txt": {
+      "path": "local/verify/observability-20261104-v1/control-v2-cap/runs/20261104T095848Z-57554/counters.txt",
+      "bytes": 263,
+      "sha256": "28d744b5ac11dab8a1bfcfb4ef186b1333ebf6bed3d8d8957331482cc42c2133"
+    },
+    "control-v2-cap/runs/20261104T095848Z-57554/run.log": {
+      "path": "local/verify/observability-20261104-v1/control-v2-cap/runs/20261104T095848Z-57554/run.log",
+      "bytes": 498,
+      "sha256": "f60863df287f1ab753d4672948273363898e0642f69113e1adbc4d675af70a02"
+    },
+    "control-v2-cap/runs/20261104T095848Z-57554/input.txt": {
+      "path": "local/verify/observability-20261104-v1/control-v2-cap/runs/20261104T095848Z-57554/input.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "control-v2-cap/runs/20261104T095848Z-57554/telemetry.json": {
+      "path": "local/verify/observability-20261104-v1/control-v2-cap/runs/20261104T095848Z-57554/telemetry.json",
+      "bytes": 277,
+      "sha256": "878af7c403f25e94ad10f2a4850fd4c04d9f53fee07402b933f91b9999b4cc3a"
+    },
+    "control-v2-cap/runs/20261104T095848Z-57554/gaps.txt": {
+      "path": "local/verify/observability-20261104-v1/control-v2-cap/runs/20261104T095848Z-57554/gaps.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "control-v2-cap/runs/20261104T095848Z-57554/flight-1.log": {
+      "path": "local/verify/observability-20261104-v1/control-v2-cap/runs/20261104T095848Z-57554/flight-1.log",
+      "bytes": 47943,
+      "sha256": "9c16c5e277da697cc4750388d7fe76576e4c8d2742547f0f2e58d9dbc970653b"
+    },
+    "control-normal/fixture/save/game/private-player-token": {
+      "path": "local/verify/observability-20261104-v1/control-normal/fixture/save/game/private-player-token",
+      "bytes": 24,
+      "sha256": "ffada58bbc5616085007946dacadf5fe85cef41e2159ad6713260dff8985683d"
+    },
+    "control-normal/runs/20261104T093402Z-82535/meta.txt": {
+      "path": "local/verify/observability-20261104-v1/control-normal/runs/20261104T093402Z-82535/meta.txt",
+      "bytes": 1540,
+      "sha256": "ef1a83829df9142b7007d698ffb457ed9e67999a03fed6de9ecd7509dc29aded"
+    },
+    "control-normal/runs/20261104T093402Z-82535/result.txt": {
+      "path": "local/verify/observability-20261104-v1/control-normal/runs/20261104T093402Z-82535/result.txt",
+      "bytes": 65,
+      "sha256": "69a25681f4aa9343008a26d0104ffd5aeb56479fbcdb9c43c1a6f23f6070b738"
+    },
+    "control-normal/runs/20261104T093402Z-82535/counters.txt": {
+      "path": "local/verify/observability-20261104-v1/control-normal/runs/20261104T093402Z-82535/counters.txt",
+      "bytes": 261,
+      "sha256": "dc69ab770e7009f28b89540a64989e1793c6568a961248c434c94f5e31fa0cb0"
+    },
+    "control-normal/runs/20261104T093402Z-82535/run.log": {
+      "path": "local/verify/observability-20261104-v1/control-normal/runs/20261104T093402Z-82535/run.log",
+      "bytes": 1019,
+      "sha256": "308eeba08e5e3a82b09c3d064ea6ac571da2e07fc69024917a6ac3cb2d78dbe3"
+    },
+    "control-normal/runs/20261104T093402Z-82535/input.txt": {
+      "path": "local/verify/observability-20261104-v1/control-normal/runs/20261104T093402Z-82535/input.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "control-normal/runs/20261104T093402Z-82535/telemetry.json": {
+      "path": "local/verify/observability-20261104-v1/control-normal/runs/20261104T093402Z-82535/telemetry.json",
+      "bytes": 234,
+      "sha256": "45c6aac9093de7fb41a4ae703eb86fcc9813869530e725523dea83572c47dbfe"
+    },
+    "control-normal/runs/20261104T093402Z-82535/gaps.txt": {
+      "path": "local/verify/observability-20261104-v1/control-normal/runs/20261104T093402Z-82535/gaps.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "control-normal/runs/20261104T093402Z-82535/flight-1.log": {
+      "path": "local/verify/observability-20261104-v1/control-normal/runs/20261104T093402Z-82535/flight-1.log",
+      "bytes": 1049,
+      "sha256": "120ad33d8122ca6a1f1ee6c8d1a3a39c51f657b7a17b774e01ac8ec480bb0860"
+    },
+    "control-cap/fixture/save/game/private-player-token": {
+      "path": "local/verify/observability-20261104-v1/control-cap/fixture/save/game/private-player-token",
+      "bytes": 24,
+      "sha256": "ffada58bbc5616085007946dacadf5fe85cef41e2159ad6713260dff8985683d"
+    },
+    "control-cap/runs/20261104T093402Z-82541/meta.txt": {
+      "path": "local/verify/observability-20261104-v1/control-cap/runs/20261104T093402Z-82541/meta.txt",
+      "bytes": 1529,
+      "sha256": "0b857a4318ecceed43732191d9fa352194d3dafaf58dc276dedab21d332c1dcb"
+    },
+    "control-cap/runs/20261104T093402Z-82541/result.txt": {
+      "path": "local/verify/observability-20261104-v1/control-cap/runs/20261104T093402Z-82541/result.txt",
+      "bytes": 65,
+      "sha256": "4412e3efa5826ba92afe5beb246408e9e2bcfaeb315522fd82a580f5f536604d"
+    },
+    "control-cap/runs/20261104T093402Z-82541/counters.txt": {
+      "path": "local/verify/observability-20261104-v1/control-cap/runs/20261104T093402Z-82541/counters.txt",
+      "bytes": 263,
+      "sha256": "28d744b5ac11dab8a1bfcfb4ef186b1333ebf6bed3d8d8957331482cc42c2133"
+    },
+    "control-cap/runs/20261104T093402Z-82541/run.log": {
+      "path": "local/verify/observability-20261104-v1/control-cap/runs/20261104T093402Z-82541/run.log",
+      "bytes": 498,
+      "sha256": "f60863df287f1ab753d4672948273363898e0642f69113e1adbc4d675af70a02"
+    },
+    "control-cap/runs/20261104T093402Z-82541/input.txt": {
+      "path": "local/verify/observability-20261104-v1/control-cap/runs/20261104T093402Z-82541/input.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "control-cap/runs/20261104T093402Z-82541/telemetry.json": {
+      "path": "local/verify/observability-20261104-v1/control-cap/runs/20261104T093402Z-82541/telemetry.json",
+      "bytes": 231,
+      "sha256": "270efe10c244908895f9cafa0baceb53a63de37c7d8ae9fd68a8fe000950678d"
+    },
+    "control-cap/runs/20261104T093402Z-82541/gaps.txt": {
+      "path": "local/verify/observability-20261104-v1/control-cap/runs/20261104T093402Z-82541/gaps.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "control-cap/runs/20261104T093402Z-82541/flight-1.log": {
+      "path": "local/verify/observability-20261104-v1/control-cap/runs/20261104T093402Z-82541/flight-1.log",
+      "bytes": 47943,
+      "sha256": "d540dd344574909d134ba89f7806e4b05babd53242fab90b0b3dfd72eb3c1f1b"
+    },
+    "control-io/fixture/save/game/private-player-token": {
+      "path": "local/verify/observability-20261104-v1/control-io/fixture/save/game/private-player-token",
+      "bytes": 24,
+      "sha256": "ffada58bbc5616085007946dacadf5fe85cef41e2159ad6713260dff8985683d"
+    },
+    "control-io/runs/20261104T093402Z-82547/meta.txt": {
+      "path": "local/verify/observability-20261104-v1/control-io/runs/20261104T093402Z-82547/meta.txt",
+      "bytes": 1532,
+      "sha256": "6171d6642f0879af4041debe76845169da5250410640199a73d79422244571da"
+    },
+    "control-io/runs/20261104T093402Z-82547/result.txt": {
+      "path": "local/verify/observability-20261104-v1/control-io/runs/20261104T093402Z-82547/result.txt",
+      "bytes": 65,
+      "sha256": "ad870de920b71363b1ba34824fe418393f9a5c5f2f67d5cea9dea62c740b4df7"
+    },
+    "control-io/runs/20261104T093402Z-82547/counters.txt": {
+      "path": "local/verify/observability-20261104-v1/control-io/runs/20261104T093402Z-82547/counters.txt",
+      "bytes": 261,
+      "sha256": "0d5d98ec0c6e1f8148bbebd9ae55d6c1af990d0334cbe7b25cfec6fb7c2a5a20"
+    },
+    "control-io/runs/20261104T093402Z-82547/run.log": {
+      "path": "local/verify/observability-20261104-v1/control-io/runs/20261104T093402Z-82547/run.log",
+      "bytes": 1019,
+      "sha256": "25b49fa1754e25977381992e7d071bc624a4ed6431861b164c48eca2db99553c"
+    },
+    "control-io/runs/20261104T093402Z-82547/input.txt": {
+      "path": "local/verify/observability-20261104-v1/control-io/runs/20261104T093402Z-82547/input.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "control-io/runs/20261104T093402Z-82547/telemetry.json": {
+      "path": "local/verify/observability-20261104-v1/control-io/runs/20261104T093402Z-82547/telemetry.json",
+      "bytes": 235,
+      "sha256": "6b88562c5fa9c075ab3f635411858f53c452fe723b54d06b2131d112be2c3d45"
+    },
+    "control-io/runs/20261104T093402Z-82547/gaps.txt": {
+      "path": "local/verify/observability-20261104-v1/control-io/runs/20261104T093402Z-82547/gaps.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "control-io/runs/20261104T093402Z-82547/flight-1.log": {
+      "path": "local/verify/observability-20261104-v1/control-io/runs/20261104T093402Z-82547/flight-1.log",
+      "bytes": 1094,
+      "sha256": "cc25c223b2f2ed1851af70d4ace3c784d96edda5e37a071a5f4e256db4a4702d"
+    },
+    "control-console-failure/stages.jsonl": {
+      "path": "local/verify/observability-20261104-v1/control-console-failure/stages.jsonl",
+      "bytes": 598,
+      "sha256": "37f108156a868fa4283dc1cf4d74f597d011d2339f634d65071985853daa7db1"
+    },
+    "control-console-failure/result.json": {
+      "path": "local/verify/observability-20261104-v1/control-console-failure/result.json",
+      "bytes": 848,
+      "sha256": "964b7aa6d34fc7a73a4f465c75beba3deee575527d60798f25432d48c07c8c3a"
+    },
+    "control-console-failure/0.log": {
+      "path": "local/verify/observability-20261104-v1/control-console-failure/0.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "control-console-failure/launcher-stderr.txt": {
+      "path": "local/verify/observability-20261104-v1/control-console-failure/launcher-stderr.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "control-console-failure/manifest.json": {
+      "path": "local/verify/observability-20261104-v1/control-console-failure/manifest.json",
+      "bytes": 405,
+      "sha256": "24c8ddd738860fad46227cf8993b50bfbae2619084a8384970a04af2e6fbe91f"
+    },
+    "control-console-failure/attempt.json": {
+      "path": "local/verify/observability-20261104-v1/control-console-failure/attempt.json",
+      "bytes": 230,
+      "sha256": "f0bb9dfc98d6d885cb727362929fc83ee6da2eb0db356ff108da892e4f1a28c6"
+    },
+    "control-v2-io/fixture/save/game/private-player-token": {
+      "path": "local/verify/observability-20261104-v1/control-v2-io/fixture/save/game/private-player-token",
+      "bytes": 24,
+      "sha256": "ffada58bbc5616085007946dacadf5fe85cef41e2159ad6713260dff8985683d"
+    },
+    "control-v2-io/runs/20261104T095848Z-57558/meta.txt": {
+      "path": "local/verify/observability-20261104-v1/control-v2-io/runs/20261104T095848Z-57558/meta.txt",
+      "bytes": 1538,
+      "sha256": "235cb7fdbc7cc8a7e96f42f67788bd5f6708546912ac36256bd5f84263080b75"
+    },
+    "control-v2-io/runs/20261104T095848Z-57558/result.txt": {
+      "path": "local/verify/observability-20261104-v1/control-v2-io/runs/20261104T095848Z-57558/result.txt",
+      "bytes": 65,
+      "sha256": "ad870de920b71363b1ba34824fe418393f9a5c5f2f67d5cea9dea62c740b4df7"
+    },
+    "control-v2-io/runs/20261104T095848Z-57558/counters.txt": {
+      "path": "local/verify/observability-20261104-v1/control-v2-io/runs/20261104T095848Z-57558/counters.txt",
+      "bytes": 261,
+      "sha256": "0d5d98ec0c6e1f8148bbebd9ae55d6c1af990d0334cbe7b25cfec6fb7c2a5a20"
+    },
+    "control-v2-io/runs/20261104T095848Z-57558/run.log": {
+      "path": "local/verify/observability-20261104-v1/control-v2-io/runs/20261104T095848Z-57558/run.log",
+      "bytes": 1019,
+      "sha256": "927814a91d9212d328626f67f6a22565d1ce769c077929e0b8381142b2cb7bec"
+    },
+    "control-v2-io/runs/20261104T095848Z-57558/input.txt": {
+      "path": "local/verify/observability-20261104-v1/control-v2-io/runs/20261104T095848Z-57558/input.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "control-v2-io/runs/20261104T095848Z-57558/telemetry.json": {
+      "path": "local/verify/observability-20261104-v1/control-v2-io/runs/20261104T095848Z-57558/telemetry.json",
+      "bytes": 281,
+      "sha256": "de5e2bedcb854efd74c3d9b0e01299e6f4c9649d54db923f2fe06918a2ca0f40"
+    },
+    "control-v2-io/runs/20261104T095848Z-57558/gaps.txt": {
+      "path": "local/verify/observability-20261104-v1/control-v2-io/runs/20261104T095848Z-57558/gaps.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "control-v2-io/runs/20261104T095848Z-57558/flight-1.log": {
+      "path": "local/verify/observability-20261104-v1/control-v2-io/runs/20261104T095848Z-57558/flight-1.log",
+      "bytes": 1094,
+      "sha256": "6a8e7992db04cf45d6e7bd8ae9e6e782d6a955edede6d3bfd6243c0d1333da4e"
+    },
+    "control-console-timeout/stages.jsonl": {
+      "path": "local/verify/observability-20261104-v1/control-console-timeout/stages.jsonl",
+      "bytes": 609,
+      "sha256": "848888bc7c9d488f5b773c3c8cf96f7d707e5f338f605d453fafd5a66b61cc6b"
+    },
+    "control-console-timeout/result.json": {
+      "path": "local/verify/observability-20261104-v1/control-console-timeout/result.json",
+      "bytes": 1215,
+      "sha256": "28755b32b08d7d636972356840b79163600d685cfd562cf53584a83e506c74e9"
+    },
+    "control-console-timeout/0.log": {
+      "path": "local/verify/observability-20261104-v1/control-console-timeout/0.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "control-console-timeout/launcher-stderr.txt": {
+      "path": "local/verify/observability-20261104-v1/control-console-timeout/launcher-stderr.txt",
+      "bytes": 161,
+      "sha256": "db522c44b35c47bad50b00dc3d5ce9ce7deff05eb3c169ab1cf942f033622ee9"
+    },
+    "control-console-timeout/manifest.json": {
+      "path": "local/verify/observability-20261104-v1/control-console-timeout/manifest.json",
+      "bytes": 412,
+      "sha256": "2b95bc01c1b34fbddbab24c117deffe7523df5fa688b263c0e9ec34f208aeb9e"
+    },
+    "control-console-timeout/attempt.json": {
+      "path": "local/verify/observability-20261104-v1/control-console-timeout/attempt.json",
+      "bytes": 230,
+      "sha256": "126e651338b9f0814c638390e3f3876788bb3372eba082a4a55d235e3ebfed3a"
+    },
+    "control-stream/fixture/save/game/private-player-token": {
+      "path": "local/verify/observability-20261104-v1/control-stream/fixture/save/game/private-player-token",
+      "bytes": 24,
+      "sha256": "ffada58bbc5616085007946dacadf5fe85cef41e2159ad6713260dff8985683d"
+    },
+    "control-stream/runs/20261104T093402Z-82554/meta.txt": {
+      "path": "local/verify/observability-20261104-v1/control-stream/runs/20261104T093402Z-82554/meta.txt",
+      "bytes": 1540,
+      "sha256": "29dd4713cf155ba4368b0016be20b87fd6507fc7885d2d40d226a8314b019571"
+    },
+    "control-stream/runs/20261104T093402Z-82554/result.txt": {
+      "path": "local/verify/observability-20261104-v1/control-stream/runs/20261104T093402Z-82554/result.txt",
+      "bytes": 65,
+      "sha256": "ad870de920b71363b1ba34824fe418393f9a5c5f2f67d5cea9dea62c740b4df7"
+    },
+    "control-stream/runs/20261104T093402Z-82554/counters.txt": {
+      "path": "local/verify/observability-20261104-v1/control-stream/runs/20261104T093402Z-82554/counters.txt",
+      "bytes": 261,
+      "sha256": "dc69ab770e7009f28b89540a64989e1793c6568a961248c434c94f5e31fa0cb0"
+    },
+    "control-stream/runs/20261104T093402Z-82554/run.log": {
+      "path": "local/verify/observability-20261104-v1/control-stream/runs/20261104T093402Z-82554/run.log",
+      "bytes": 32112,
+      "sha256": "ceb0c800912f4eac980f8526069d48982df72f6ae3f11a2d5819ac8ce52b647b"
+    },
+    "control-stream/runs/20261104T093402Z-82554/input.txt": {
+      "path": "local/verify/observability-20261104-v1/control-stream/runs/20261104T093402Z-82554/input.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "control-stream/runs/20261104T093402Z-82554/telemetry.json": {
+      "path": "local/verify/observability-20261104-v1/control-stream/runs/20261104T093402Z-82554/telemetry.json",
+      "bytes": 237,
+      "sha256": "1236f39b06a7d87a8aea0d31a871dfcb543226b5f9fea329e47b17f2319b5876"
+    },
+    "control-stream/runs/20261104T093402Z-82554/gaps.txt": {
+      "path": "local/verify/observability-20261104-v1/control-stream/runs/20261104T093402Z-82554/gaps.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "control-stream/runs/20261104T093402Z-82554/flight-1.log": {
+      "path": "local/verify/observability-20261104-v1/control-stream/runs/20261104T093402Z-82554/flight-1.log",
+      "bytes": 1049,
+      "sha256": "07a5a0b313b19d0aa1ba132784cb23da639fa6a4aacf478b80085b5361b474a7"
+    },
+    "control-hold/fixture/save/game/private-player-token": {
+      "path": "local/verify/observability-20261104-v1/control-hold/fixture/save/game/private-player-token",
+      "bytes": 24,
+      "sha256": "ffada58bbc5616085007946dacadf5fe85cef41e2159ad6713260dff8985683d"
+    },
+    "control-hold/runs/20261104T093402Z-82567/meta.txt": {
+      "path": "local/verify/observability-20261104-v1/control-hold/runs/20261104T093402Z-82567/meta.txt",
+      "bytes": 1536,
+      "sha256": "b142096a1c9ca533e42e1f77dca22082d2a8ada021d7b5cfc04f505b973b7c2c"
+    },
+    "control-hold/runs/20261104T093402Z-82567/run.log": {
+      "path": "local/verify/observability-20261104-v1/control-hold/runs/20261104T093402Z-82567/run.log",
+      "bytes": 1045,
+      "sha256": "f6b69014db0d584d52590ed76fdac1e6021ecf4ba81b81df927418c6ba2c6420"
+    },
+    "control-hold/runs/20261104T093402Z-82567/input.txt": {
+      "path": "local/verify/observability-20261104-v1/control-hold/runs/20261104T093402Z-82567/input.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "control-hold/runs/20261104T093402Z-82567/telemetry.json": {
+      "path": "local/verify/observability-20261104-v1/control-hold/runs/20261104T093402Z-82567/telemetry.json",
+      "bytes": 236,
+      "sha256": "7d5e46e0a1e407f92523016ba2a82d833c08b0feff4eb4942dc2dada5a092493"
+    },
+    "control-hold/runs/20261104T093402Z-82567/flight-1.log": {
+      "path": "local/verify/observability-20261104-v1/control-hold/runs/20261104T093402Z-82567/flight-1.log",
+      "bytes": 1127,
+      "sha256": "1cf5b847158dab2bcf21d4ddbededd9a07cd09528bf36f2faaa25a75faf5722b"
+    },
+    "control-v2-hold/fixture/save/game/private-player-token": {
+      "path": "local/verify/observability-20261104-v1/control-v2-hold/fixture/save/game/private-player-token",
+      "bytes": 24,
+      "sha256": "ffada58bbc5616085007946dacadf5fe85cef41e2159ad6713260dff8985683d"
+    },
+    "control-v2-hold/runs/20261104T095848Z-57570/meta.txt": {
+      "path": "local/verify/observability-20261104-v1/control-v2-hold/runs/20261104T095848Z-57570/meta.txt",
+      "bytes": 1542,
+      "sha256": "c0b4e8a248d4e95a3b339b798f992e30da81ca9385b07a6bdb75e95486ce63de"
+    },
+    "control-v2-hold/runs/20261104T095848Z-57570/run.log": {
+      "path": "local/verify/observability-20261104-v1/control-v2-hold/runs/20261104T095848Z-57570/run.log",
+      "bytes": 1045,
+      "sha256": "8b28c804b241f0f70c06ac6c3546f0ad29de3ca0636ee3ce1e7f84e534e9dc83"
+    },
+    "control-v2-hold/runs/20261104T095848Z-57570/input.txt": {
+      "path": "local/verify/observability-20261104-v1/control-v2-hold/runs/20261104T095848Z-57570/input.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "control-v2-hold/runs/20261104T095848Z-57570/telemetry.json": {
+      "path": "local/verify/observability-20261104-v1/control-v2-hold/runs/20261104T095848Z-57570/telemetry.json",
+      "bytes": 282,
+      "sha256": "57d5dc9fd96be26642e0e3240e34b04f5a5428648f21c7cb5f6ff87aa6dc9bb6"
+    },
+    "control-v2-hold/runs/20261104T095848Z-57570/flight-1.log": {
+      "path": "local/verify/observability-20261104-v1/control-v2-hold/runs/20261104T095848Z-57570/flight-1.log",
+      "bytes": 1127,
+      "sha256": "cb898cb2e670b571f2eabe208f224b112782c051e569533657d33fc9291d5430"
+    },
+    "control-v2-stream/fixture/save/game/private-player-token": {
+      "path": "local/verify/observability-20261104-v1/control-v2-stream/fixture/save/game/private-player-token",
+      "bytes": 24,
+      "sha256": "ffada58bbc5616085007946dacadf5fe85cef41e2159ad6713260dff8985683d"
+    },
+    "control-v2-stream/runs/20261104T095848Z-57563/meta.txt": {
+      "path": "local/verify/observability-20261104-v1/control-v2-stream/runs/20261104T095848Z-57563/meta.txt",
+      "bytes": 1546,
+      "sha256": "4fd46cfe88742bafc4db395b0fa386d6de00ca344bb30ff663717162d964d8c0"
+    },
+    "control-v2-stream/runs/20261104T095848Z-57563/result.txt": {
+      "path": "local/verify/observability-20261104-v1/control-v2-stream/runs/20261104T095848Z-57563/result.txt",
+      "bytes": 65,
+      "sha256": "4412e3efa5826ba92afe5beb246408e9e2bcfaeb315522fd82a580f5f536604d"
+    },
+    "control-v2-stream/runs/20261104T095848Z-57563/counters.txt": {
+      "path": "local/verify/observability-20261104-v1/control-v2-stream/runs/20261104T095848Z-57563/counters.txt",
+      "bytes": 261,
+      "sha256": "dc69ab770e7009f28b89540a64989e1793c6568a961248c434c94f5e31fa0cb0"
+    },
+    "control-v2-stream/runs/20261104T095848Z-57563/run.log": {
+      "path": "local/verify/observability-20261104-v1/control-v2-stream/runs/20261104T095848Z-57563/run.log",
+      "bytes": 32115,
+      "sha256": "ae899468fa3637e125affabd245741e20f15f27d896e353d9a433a6224861e11"
+    },
+    "control-v2-stream/runs/20261104T095848Z-57563/input.txt": {
+      "path": "local/verify/observability-20261104-v1/control-v2-stream/runs/20261104T095848Z-57563/input.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "control-v2-stream/runs/20261104T095848Z-57563/telemetry.json": {
+      "path": "local/verify/observability-20261104-v1/control-v2-stream/runs/20261104T095848Z-57563/telemetry.json",
+      "bytes": 283,
+      "sha256": "8c528879a9730de392e7a503ed927896b3065e88685a6de17d3ced566bc12add"
+    },
+    "control-v2-stream/runs/20261104T095848Z-57563/gaps.txt": {
+      "path": "local/verify/observability-20261104-v1/control-v2-stream/runs/20261104T095848Z-57563/gaps.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "control-v2-stream/runs/20261104T095848Z-57563/flight-1.log": {
+      "path": "local/verify/observability-20261104-v1/control-v2-stream/runs/20261104T095848Z-57563/flight-1.log",
+      "bytes": 1049,
+      "sha256": "86d4df94ddb95d061c697552a63a8c65727203dfceb293fe6e54a8c1552a56f1"
+    }
+  }
+}

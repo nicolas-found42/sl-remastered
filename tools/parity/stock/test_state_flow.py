@@ -9,6 +9,24 @@ state = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(state)
 
 
+class PassiveCaptureTimeoutTest(unittest.TestCase):
+    def test_subprocess_caps_share_request_and_global_deadline(self):
+        clock = [3.0]
+        with mock.patch.object(state.time, 'monotonic', side_effect=lambda: clock[0]):
+            self.assertEqual(state.passive_capture_timeout(100, 10), 2)
+            clock[0] = 5  # Guest used its whole two-second allowance.
+            self.assertEqual(state.passive_capture_timeout(100, 10), 2)
+            self.assertEqual(state.passive_capture_timeout(.4, 10), .4)
+            clock[0] = 9.75
+            self.assertEqual(state.passive_capture_timeout(100, 10), .25)
+            clock[0] = 10
+            with self.assertRaises(TimeoutError):
+                state.passive_capture_timeout(100, 10)
+            clock[0] = 3
+            with self.assertRaises(TimeoutError):
+                state.passive_capture_timeout(0, 10)
+
+
 class ObservedButtonTest(unittest.TestCase):
     def fixture(self, delay=.6, no_down=False, no_up=False, truncate=False, budget=10):
         self.now = 0.

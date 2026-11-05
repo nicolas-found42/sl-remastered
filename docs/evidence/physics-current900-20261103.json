@@ -1,0 +1,568 @@
+{
+  "schema": 1,
+  "scope": "Source-frozen current Port vs independently repeated conditional original constructor/full2048syntheticfloor fixture,900steps. No retailqueue, whole-game Journey, or settlingassertion acceptance.",
+  "body_comparison": {
+    "sources": [
+      {
+        "path": "/Users/nicolas/Documents/github/sl-remastered/local/verify/issue53-bundle-20261102/issue53-original900-observer-v1/capture-77e35be3ef/work/first-0.jsonl",
+        "sha256": "6d3d471581d270d64ce0b3b9ba158ec41c76658572ca87df0cc37bf626912b4b",
+        "body_records": 3602
+      },
+      {
+        "path": "/Users/nicolas/Documents/github/sl-remastered/local/verify/native-background-tests/attempt-z_x05__f/flag/issue53-current900-metadata-v1/trace.jsonl",
+        "sha256": "f7aefb54fb63652f5801b6d5ce300ff8afd7557255a860f22cce422fe19528e0",
+        "body_records": 3602
+      }
+    ],
+    "steps": 900,
+    "bodies": 2,
+    "equal": true,
+    "differing_body_records": 0,
+    "first_difference": null,
+    "scope": "Complete ordered constructor/initial/final body snapshots only; two 53-word buffers starting at current=0. No intermediate contact causality or game parity."
+  },
+  "metadata_comparisons": [
+    {
+      "world": {
+        "phase": "constructor",
+        "stock_gravity_enabled_word": 1,
+        "port_gravity_enabled": true,
+        "gravity_words_equal": true,
+        "stock_gravity_words": [
+          0,
+          3239900611,
+          0
+        ],
+        "port_gravity_words": [
+          0,
+          3239900611,
+          0
+        ],
+        "air_density_word_equal": true,
+        "stock_air_density_word": 1067809400,
+        "port_air_density_word": 1067809400,
+        "stock_air_enabled_word": 1,
+        "port_air_enable_switch": "not exposed in WorldParams; no equality claim"
+      },
+      "bodies": [
+        {
+          "index": 0,
+          "stock_activity_words": [
+            0,
+            0,
+            0
+          ],
+          "port_activity_words": [
+            0,
+            0,
+            0
+          ],
+          "activity_equal": true,
+          "stock_flags": 5,
+          "port_flags": 5,
+          "stock_current": 0,
+          "port_current": 0,
+          "stock_prototype_flags": 1025,
+          "port_prototype_flags": 1024,
+          "stock_shape_type": 5,
+          "port_shape_type": 5,
+          "prototype_differences": [],
+          "shape_differences": [],
+          "matrices": {
+            "inverse_inertia": {
+              "different_offsets": [],
+              "physical9_entries_equal": true,
+              "padding_offsets": [
+                3,
+                7,
+                11
+              ]
+            },
+            "inertia": {
+              "different_offsets": [
+                3,
+                7,
+                11
+              ],
+              "physical9_entries_equal": true,
+              "padding_offsets": [
+                3,
+                7,
+                11
+              ]
+            }
+          }
+        },
+        {
+          "index": 1,
+          "stock_activity_words": [
+            0,
+            0,
+            0
+          ],
+          "port_activity_words": [
+            0,
+            0,
+            0
+          ],
+          "activity_equal": true,
+          "stock_flags": 9,
+          "port_flags": 9,
+          "stock_current": 0,
+          "port_current": 0,
+          "stock_prototype_flags": 1025,
+          "port_prototype_flags": 1025,
+          "stock_shape_type": 6,
+          "port_shape_type": 6,
+          "prototype_differences": [
+            {
+              "field": "volume",
+              "stock_offset": 136,
+              "stock": 1090519040,
+              "port": 1082526354,
+              "stock_float": 8.0,
+              "port_float": 4.188790321350098
+            }
+          ],
+          "shape_differences": [
+            {
+              "field": "volume",
+              "stock_offset": 76,
+              "stock": 1090519040,
+              "port": 1082526354,
+              "stock_float": 8.0,
+              "port_float": 4.188790321350098
+            }
+          ],
+          "matrices": {
+            "inverse_inertia": {
+              "different_offsets": [
+                3
+              ],
+              "physical9_entries_equal": true,
+              "padding_offsets": [
+                3,
+                7,
+                11
+              ]
+            },
+            "inertia": {
+              "different_offsets": [],
+              "physical9_entries_equal": true,
+              "padding_offsets": [
+                3,
+                7,
+                11
+              ]
+            }
+          }
+        },
+        {
+          "index": 2,
+          "stock_activity_words": [
+            0,
+            0,
+            0
+          ],
+          "port_activity_words": [
+            0,
+            0,
+            0
+          ],
+          "activity_equal": true,
+          "stock_flags": 0,
+          "port_flags": 0,
+          "stock_current": 0,
+          "port_current": 0,
+          "stock_prototype_flags": 1029,
+          "port_prototype_flags": 1029,
+          "stock_shape_type": 0,
+          "port_shape_type": 0,
+          "prototype_differences": [],
+          "shape_differences": [
+            {
+              "field": "friction",
+              "stock_offset": 80,
+              "stock": 1058642330,
+              "port": 1065353216,
+              "stock_float": 0.6000000238418579,
+              "port_float": 1.0
+            }
+          ],
+          "matrices": {
+            "inverse_inertia": {
+              "different_offsets": [],
+              "physical9_entries_equal": true,
+              "padding_offsets": [
+                3,
+                7,
+                11
+              ]
+            },
+            "inertia": {
+              "different_offsets": [],
+              "physical9_entries_equal": true,
+              "padding_offsets": [
+                3,
+                7,
+                11
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "world": {
+        "phase": "terminal",
+        "stock_gravity_enabled_word": 1,
+        "port_gravity_enabled": true,
+        "gravity_words_equal": true,
+        "stock_gravity_words": [
+          0,
+          3239900611,
+          0
+        ],
+        "port_gravity_words": [
+          0,
+          3239900611,
+          0
+        ],
+        "air_density_word_equal": true,
+        "stock_air_density_word": 1067809400,
+        "port_air_density_word": 1067809400,
+        "stock_air_enabled_word": 1,
+        "port_air_enable_switch": "not exposed in WorldParams; no equality claim"
+      },
+      "bodies": [
+        {
+          "index": 0,
+          "stock_activity_words": [
+            0,
+            0,
+            0
+          ],
+          "port_activity_words": [
+            0,
+            0,
+            0
+          ],
+          "activity_equal": true,
+          "stock_flags": 5,
+          "port_flags": 5,
+          "stock_current": 0,
+          "port_current": 0,
+          "stock_prototype_flags": 1025,
+          "port_prototype_flags": 1024,
+          "stock_shape_type": 5,
+          "port_shape_type": 5,
+          "prototype_differences": [],
+          "shape_differences": [],
+          "matrices": {
+            "inverse_inertia": {
+              "different_offsets": [],
+              "physical9_entries_equal": true,
+              "padding_offsets": [
+                3,
+                7,
+                11
+              ]
+            },
+            "inertia": {
+              "different_offsets": [
+                3,
+                7,
+                11
+              ],
+              "physical9_entries_equal": true,
+              "padding_offsets": [
+                3,
+                7,
+                11
+              ]
+            }
+          }
+        },
+        {
+          "index": 1,
+          "stock_activity_words": [
+            1091507210,
+            3276024294,
+            3243537021
+          ],
+          "port_activity_words": [
+            1091507210,
+            3276024294,
+            3243537021
+          ],
+          "activity_equal": true,
+          "stock_flags": 9,
+          "port_flags": 9,
+          "stock_current": 0,
+          "port_current": 0,
+          "stock_prototype_flags": 1025,
+          "port_prototype_flags": 1025,
+          "stock_shape_type": 6,
+          "port_shape_type": 6,
+          "prototype_differences": [
+            {
+              "field": "volume",
+              "stock_offset": 136,
+              "stock": 1090519040,
+              "port": 1082526354,
+              "stock_float": 8.0,
+              "port_float": 4.188790321350098
+            }
+          ],
+          "shape_differences": [
+            {
+              "field": "volume",
+              "stock_offset": 76,
+              "stock": 1090519040,
+              "port": 1082526354,
+              "stock_float": 8.0,
+              "port_float": 4.188790321350098
+            }
+          ],
+          "matrices": {
+            "inverse_inertia": {
+              "different_offsets": [
+                3
+              ],
+              "physical9_entries_equal": true,
+              "padding_offsets": [
+                3,
+                7,
+                11
+              ]
+            },
+            "inertia": {
+              "different_offsets": [],
+              "physical9_entries_equal": true,
+              "padding_offsets": [
+                3,
+                7,
+                11
+              ]
+            }
+          }
+        },
+        {
+          "index": 2,
+          "stock_activity_words": [
+            0,
+            0,
+            0
+          ],
+          "port_activity_words": [
+            0,
+            0,
+            0
+          ],
+          "activity_equal": true,
+          "stock_flags": 0,
+          "port_flags": 0,
+          "stock_current": 0,
+          "port_current": 0,
+          "stock_prototype_flags": 1029,
+          "port_prototype_flags": 1029,
+          "stock_shape_type": 0,
+          "port_shape_type": 0,
+          "prototype_differences": [],
+          "shape_differences": [
+            {
+              "field": "friction",
+              "stock_offset": 80,
+              "stock": 1058642330,
+              "port": 1065353216,
+              "stock_float": 0.6000000238418579,
+              "port_float": 1.0
+            }
+          ],
+          "matrices": {
+            "inverse_inertia": {
+              "different_offsets": [],
+              "physical9_entries_equal": true,
+              "padding_offsets": [
+                3,
+                7,
+                11
+              ]
+            },
+            "inertia": {
+              "different_offsets": [],
+              "physical9_entries_equal": true,
+              "padding_offsets": [
+                3,
+                7,
+                11
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "production_source_binding": {
+    "base_commit": "f83063ec4838c93f66db2e9cace7e96f82159af5",
+    "production_patch_sha256": "47d68ddb2ddf4c9e525690b7f2f22f7883165409009f6a96c1a06762e7435511",
+    "tracked_sources": 256,
+    "library": {
+      "path": "/Users/nicolas/Documents/github/sl-remastered/build/libsl_data.a",
+      "sha256": "57c1f0375f28beeb8d0bf853e8593f61a72424a4aadec4212035fddb4f92f20e"
+    },
+    "executable": {
+      "native_sha256": "c2da7bc18b440d8b12b0e4f8235888f9f2dcb04afd8fd73463762f6b8dadc447",
+      "library_before_after_equal": true,
+      "production_sources_before_after_equal": true
+    },
+    "build_metadata": {
+      "compile_commands.json": "343ce42c301420880e540aff5333338c838100707e173000fb31a67e5b6dfbff",
+      "CMakeCache.txt": "dbf2d6624206a88c98f122970b8264ba9899c88200d857cac659f897a23e370a"
+    },
+    "compiler_sha256": "a856ec74c559401131ad608625ef252fb2db6c78bc0c480c1c4c782ee4896db1"
+  },
+  "source_reconstruction_audit": {
+    "reconstructed_tracked_sources": 256,
+    "all_reconstructed_hashes_equal": true,
+    "exit_observed": 0,
+    "actual_index_and_worktree_untouched": true,
+    "method": "temporary GIT_INDEX_FILE/GIT_OBJECT_DIRECTORY with actualbaseobjects as read-only alternates; gitread-treeBASE; gitapply--cached production.patch; all256 gitshow:indexsource hashes matchbindings",
+    "audit_source_sha256": "588190813f32f1c43a4f45c254e3382762db89df17a2c0a8a7493a0f9b757646",
+    "audit_source": "from pathlib import Path\nimport json,subprocess,tempfile,os,hashlib\nR=Path('/Users/nicolas/Documents/github/sl-remastered')\nD=R/'local/verify/native-background-tests/attempt-z_x05__f/flag/issue53-current900-metadata-v1'\nb=json.loads((D/'bindings.json').read_text())\ncommon=Path(subprocess.check_output(['git','rev-parse','--git-common-dir'],cwd=R,text=True).strip())\nif not common.is_absolute():common=R/common\nh=lambda data:hashlib.sha256(data).hexdigest()\nassert h((D/'production.patch').read_bytes())==b['production_patch_sha256']\nwith tempfile.TemporaryDirectory(prefix='issue53-source-reconstruct-') as temp:\n t=Path(temp);(t/'objects').mkdir()\n env=dict(os.environ,GIT_INDEX_FILE=str(t/'index'),GIT_OBJECT_DIRECTORY=str(t/'objects'),GIT_ALTERNATE_OBJECT_DIRECTORIES=str(common/'objects'))\n def run(args,**kwargs):return subprocess.run(['git',*args],cwd=R,env=env,check=True,capture_output=True,timeout=30,**kwargs)\n run(['read-tree',b['base_commit']])\n run(['apply','--cached','--whitespace=nowarn',str(D/'production.patch')])\n for name,expected in b['production'].items():\n  actual=h(run(['show',':'+name]).stdout)\n  if actual!=expected:raise ValueError('reconstructed source mismatch:'+name)\n print(json.dumps({'base_commit':b['base_commit'],'patch_sha256':b['production_patch_sha256'],'reconstructed_tracked_source_count':len(b['production']),'all_reconstructed_hashes_equal':True,'actual_index_and_worktree_untouched':True,'method':'isolated temporary Git index/object directory; existing base objects read through alternates'}))\n"
+  },
+  "execution": {
+    "result": {
+      "schema": 1,
+      "required_stages": [
+        "compile",
+        "run"
+      ],
+      "stages": {
+        "compile": {
+          "command": [
+            "clang++",
+            "-Wall",
+            "-Wextra",
+            "-Wshorten-64-to-32",
+            "-std=c++20",
+            "-O3",
+            "-UNDEBUG",
+            "-ffp-contract=off",
+            "-I/Users/nicolas/Documents/github/sl-remastered/src",
+            "/Users/nicolas/Documents/github/sl-remastered/local/verify/native-background-tests/attempt-z_x05__f/flag/issue53-current900-metadata-v1/native.cpp",
+            "-o",
+            "/Users/nicolas/Documents/github/sl-remastered/local/verify/native-background-tests/attempt-z_x05__f/flag/issue53-current900-metadata-v1/native",
+            "-Wl,-rpath,/opt/homebrew/lib",
+            "/Users/nicolas/Documents/github/sl-remastered/build/libsl_data.a",
+            "/opt/homebrew/lib/libSDL3.0.dylib",
+            "/opt/homebrew/lib/libjpeg.dylib",
+            "/opt/homebrew/lib/libpng.dylib",
+            "-lz"
+          ],
+          "expected_exit": 0,
+          "actual_exit": 0,
+          "completed": true
+        },
+        "run": {
+          "command": [
+            "/Users/nicolas/Documents/github/sl-remastered/local/verify/native-background-tests/attempt-z_x05__f/flag/issue53-current900-metadata-v1/native"
+          ],
+          "expected_exit": 0,
+          "actual_exit": 0,
+          "completed": true
+        }
+      },
+      "missing_stages": [],
+      "supervision_failures": [],
+      "execution_passed": true,
+      "parity_verified": false
+    },
+    "retained_final_prepaid_sample": {
+      "stage": "final",
+      "complete": true,
+      "parent": "/Users/nicolas/Documents/github/sl-remastered/local/verify/native-background-tests/attempt-z_x05__f/flag",
+      "child": "/Users/nicolas/Documents/github/sl-remastered/local/verify/native-background-tests/attempt-z_x05__f/flag/issue53-current900-metadata-v1",
+      "parent_identity": [
+        16777233,
+        76783694
+      ],
+      "child_identity": [
+        16777233,
+        85220930
+      ],
+      "parent_max": 1073741824,
+      "child_max": 25165824,
+      "scan_seconds": 5,
+      "scan_attempts": [
+        {
+          "number": 1,
+          "complete": true,
+          "elapsed": 1.2877938749734312,
+          "entries_scanned": 9951
+        }
+      ],
+      "logical_bytes": 1051549745,
+      "child_bytes": 13285411,
+      "elapsed": 1.2877959159668535,
+      "old_atime_deltas": {
+        ".": [
+          1793759035931653980,
+          1793760734391552265
+        ],
+        "issue53-phase-split-port900-v1/admission.json": [
+          1793759035942711267,
+          1793760731705602989
+        ]
+      },
+      "hash_scope": "all_preexisting_regular_files; new_child_fully_accounted_without_unused_hashes"
+    },
+    "outer_driver_exit_observed": 0
+  },
+  "assertion_boundary": {
+    "diagnostic_scope": {
+      "type": "diagnostic_scope",
+      "complete_steps": 900,
+      "settling_assertions_executed": false
+    },
+    "original_object_test_assertions_changed": false,
+    "original_object_test_result": "FAILEDspeed<0.3; whole gate129/130 reportedseparately; diagnosticdoesnotexecuteorreplaceits settlingassertions"
+  },
+  "findings": [
+    "All3602bodyrecords match exact106words,flags/current. Constructor/terminal activitywords and actualworldgravity/airdensity match. The unchanged original900speed and true-sleep assertions stillfail; no physicschange is authorized merelytoforcegreen.",
+    "Actualaggregate rootvolume differs: Original8.0, Port4.188790321350098 (correctingearlier0inference). Shape kind6,radii,bounds,extents,centers,bounce,dims agree. Rootvolume ismetadata fidelitywork even though thisfixture trajectory agrees.",
+    "ChildprototypeCreatedbit differs1025vs1024; actualStockscript/configslotconstruction remainsseparatefromdirectoracleconstructor. GroundfrictionOriginal.6vsPort1 reflects substitutedfloor setup; observed contactfriction.6 and trajectoryagree but retailmaterialqualification remainsopen.",
+    "Prototypeinertia differences are onlypadding slots3,7,11, which areexcludedfrom the9physicalmatrixentries. No numericaldynamics mismatch isclaimed fromuninitializedpadding.",
+    "Originaladapterpassed:false inconsistency remainsas recordedbyseparatemetadatareport. The currentPort consoleexperiment reports execution_passed:true and parity_verified:false; no completeadapter/gameparityacceptance follows.",
+    "CurrentPortsource isreconstructible fromretained base+fullpatch and256verifiedsourcehashes; olderphase64/900binarysource-reconstructionlimitations remainhistorical.",
+    "Retailqueue substitution, FPUthreadscope and actualgame lifecycle remainunqualified. No fullproductrequirementpromoted."
+  ],
+  "source_bindings": {
+    "local/verify/native-background-tests/attempt-z_x05__f/flag/issue53-current900-metadata-v1/driver.py": "fca86b2a598c8467a4da435653407545a31732fabe697b7540d641ba2ef13eb8",
+    "local/verify/native-background-tests/attempt-z_x05__f/flag/issue53-current900-metadata-v1/bindings.json": "3f5b1788cf42065394be2dfc69d7f0f0cf811377de25fa19212012c53d4c8fc1",
+    "local/verify/native-background-tests/attempt-z_x05__f/flag/issue53-current900-metadata-v1/production.patch": "47d68ddb2ddf4c9e525690b7f2f22f7883165409009f6a96c1a06762e7435511",
+    "local/verify/native-background-tests/attempt-z_x05__f/flag/issue53-current900-metadata-v1/native.cpp": "42f839aa436a4dc612af6da9a6311528a8c3ad7c8787cc6df8e9beb4a0c24dd6",
+    "local/verify/native-background-tests/attempt-z_x05__f/flag/issue53-current900-metadata-v1/executable.json": "a78ba6c19e9bd5624a438132dbdc3467864747bccd32e1c9c678aef8cec58fb5",
+    "local/verify/native-background-tests/attempt-z_x05__f/flag/issue53-current900-metadata-v1/result.json": "115ea06e2eb8da7efc3ed4602c48496a1a640946678c84dcc540bba9569fbcc9",
+    "local/verify/native-background-tests/attempt-z_x05__f/flag/issue53-current900-metadata-v1/prepaid-audit.json": "2fcdf65f1688155b75ff50b9ed3f683030223deb01736ead6bb8fb1804cb721c",
+    "local/verify/native-background-tests/attempt-z_x05__f/flag/issue53-current900-metadata-v1/compile_commands.json": "343ce42c301420880e540aff5333338c838100707e173000fb31a67e5b6dfbff",
+    "local/verify/native-background-tests/attempt-z_x05__f/flag/issue53-current900-metadata-v1/CMakeCache.txt": "dbf2d6624206a88c98f122970b8264ba9899c88200d857cac659f897a23e370a",
+    "local/verify/native-background-tests/attempt-z_x05__f/flag/issue53-current900-metadata-v1/compiler.txt": "a856ec74c559401131ad608625ef252fb2db6c78bc0c480c1c4c782ee4896db1",
+    "local/verify/native-background-tests/attempt-z_x05__f/flag/issue53-current900-metadata-v1/trace.jsonl": "f7aefb54fb63652f5801b6d5ce300ff8afd7557255a860f22cce422fe19528e0",
+    "local/verify/issue53-bundle-20261102/issue53-original900-observer-v1/driver.py": "08929ca7a81c84947ccfc5a9da0d1d13ba70b680e621c46a4b89209188938d1c",
+    "local/verify/issue53-bundle-20261102/issue53-original900-observer-v1/build.json": "56fdb4a6d3eae8f5e67f1317725d82ab2e6d92f59a2ff4b09932c9cc1b8b8ffd",
+    "local/verify/issue53-bundle-20261102/issue53-original900-observer-v1/world-loop.inc": "0721c379938a3c33747940c3409052680a9c4f7f5a698d211581c90551c972b6",
+    "local/verify/issue53-bundle-20261102/issue53-original900-observer-v1/prepaid-audit.json": "b791c84e49504bcd2453ef6d6f647db8f89ae74066f85e9aa715350ab1ca0674",
+    "local/verify/issue53-bundle-20261102/issue53-original900-observer-v1/capture-77e35be3ef/result.json": "4455bc9bb1ea3295b8f765ca2bf4fdb587488eba3e615ee9de64325539710a21",
+    "local/verify/issue53-bundle-20261102/issue53-original900-observer-v1/capture-77e35be3ef/work/first-0.jsonl": "6d3d471581d270d64ce0b3b9ba158ec41c76658572ca87df0cc37bf626912b4b"
+  },
+  "post_execution_readonly_audit": {
+    "production_sources_equal": true,
+    "checked_sources": 256,
+    "changed_sources": [],
+    "linked_library_equal": true,
+    "complete_HEAD_patch_equal": true,
+    "scope": "Fresh hashes after run and report construction match bindings. The immutable executable.json source check was after linking; this additional check covers the completed execution interval."
+  },
+  "report_status": "Frozen current-source comparison and metadata report; no acceptance or assertion waiver."
+}

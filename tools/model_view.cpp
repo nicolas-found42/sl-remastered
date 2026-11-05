@@ -430,7 +430,7 @@ int main(int argc, char** argv) {
 			if (!running) break;
 			const double now = seconds(start, Clock::now());
 			const auto t0 = Clock::now();
-			if (!renderFrame(fixedStep ? frames / 60.0 : now)) return 1;
+      if (!renderFrame(fixedStep ? static_cast<double>(frames) / 60.0 : now)) return 1;
 			rasterTime += seconds(t0, Clock::now());
 			if (!renderer->clear(0, 0, 0, 255, error) || !raster.blit(*renderer, error) || !renderer->present(error)) {
 				std::fprintf(stderr, "present: %s\n", error.c_str());
@@ -441,8 +441,8 @@ int main(int argc, char** argv) {
 			if (fixedStep && frames > options.captureFrame) break;
 		}
 		const double elapsed = seconds(start, Clock::now());
-		if (frames) std::printf("window: %llu frames in %.2f s (%.1f frames per second); software raster %.2f ms per frame\n",
-		                        static_cast<unsigned long long>(frames), elapsed, frames / elapsed, 1000.0 * rasterTime / frames);
+    if (frames) std::printf("window: %llu frames in %.2f s (%.1f frames per second); software raster %.2f ms per frame\n",
+                            static_cast<unsigned long long>(frames), elapsed, static_cast<double>(frames) / elapsed, 1000.0 * rasterTime / static_cast<double>(frames));
 	}
 	if (!options.capture.empty()) {
 		if (!raster.saveBmp(options.capture, error)) { std::fprintf(stderr, "capture: %s\n", error.c_str()); return 1; }

@@ -1,0 +1,895 @@
+{
+  "schema": 1,
+  "scope": "Independent original-code constructor-to900 syntheticfullfloor repeat and metadata observer; no retail discovery, gameplay proof or complete adapter acceptance.",
+  "body_repeat_and_observer_transparency": {
+    "sources": [
+      {
+        "path": "/Users/nicolas/Documents/github/sl-remastered/local/verify/issue53-bundle-20261102/issue53-original900-scoped-v1/capture-3f8c048a09/work/first-0.jsonl",
+        "sha256": "dd868ccdf4386fefcf011d345e163ea620d17e41c522dad8024218f682bd722c",
+        "body_records": 3602
+      },
+      {
+        "path": "/Users/nicolas/Documents/github/sl-remastered/local/verify/issue53-bundle-20261102/issue53-original900-observer-v1/capture-77e35be3ef/work/first-0.jsonl",
+        "sha256": "6d3d471581d270d64ce0b3b9ba158ec41c76658572ca87df0cc37bf626912b4b",
+        "body_records": 3602
+      }
+    ],
+    "steps": 900,
+    "bodies": 2,
+    "equal": true,
+    "differing_body_records": 0,
+    "first_difference": null,
+    "scope": "Complete ordered constructor/initial/final body snapshots only; two 53-word buffers starting at current=0. No intermediate contact causality or game parity."
+  },
+  "world_fields": [
+    {
+      "phase": "constructor",
+      "step": 0,
+      "gravity_enabled_word": 1,
+      "air_enabled_word": 1,
+      "fields": {
+        "gravity_x": {
+          "offset": 260,
+          "word": 0,
+          "float32": 0.0
+        },
+        "gravity_y": {
+          "offset": 264,
+          "word": 3239900611,
+          "float32": -9.8100004196167
+        },
+        "gravity_z": {
+          "offset": 268,
+          "word": 0,
+          "float32": 0.0
+        },
+        "air_density": {
+          "offset": 436,
+          "word": 1067809400,
+          "float32": 1.292799949645996
+        }
+      }
+    },
+    {
+      "phase": "terminal",
+      "step": 899,
+      "gravity_enabled_word": 1,
+      "air_enabled_word": 1,
+      "fields": {
+        "gravity_x": {
+          "offset": 260,
+          "word": 0,
+          "float32": 0.0
+        },
+        "gravity_y": {
+          "offset": 264,
+          "word": 3239900611,
+          "float32": -9.8100004196167
+        },
+        "gravity_z": {
+          "offset": 268,
+          "word": 0,
+          "float32": 0.0
+        },
+        "air_density": {
+          "offset": 436,
+          "word": 1067809400,
+          "float32": 1.292799949645996
+        }
+      }
+    }
+  ],
+  "body_fields": [
+    {
+      "phase": "constructor",
+      "step": 0,
+      "index": 0,
+      "activity_words": [
+        0,
+        0,
+        0
+      ],
+      "activity_values": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "prototype_flags_word": 1025,
+      "prototype_fields": {
+        "inverse_mass": {
+          "offset": 20,
+          "word": 1028443341,
+          "float32": 0.05000000074505806
+        },
+        "linear_drag": {
+          "offset": 128,
+          "word": 3184315596,
+          "float32": -0.09999999403953552
+        },
+        "angular_drag": {
+          "offset": 132,
+          "word": 3192704204,
+          "float32": -0.19999998807907104
+        },
+        "volume": {
+          "offset": 136,
+          "word": 1040187392,
+          "float32": 0.125
+        }
+      },
+      "shape_type_word": 5,
+      "shape_fields": {
+        "bound_radius": {
+          "offset": 12,
+          "word": 1056394609,
+          "float32": 0.48301270604133606
+        },
+        "radius": {
+          "offset": 16,
+          "word": 0,
+          "float32": 0.0
+        },
+        "extent_x": {
+          "offset": 20,
+          "word": 1050253722,
+          "float32": 0.30000001192092896
+        },
+        "extent_y": {
+          "offset": 24,
+          "word": 1050253722,
+          "float32": 0.30000001192092896
+        },
+        "extent_z": {
+          "offset": 28,
+          "word": 1050253722,
+          "float32": 0.30000001192092896
+        },
+        "center_x": {
+          "offset": 64,
+          "word": 0,
+          "float32": 0.0
+        },
+        "center_y": {
+          "offset": 68,
+          "word": 0,
+          "float32": 0.0
+        },
+        "center_z": {
+          "offset": 72,
+          "word": 0,
+          "float32": 0.0
+        },
+        "volume": {
+          "offset": 76,
+          "word": 1040187392,
+          "float32": 0.125
+        },
+        "friction": {
+          "offset": 80,
+          "word": 1058642330,
+          "float32": 0.6000000238418579
+        },
+        "bounce": {
+          "offset": 88,
+          "word": 1045220557,
+          "float32": 0.20000000298023224
+        }
+      },
+      "shape_parameter_words": [
+        1048576000,
+        1048576000,
+        1048576000
+      ]
+    },
+    {
+      "phase": "constructor",
+      "step": 0,
+      "index": 1,
+      "activity_words": [
+        0,
+        0,
+        0
+      ],
+      "activity_values": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "prototype_flags_word": 1025,
+      "prototype_fields": {
+        "inverse_mass": {
+          "offset": 20,
+          "word": 1028443341,
+          "float32": 0.05000000074505806
+        },
+        "linear_drag": {
+          "offset": 128,
+          "word": 3184315596,
+          "float32": -0.09999999403953552
+        },
+        "angular_drag": {
+          "offset": 132,
+          "word": 3192704204,
+          "float32": -0.19999998807907104
+        },
+        "volume": {
+          "offset": 136,
+          "word": 1090519040,
+          "float32": 8.0
+        }
+      },
+      "shape_type_word": 6,
+      "shape_fields": {
+        "bound_radius": {
+          "offset": 12,
+          "word": 1055298067,
+          "float32": 0.45033320784568787
+        },
+        "radius": {
+          "offset": 16,
+          "word": 0,
+          "float32": 0.0
+        },
+        "extent_x": {
+          "offset": 20,
+          "word": 1048911544,
+          "float32": 0.25999999046325684
+        },
+        "extent_y": {
+          "offset": 24,
+          "word": 1048911544,
+          "float32": 0.25999999046325684
+        },
+        "extent_z": {
+          "offset": 28,
+          "word": 1048911544,
+          "float32": 0.25999999046325684
+        },
+        "center_x": {
+          "offset": 64,
+          "word": 2147483648,
+          "float32": -0.0
+        },
+        "center_y": {
+          "offset": 68,
+          "word": 2147483648,
+          "float32": -0.0
+        },
+        "center_z": {
+          "offset": 72,
+          "word": 2147483648,
+          "float32": -0.0
+        },
+        "volume": {
+          "offset": 76,
+          "word": 1090519040,
+          "float32": 8.0
+        },
+        "friction": {
+          "offset": 80,
+          "word": 1058642330,
+          "float32": 0.6000000238418579
+        },
+        "bounce": {
+          "offset": 88,
+          "word": 1045220557,
+          "float32": 0.20000000298023224
+        }
+      },
+      "shape_parameter_words": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "phase": "constructor",
+      "step": 0,
+      "index": 2,
+      "activity_words": [
+        0,
+        0,
+        0
+      ],
+      "activity_values": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "prototype_flags_word": 1029,
+      "prototype_fields": {
+        "inverse_mass": {
+          "offset": 20,
+          "word": 0,
+          "float32": 0.0
+        },
+        "linear_drag": {
+          "offset": 128,
+          "word": 0,
+          "float32": 0.0
+        },
+        "angular_drag": {
+          "offset": 132,
+          "word": 0,
+          "float32": 0.0
+        },
+        "volume": {
+          "offset": 136,
+          "word": 0,
+          "float32": 0.0
+        }
+      },
+      "shape_type_word": 0,
+      "shape_fields": {
+        "bound_radius": {
+          "offset": 12,
+          "word": 0,
+          "float32": 0.0
+        },
+        "radius": {
+          "offset": 16,
+          "word": 0,
+          "float32": 0.0
+        },
+        "extent_x": {
+          "offset": 20,
+          "word": 0,
+          "float32": 0.0
+        },
+        "extent_y": {
+          "offset": 24,
+          "word": 0,
+          "float32": 0.0
+        },
+        "extent_z": {
+          "offset": 28,
+          "word": 0,
+          "float32": 0.0
+        },
+        "center_x": {
+          "offset": 64,
+          "word": 0,
+          "float32": 0.0
+        },
+        "center_y": {
+          "offset": 68,
+          "word": 0,
+          "float32": 0.0
+        },
+        "center_z": {
+          "offset": 72,
+          "word": 0,
+          "float32": 0.0
+        },
+        "volume": {
+          "offset": 76,
+          "word": 0,
+          "float32": 0.0
+        },
+        "friction": {
+          "offset": 80,
+          "word": 1058642330,
+          "float32": 0.6000000238418579
+        },
+        "bounce": {
+          "offset": 88,
+          "word": 1045220557,
+          "float32": 0.20000000298023224
+        }
+      },
+      "shape_parameter_words": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "phase": "terminal",
+      "step": 899,
+      "index": 0,
+      "activity_words": [
+        0,
+        0,
+        0
+      ],
+      "activity_values": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "prototype_flags_word": 1025,
+      "prototype_fields": {
+        "inverse_mass": {
+          "offset": 20,
+          "word": 1028443341,
+          "float32": 0.05000000074505806
+        },
+        "linear_drag": {
+          "offset": 128,
+          "word": 3184315596,
+          "float32": -0.09999999403953552
+        },
+        "angular_drag": {
+          "offset": 132,
+          "word": 3192704204,
+          "float32": -0.19999998807907104
+        },
+        "volume": {
+          "offset": 136,
+          "word": 1040187392,
+          "float32": 0.125
+        }
+      },
+      "shape_type_word": 5,
+      "shape_fields": {
+        "bound_radius": {
+          "offset": 12,
+          "word": 1056394609,
+          "float32": 0.48301270604133606
+        },
+        "radius": {
+          "offset": 16,
+          "word": 0,
+          "float32": 0.0
+        },
+        "extent_x": {
+          "offset": 20,
+          "word": 1050253722,
+          "float32": 0.30000001192092896
+        },
+        "extent_y": {
+          "offset": 24,
+          "word": 1050253722,
+          "float32": 0.30000001192092896
+        },
+        "extent_z": {
+          "offset": 28,
+          "word": 1050253722,
+          "float32": 0.30000001192092896
+        },
+        "center_x": {
+          "offset": 64,
+          "word": 0,
+          "float32": 0.0
+        },
+        "center_y": {
+          "offset": 68,
+          "word": 0,
+          "float32": 0.0
+        },
+        "center_z": {
+          "offset": 72,
+          "word": 0,
+          "float32": 0.0
+        },
+        "volume": {
+          "offset": 76,
+          "word": 1040187392,
+          "float32": 0.125
+        },
+        "friction": {
+          "offset": 80,
+          "word": 1058642330,
+          "float32": 0.6000000238418579
+        },
+        "bounce": {
+          "offset": 88,
+          "word": 1045220557,
+          "float32": 0.20000000298023224
+        }
+      },
+      "shape_parameter_words": [
+        1048576000,
+        1048576000,
+        1048576000
+      ]
+    },
+    {
+      "phase": "terminal",
+      "step": 899,
+      "index": 1,
+      "activity_words": [
+        1091507210,
+        3276024294,
+        3243537021
+      ],
+      "activity_values": [
+        8.942392349243164,
+        -196.16366577148438,
+        -13.27795124053955
+      ],
+      "prototype_flags_word": 1025,
+      "prototype_fields": {
+        "inverse_mass": {
+          "offset": 20,
+          "word": 1028443341,
+          "float32": 0.05000000074505806
+        },
+        "linear_drag": {
+          "offset": 128,
+          "word": 3184315596,
+          "float32": -0.09999999403953552
+        },
+        "angular_drag": {
+          "offset": 132,
+          "word": 3192704204,
+          "float32": -0.19999998807907104
+        },
+        "volume": {
+          "offset": 136,
+          "word": 1090519040,
+          "float32": 8.0
+        }
+      },
+      "shape_type_word": 6,
+      "shape_fields": {
+        "bound_radius": {
+          "offset": 12,
+          "word": 1055298067,
+          "float32": 0.45033320784568787
+        },
+        "radius": {
+          "offset": 16,
+          "word": 0,
+          "float32": 0.0
+        },
+        "extent_x": {
+          "offset": 20,
+          "word": 1048911544,
+          "float32": 0.25999999046325684
+        },
+        "extent_y": {
+          "offset": 24,
+          "word": 1048911544,
+          "float32": 0.25999999046325684
+        },
+        "extent_z": {
+          "offset": 28,
+          "word": 1048911544,
+          "float32": 0.25999999046325684
+        },
+        "center_x": {
+          "offset": 64,
+          "word": 2147483648,
+          "float32": -0.0
+        },
+        "center_y": {
+          "offset": 68,
+          "word": 2147483648,
+          "float32": -0.0
+        },
+        "center_z": {
+          "offset": 72,
+          "word": 2147483648,
+          "float32": -0.0
+        },
+        "volume": {
+          "offset": 76,
+          "word": 1090519040,
+          "float32": 8.0
+        },
+        "friction": {
+          "offset": 80,
+          "word": 1058642330,
+          "float32": 0.6000000238418579
+        },
+        "bounce": {
+          "offset": 88,
+          "word": 1045220557,
+          "float32": 0.20000000298023224
+        }
+      },
+      "shape_parameter_words": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "phase": "terminal",
+      "step": 899,
+      "index": 2,
+      "activity_words": [
+        0,
+        0,
+        0
+      ],
+      "activity_values": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "prototype_flags_word": 1029,
+      "prototype_fields": {
+        "inverse_mass": {
+          "offset": 20,
+          "word": 0,
+          "float32": 0.0
+        },
+        "linear_drag": {
+          "offset": 128,
+          "word": 0,
+          "float32": 0.0
+        },
+        "angular_drag": {
+          "offset": 132,
+          "word": 0,
+          "float32": 0.0
+        },
+        "volume": {
+          "offset": 136,
+          "word": 0,
+          "float32": 0.0
+        }
+      },
+      "shape_type_word": 0,
+      "shape_fields": {
+        "bound_radius": {
+          "offset": 12,
+          "word": 0,
+          "float32": 0.0
+        },
+        "radius": {
+          "offset": 16,
+          "word": 0,
+          "float32": 0.0
+        },
+        "extent_x": {
+          "offset": 20,
+          "word": 0,
+          "float32": 0.0
+        },
+        "extent_y": {
+          "offset": 24,
+          "word": 0,
+          "float32": 0.0
+        },
+        "extent_z": {
+          "offset": 28,
+          "word": 0,
+          "float32": 0.0
+        },
+        "center_x": {
+          "offset": 64,
+          "word": 0,
+          "float32": 0.0
+        },
+        "center_y": {
+          "offset": 68,
+          "word": 0,
+          "float32": 0.0
+        },
+        "center_z": {
+          "offset": 72,
+          "word": 0,
+          "float32": 0.0
+        },
+        "volume": {
+          "offset": 76,
+          "word": 0,
+          "float32": 0.0
+        },
+        "friction": {
+          "offset": 80,
+          "word": 1058642330,
+          "float32": 0.6000000238418579
+        },
+        "bounce": {
+          "offset": 88,
+          "word": 1045220557,
+          "float32": 0.20000000298023224
+        }
+      },
+      "shape_parameter_words": [
+        0,
+        0,
+        0
+      ]
+    }
+  ],
+  "scope_limits": {
+    "type": "scope_limits",
+    "requested_steps": 900,
+    "mandatory_body_records": 3602,
+    "discovery_total": 1308,
+    "discovery_per_step_limit": 20,
+    "discovery_total_limit": 18000,
+    "candidate_rows": 256,
+    "candidate_row_limit": 256
+  },
+  "execution_controls": {
+    "scoped900": {
+      "passed": false,
+      "execution_finished": true,
+      "container_exit": 0,
+      "case_exits": {
+        "first-0": "0"
+      },
+      "observations": {
+        "actual_isolation": true,
+        "removed": true,
+        "seed_preserved": true,
+        "stock_preserved": true,
+        "payload_preserved": true,
+        "producer_preserved": true,
+        "private_prefix_inodes": true,
+        "ephemeral_capture_complete": true,
+        "prepaid_preserved": true
+      },
+      "last_retained_prepaid_sample": {
+        "stage": "final",
+        "complete": true,
+        "parent": "/Users/nicolas/Documents/github/sl-remastered/local/verify/issue53-bundle-20261102",
+        "child": "/Users/nicolas/Documents/github/sl-remastered/local/verify/issue53-bundle-20261102/issue53-original900-scoped-v1",
+        "parent_identity": [
+          16777233,
+          77326639
+        ],
+        "child_identity": [
+          16777233,
+          85135194
+        ],
+        "parent_max": 67108864,
+        "child_max": 16777216,
+        "scan_seconds": 5,
+        "scan_attempts": [
+          {
+            "number": 1,
+            "complete": true,
+            "elapsed": 0.028729707992170006,
+            "entries_scanned": 112
+          }
+        ],
+        "logical_bytes": 54254752,
+        "child_bytes": 6640742,
+        "elapsed": 0.028731082973536104,
+        "old_atime_deltas": {
+          ".": [
+            1793650426400796726,
+            1793759447754878003
+          ]
+        },
+        "hash_scope": "all_preexisting_regular_files; new_child_fully_accounted_without_unused_hashes"
+      },
+      "outer_driver_exit_observed_by_Codex_exec": 0,
+      "limit": "passed remains false; execution observations and final retained prepaid sample do not promote overall adapter pass or parity."
+    },
+    "observer900": {
+      "passed": false,
+      "execution_finished": true,
+      "container_exit": 0,
+      "case_exits": {
+        "first-0": "0"
+      },
+      "observations": {
+        "actual_isolation": true,
+        "removed": true,
+        "seed_preserved": true,
+        "stock_preserved": true,
+        "payload_preserved": true,
+        "producer_preserved": true,
+        "private_prefix_inodes": true,
+        "ephemeral_capture_complete": true,
+        "prepaid_preserved": true
+      },
+      "last_retained_prepaid_sample": {
+        "stage": "final",
+        "complete": true,
+        "parent": "/Users/nicolas/Documents/github/sl-remastered/local/verify/issue53-bundle-20261102",
+        "child": "/Users/nicolas/Documents/github/sl-remastered/local/verify/issue53-bundle-20261102/issue53-original900-observer-v1",
+        "parent_identity": [
+          16777233,
+          77326639
+        ],
+        "child_identity": [
+          16777233,
+          85150499
+        ],
+        "parent_max": 67108864,
+        "child_max": 8388608,
+        "scan_seconds": 5,
+        "scan_attempts": [
+          {
+            "number": 1,
+            "complete": true,
+            "elapsed": 0.04032420797739178,
+            "entries_scanned": 188
+          }
+        ],
+        "logical_bytes": 60966386,
+        "child_bytes": 6650797,
+        "elapsed": 0.0403257500147447,
+        "old_atime_deltas": {
+          ".": [
+            1793759447754878003,
+            1793759959546465281
+          ],
+          "issue53-original900-scoped-v1/capture-3f8c048a09/payload-after.json": [
+            1793759478998015151,
+            1793759959507011964
+          ],
+          "issue53-original900-scoped-v1/capture-3f8c048a09/seed-before.json": [
+            1793759449062748019,
+            1793759959507410548
+          ],
+          "issue53-original900-scoped-v1/capture-3f8c048a09/payload-before.json": [
+            1793759449088315062,
+            1793759959507579465
+          ],
+          "issue53-original900-scoped-v1/capture-3f8c048a09/container-inspect.json": [
+            1793759450310579142,
+            1793759959508973093
+          ],
+          "issue53-original900-scoped-v1/capture-3f8c048a09/work/prefix-after.json": [
+            1793759478007474382,
+            1793759959509392468
+          ],
+          "issue53-original900-scoped-v1/capture-3f8c048a09/work/prefix-prepared.json": [
+            1793759478006775006,
+            1793759959510048636
+          ],
+          "issue53-original900-scoped-v1/capture-3f8c048a09/work/prefix-finished.json": [
+            1793759478007639924,
+            1793759959511080846
+          ],
+          "issue53-original900-scoped-v1/capture-3f8c048a09/launch.json": [
+            1793759449088390979,
+            1793759959513493100
+          ],
+          "issue53-original900-scoped-v1/__pycache__/prefix_shell.cpython-315.pyc": [
+            1793759448076490008,
+            1793759959513854892
+          ],
+          "issue53-original900-scoped-v1/admission.json": [
+            1793759447761475181,
+            1793759959515027436
+          ]
+        },
+        "hash_scope": "all_preexisting_regular_files; new_child_fully_accounted_without_unused_hashes"
+      },
+      "outer_driver_exit_observed_by_Codex_exec": 0,
+      "limit": "passed remains false; execution observations and final retained prepaid sample do not promote overall adapter pass or parity."
+    }
+  },
+  "metadata_correction": {
+    "frozen_prior_report": "docs/evidence/physics-parity64-20261103.json",
+    "prior_report_sha256": "9212ec738822a1fc55e2cbf9d6dadba6ce329dec62ba7d33af221b31eb370c8f",
+    "finding": "Both capture result.json files retain passed:false. Producer initializes passed:false at capture.py32 and never updates it; execution_finished is separately derived at170 and process exit follows execution_finished at189. Preserve that contradiction rather than claiming overall adapter passed. Narrow completebody equality and named control observations remain factual.",
+    "corrected_wording": "Original case/container exited0, execution_finishedtrue, listed preservation/cleanup observations true and retained final prepaid sample complete; top-levelpassedfalse. No automatic pass or acceptance."
+  },
+  "fixture_findings": [
+    "Original root is initially constructed from mass1/unitBox then original aggregate finalizer converts its shape to Mesh6 with bound.4503332078 and extents.26. Port constructs Mesh6 directly then finalizes. Earlier input-kind concern is narrower after actual metadata: finalizedshape kind agrees; actualPort bounds/volume still require runtime projection.",
+    "Original aggregate root retains volume8 from placeholderBox; child volume.125. Port source starts rootMesh volume0; currentPort actual volume remains tobeobserved.",
+    "Original child prototype flags1025 versus priorPort1024 differ by Created1, not Simple0x200. Both rootflags9 and all106states match through900.",
+    "Original terminalrootactivity is [8.942392349243164,-196.16366577148438,-13.27795124053955], consistent with priorPort printed diagnostics but exactPort activitywords await currentruntimeprojection.",
+    "Actual originalworld gravityenabled1/airenabled1/gravity(0,-9.81,0)/airdensity1.2928 are unchanged constructor toterminal, matchingPort source defaults; currentPort actual runtimeparameterprojection pending.",
+    "Original root terminalspeed.4684877694 and omegaSq10.2991809845 exceed original4a4ed0linear/angular rest thresholds independently of activity. This conditionaloriginalfixture does not satisfy unchanged Port900settlingassertions.",
+    "Entire004a2540 is substituted: original drains owner/resourcequeue, clears ownerflag, acquires/deduplicates up to16resourceIDs, destroysqueueentries and calls004b4250. Feeder instead alwaysscans2048syntheticfaces and selects candidates. Actualretail timing/materials/discovery remain unqualified.",
+    "FPUcw007f is explicit and preserved; observedWinegraphics-thread mode supports that fixture setting, but actualphysicsworker/Windows mode is not established."
+  ],
+  "source_bindings": {
+    "local/verify/issue53-bundle-20261102/issue53-original900-scoped-v1/driver.py": "2943845c1a9a45ba762bd5bc801c7c0973073e0027c1b0fc5f985a57f866ca0d",
+    "local/verify/issue53-bundle-20261102/issue53-original900-scoped-v1/proposal.json": "19462d7ec79bfb91245fba8e82071209a8c608cfabdec5324e1fdced4f7410be",
+    "local/verify/issue53-bundle-20261102/issue53-original900-scoped-v1/build.json": "012e3996b61115fda2f1bedc50e76f6f7a0d8d16f0a062ff7beca6612fd833eb",
+    "local/verify/issue53-bundle-20261102/issue53-original900-scoped-v1/compile-result.json": "64c16a1b726d4755eaf2f26de8e0c24331f8a3fbae6d349721d405cf3faf6ac7",
+    "local/verify/issue53-bundle-20261102/issue53-original900-scoped-v1/world-loop.inc": "affdbfa241a11df0d1edfa6913dac0791244eae258731fe889503181e832cb50",
+    "local/verify/issue53-bundle-20261102/issue53-original900-scoped-v1/capture.py": "248bb6ca6c7e013f20b2357d98fa5319c120329df89adb18eba873e31f98585a",
+    "local/verify/issue53-bundle-20261102/issue53-original900-scoped-v1/prepaid-audit.json": "c6fb7d03fbcc23a97693fb73fe5b8059ccf2b61813e534447da2a03bbc72a56a",
+    "local/verify/issue53-bundle-20261102/issue53-original900-scoped-v1/capture-3f8c048a09/result.json": "986ad7ae861cd903e17fea86cd7ddf9b4879bdd6daa3027a66090e193026bb62",
+    "local/verify/issue53-bundle-20261102/issue53-original900-scoped-v1/capture-3f8c048a09/work/first-0.jsonl": "dd868ccdf4386fefcf011d345e163ea620d17e41c522dad8024218f682bd722c",
+    "local/verify/issue53-bundle-20261102/issue53-original900-observer-v1/driver.py": "08929ca7a81c84947ccfc5a9da0d1d13ba70b680e621c46a4b89209188938d1c",
+    "local/verify/issue53-bundle-20261102/issue53-original900-observer-v1/proposal.json": "fbabf2696fb0e112559b3ebc3dad8aef6cb9372afa7339bbe1da1441796ad5bf",
+    "local/verify/issue53-bundle-20261102/issue53-original900-observer-v1/build.json": "56fdb4a6d3eae8f5e67f1317725d82ab2e6d92f59a2ff4b09932c9cc1b8b8ffd",
+    "local/verify/issue53-bundle-20261102/issue53-original900-observer-v1/compile-result.json": "11243e2312861ad65784a7fe693f0678b35a6316f88db9af9164909900e64c40",
+    "local/verify/issue53-bundle-20261102/issue53-original900-observer-v1/world-loop.inc": "0721c379938a3c33747940c3409052680a9c4f7f5a698d211581c90551c972b6",
+    "local/verify/issue53-bundle-20261102/issue53-original900-observer-v1/capture.py": "248bb6ca6c7e013f20b2357d98fa5319c120329df89adb18eba873e31f98585a",
+    "local/verify/issue53-bundle-20261102/issue53-original900-observer-v1/prepaid-audit.json": "b791c84e49504bcd2453ef6d6f647db8f89ae74066f85e9aa715350ab1ca0674",
+    "local/verify/issue53-bundle-20261102/issue53-original900-observer-v1/capture-77e35be3ef/result.json": "4455bc9bb1ea3295b8f765ca2bf4fdb587488eba3e615ee9de64325539710a21",
+    "local/verify/issue53-bundle-20261102/issue53-original900-observer-v1/capture-77e35be3ef/work/first-0.jsonl": "6d3d471581d270d64ce0b3b9ba158ec41c76658572ca87df0cc37bf626912b4b",
+    "src/object_physics.cpp": "154b9865eb4baabd16b5564297ccc3e1b1a246c42135d9df1cb4443d58f08799",
+    "src/physics_compound_finalize.cpp": "70878885b8b3e594849504d8ae730f10584b7035075d76b832d9464a1f76a2e9",
+    "src/physics_body.hpp": "903f46ea7f28f6f1a80c2f741b4e70bc5b70365761a1214f090de5d2069306f1",
+    "src/world_model.cpp": "3360a705fbdea7719ed0f0ff1b4b995f54d0ab5840d0a96743680378d640f10a",
+    "local/census/all.c": "abc503a2166b4575df41baf338805c6ca7fba477606b05caa9c7817735ad415d"
+  }
+}

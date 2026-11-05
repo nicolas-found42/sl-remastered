@@ -116,6 +116,105 @@ class GuardrailTest(unittest.TestCase):
         self.git('rm', '-f', 'renamed café.cpp')
         self.assert_pass(self.hook())
 
+    def test_edited_cpp_formatting_does_not_expand_into_legacy_neighbor(self):
+        baseline = (
+            'int sample(int width) {\n'
+            '\tconst float pixelWidth = width;\n'
+            '\tif (pixelWidth > 0) {\n'
+            '\t\treturn 1;\n'
+            '\t}\n'
+            '\treturn 0;\n'
+            '}\n'
+        )
+        path = self.write('legacy neighbor.cpp', baseline)
+        self.git('add', 'legacy neighbor.cpp')
+        self.git('-c', 'core.hooksPath=/dev/null', 'commit', '-qm', 'legacy neighbor')
+        selected = baseline.replace(
+            '\tconst float pixelWidth = width;',
+            '  const float pixelWidth = static_cast<float>(width);',
+        )
+        path.write_text(selected)
+        formatted = subprocess.run(
+            [guard.tool('clang-format'), '--style=file:' + str(self.root / '.clang-format'),
+             '--assume-filename=' + str(path), '--lines=2:2'],
+            input=selected.encode(), capture_output=True, check=True,
+        ).stdout.decode()
+        self.assertEqual(formatted.splitlines()[1], selected.splitlines()[1])
+        self.assertNotEqual(formatted.splitlines()[2], selected.splitlines()[2])
+        self.git('add', 'legacy neighbor.cpp')
+        self.assert_pass(self.hook())
+        self.assertEqual(path.read_text(), selected)
+        self.assertEqual(self.git('show', ':legacy neighbor.cpp').stdout, selected.encode())
+        path.write_text(selected.replace('  const float pixelWidth', '\tconst float pixelWidth'))
+        self.git('add', 'legacy neighbor.cpp')
+        rejected = self.hook()
+        self.assertEqual(rejected.returncode, 1, rejected.stdout + rejected.stderr)
+        self.assertIn('clang-format check failed', rejected.stderr)
+
+    def test_edited_cpp_formatting_uses_utf8_byte_offsets(self):
+        baseline = '// café λ 🛞\nint sample() {\n  int value = 1;\n\treturn value;\n}\n'
+        path = self.write('unicode.cpp', baseline)
+        self.git('add', 'unicode.cpp')
+        self.git('-c', 'core.hooksPath=/dev/null', 'commit', '-qm', 'unicode legacy')
+        selected = baseline.replace('int value = 1;', 'int value = 2;')
+        path.write_text(selected)
+        self.git('add', 'unicode.cpp')
+        self.assert_pass(self.hook())
+        path.write_text(selected.replace('int value = 2;', 'int value=2;'))
+        self.git('add', 'unicode.cpp')
+        rejected = self.hook()
+        self.assertEqual(rejected.returncode, 1, rejected.stdout + rejected.stderr)
+        self.assertIn('clang-format check failed', rejected.stderr)
+
+    def test_cpp_deletion_keeps_its_formatting_boundary(self):
+        baseline = 'int sample() {\n  int obsolete = 0;\n\treturn 1;\n}\n'
+        path = self.write('deletion.cpp', baseline)
+        self.git('add', 'deletion.cpp')
+        self.git('-c', 'core.hooksPath=/dev/null', 'commit', '-qm', 'deletion boundary')
+        selected = baseline.replace('  int obsolete = 0;\n', '')
+        path.write_text(selected)
+        self.git('add', 'deletion.cpp')
+        rejected = self.hook()
+        self.assertEqual(rejected.returncode, 1, rejected.stdout + rejected.stderr)
+        self.assertIn('clang-format check failed', rejected.stderr)
+        path.write_text(selected.replace('\treturn 1;', '  return 1;'))
+        self.git('add', 'deletion.cpp')
+        self.assert_pass(self.hook())
+
+    def test_cpp_eof_deletion_checks_the_remaining_final_line(self):
+        baseline = 'int sample() { return 1; }\nint removed() { return 0; }\n'
+        path = self.write('eof deletion.cpp', baseline)
+        self.git('add', 'eof deletion.cpp')
+        self.git('-c', 'core.hooksPath=/dev/null', 'commit', '-qm', 'EOF deletion')
+        path.write_text(baseline.splitlines(keepends=True)[0])
+        self.git('add', 'eof deletion.cpp')
+        self.assert_pass(self.hook())
+
+    def test_cpp_edited_line_reflow_is_still_rejected(self):
+        baseline = 'int sample(int width) {\n  return width;\n}\n'
+        path = self.write('reflow.cpp', baseline)
+        self.git('add', 'reflow.cpp')
+        self.git('-c', 'core.hooksPath=/dev/null', 'commit', '-qm', 'reflow baseline')
+        selected = baseline.replace('  return width;',
+                                    '  if (width > 0) { return 1; }\n  return width;')
+        path.write_text(selected)
+        self.git('add', 'reflow.cpp')
+        rejected = self.hook()
+        self.assertEqual(rejected.returncode, 1, rejected.stdout + rejected.stderr)
+        self.assertIn('clang-format check failed', rejected.stderr)
+        path.write_text(selected.replace('  if (width > 0) { return 1; }',
+                                         '  if (width > 0) {\n    return 1;\n  }'))
+        self.git('add', 'reflow.cpp')
+        self.assert_pass(self.hook())
+
+    def test_explicit_cpp_paths_still_check_untouched_legacy_lines(self):
+        path = self.write('explicit.cpp', 'int sample() {\n\treturn 1;\n}\n')
+        rejected = self.check('--paths', 'explicit.cpp')
+        self.assertEqual(rejected.returncode, 1, rejected.stdout + rejected.stderr)
+        self.assertIn('clang-format check failed', rejected.stderr)
+        path.write_text('int sample() { return 1; }\n')
+        self.assert_pass(self.check('--paths', 'explicit.cpp'))
+
     def test_shell_warning_and_clean_quote_use_selected_bytes(self):
         path = self.write(
             'control.sh', '#!/usr/bin/env bash\nprintf "%s\\n" $(printf "hello world")\n'

@@ -843,8 +843,8 @@ bool sceneDrawCameraMesh(Render2D &renderer, size_t textureId,
       const float x = std::clamp(vertex.position[0] / w, -1.0f, 1.0f);
       const float y = std::clamp(vertex.position[1] / w, -1.0f, 1.0f);
       vertices.push_back(
-          {(viewport.left + (x + 1) * viewport.width * 0.5f) * width,
-           (viewport.top + (1 - y) * viewport.height * 0.5f) * height,
+          {(viewport.left + (x + 1) * viewport.width * 0.5f) * static_cast<float>(width),
+           (viewport.top + (1 - y) * viewport.height * 0.5f) * static_cast<float>(height),
            vertex.uv[0], vertex.uv[1], instance.instanceColor()});
       if (fog) {
         const uint32_t f = static_cast<uint32_t>(
@@ -910,10 +910,11 @@ bool sceneDrawCameraMesh(Render2D &renderer, size_t textureId,
   bool drawn = true;
   for (size_t i = 0; i < vertices.size() && drawn; i += 3) {
     const std::vector<uint32_t> tri{0, 1, 2};
-    const std::vector<RenderVertex> base(vertices.begin() + i,
-                                         vertices.begin() + i + 3);
-    const std::vector<RenderVertex> overlay(fogVertices.begin() + i,
-                                            fogVertices.begin() + i + 3);
+    const auto offset = static_cast<std::vector<RenderVertex>::difference_type>(i);
+    const std::vector<RenderVertex> base(vertices.begin() + offset,
+                                         vertices.begin() + offset + 3);
+    const std::vector<RenderVertex> overlay(fogVertices.begin() + offset,
+                                            fogVertices.begin() + offset + 3);
     drawn = renderer.drawMesh(textureId, base, tri, error) &&
             renderer.drawMeshAdditive(*fogTexture, overlay, tri, error);
   }
@@ -1232,12 +1233,12 @@ bool SceneMaterialRenderer::draw(const std::array<float, 16> &view,
       std::vector<RenderVertex> vertices;
       std::vector<uint32_t> indices;
       if (renderer_.outputSize(width, height, error)) {
-        const float x = viewport.left * width + (matrix[12] * 0.1f + 1.0f) *
-                                                    viewport.width * width *
-                                                    0.5f;
-        const float y = viewport.top * height + (matrix[13] * 0.1f + 1.0f) *
-                                                    viewport.height * height *
-                                                    0.5f;
+        const float x = viewport.left * static_cast<float>(width) + (matrix[12] * 0.1f + 1.0f) *
+                                                                        viewport.width * static_cast<float>(width) *
+                                                                        0.5f;
+        const float y = viewport.top * static_cast<float>(height) + (matrix[13] * 0.1f + 1.0f) *
+                                                                        viewport.height * static_cast<float>(height) *
+                                                                        0.5f;
         if (fontGlyphGeometry(cache.mesh, text->text, x, y, text->alignment,
                               text->advanceScale, vertices, indices, error,
                               text->color)) {
@@ -1730,7 +1731,7 @@ bool SceneCameraRenderer::draw(const std::array<float, 16> &view,
         instance->typeId() != light.type.cachedValue) {
       if (light.instance.owner)
         candidates_.remove(*light.instance.owner);
-      lights_.erase(lights_.begin() + i);
+      lights_.erase(lights_.begin() + static_cast<decltype(lights_)::difference_type>(i));
       continue;
     }
     const auto type = resources_.resolve(light.type.owner);

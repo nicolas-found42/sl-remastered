@@ -1,0 +1,214 @@
+{
+  "schema": 1,
+  "scope": "Independent read-only audit of conditional frozen-binary body-state evidence. This is not product acceptance, current-source qualification, settling acceptance, or whole-game parity.",
+  "reviewer": "/root/physics_patch_review",
+  "audit_method": "Ran the documented strict trace-inspect comparator, then independently parsed and compared the raw files with a separate Python standard-library algorithm, without importing the comparator. No builds, edits to production/tests, captures, or repeated Jev judgment were performed for this audit. This report persists those completed observations without rerunning them.",
+  "inputs": [
+    {
+      "role": "scoped Stock900",
+      "path": "local/verify/issue53-bundle-20261102/issue53-original900-scoped-v1/capture-3f8c048a09/work/first-0.jsonl",
+      "sha256": "dd868ccdf4386fefcf011d345e163ea620d17e41c522dad8024218f682bd722c",
+      "bytes": 3407092,
+      "body_records": 3602
+    },
+    {
+      "role": "frozen phase-split Port900",
+      "path": "local/verify/native-background-tests/attempt-z_x05__f/flag/issue53-phase-split-port900-v1/trace.jsonl",
+      "sha256": "e0ae31146843ee13121dbc30887736b3dad638f8b30a83363d7d25f50089da39",
+      "bytes": 3048130,
+      "body_records": 3602
+    }
+  ],
+  "strict_comparator": {
+    "command": "source .venv/bin/activate\npython3 -I tools/parity/dev.py trace-inspect local/verify/issue53-bundle-20261102/issue53-original900-scoped-v1/capture-3f8c048a09/work/first-0.jsonl --body-series local/verify/native-background-tests/attempt-z_x05__f/flag/issue53-phase-split-port900-v1/trace.jsonl --steps 900 --bodies 2",
+    "exit_code": 0,
+    "steps": 900,
+    "bodies": 2,
+    "equal": true,
+    "differing_body_records": 0,
+    "first_difference": null
+  },
+  "independent_raw_checks": {
+    "complete_ordered_body_records_per_file": 3602,
+    "ordered_key_definition": "Two constructor keys (constructor,0,index), then step=0..899, phase=step-initial then step-final, index=0 then1.",
+    "unique_expected_keys": 3602,
+    "exact_key_order_and_cardinality": true,
+    "integer_identifiers_flags_current_excluding_booleans": true,
+    "flags_unsigned_32_bit": true,
+    "words_per_snapshot": 106,
+    "every_word_unsigned_32_bit_integer_excluding_booleans": true,
+    "current_rule": "constructor:0; otherwise (step + (phase == step-final)) % 2",
+    "current_identity_valid_in_every_record": true,
+    "all_states_flags_current_equal": true,
+    "trace_file_identity_size_mtime_ctime_stable_before_after_read": true,
+    "stock_scope_limits_raw": {
+      "type": "scope_limits",
+      "requested_steps": 900,
+      "mandatory_body_records": 3602,
+      "discovery_total": 1308,
+      "discovery_per_step_limit": 20,
+      "discovery_total_limit": 18000,
+      "candidate_rows": 256,
+      "candidate_row_limit": 256
+    },
+    "port_scope_limits_row": null,
+    "unobserved_fields_not_compared": "Non-body rows, activity outside the 106 state words, full world state and constructor/shape metadata are outside this exact comparison."
+  },
+  "terminal": {
+    "key": [
+      "step-final",
+      899,
+      1
+    ],
+    "body_identity_basis": "Frozen Port native.cpp:190 uses boxBodies[index==0?1:0]; index1 is boxBodies[0], the aggregate root.",
+    "current": 0,
+    "flags": 9,
+    "state_layout_basis": "physics_body.hpp State.vel at byte0x0c, omega at0x70; sizeof(State)==0xd4 (53words), with static_assert offset checks.",
+    "velocity_words": [
+      1031989300,
+      3202726082,
+      3186823188
+    ],
+    "velocity_float32": [
+      0.06391945481300354,
+      -0.4486752152442932,
+      -0.11868301033973694
+    ],
+    "speed_float32": 0.46848776936531067,
+    "speed_threshold_float32": 0.30000001192092896,
+    "speed_less_than_threshold": false,
+    "omega_squared_float32": 10.29918098449707,
+    "asleep_mask": 128,
+    "asleep_mask_basis": "src/physics_body.hpp:177 defines kBodyAsleep=0x80.",
+    "asleep_flag_present": false,
+    "same_result_independently_computed_for_each_trace": true,
+    "original_test": {
+      "path": "tests/object_world_step_test.cpp",
+      "git_diff_HEAD_observation": "empty",
+      "assertions_unchanged": true,
+      "speed_assertion_line": 240,
+      "speed_assertion": "assert(speed < 0.3f);",
+      "root_sleep_assertion_line": 242,
+      "root_sleep_assertion": "assert((boxRoot->flags & physics::kBodyAsleep) != 0);",
+      "terminal_values_satisfy_these_assertions": false
+    },
+    "diagnostic_producer_limit": "Frozen Port native.cpp returns immediately after step899-final with settling_assertions_executed:false. Its successful run exit is not a successful execution of the original settling assertions."
+  },
+  "binding_checks": {
+    "port_native": {
+      "path": "local/verify/native-background-tests/attempt-z_x05__f/flag/issue53-phase-split-port900-v1/native",
+      "sha256": "cbf786cf19fd733b97c6aafcd6a6bdb74925375ae3b599b28a1c3f4cd04bf3f8",
+      "matches_executable_json": true
+    },
+    "port_producer": {
+      "driver.py": {
+        "sha256": "c36af376e821132330fdc34b220b6804d09d4cfe5f56838f4634b6786f4a79d3",
+        "matches_bindings_json": true
+      },
+      "native.cpp": {
+        "sha256": "c2feb85e4af6e30f6bf4fc5768b48865543788fa789ea58334d5aae5778e57d2",
+        "matches_bindings_json": true
+      }
+    },
+    "port_library_historical": {
+      "recorded_sha256": "5695641f55cb89978c8f3201da04e29f22a104a715f50b8ce4439e2d19d9ceaf",
+      "observation": "Frozen driver computes the library hash before compile and asserts it unchanged after link, together with its production source hashes. executable.json records library_before_after_equal:true. This audit verified the frozen executable hash; it did not reconstruct or verify the historical library bytes from today's build tree."
+    },
+    "stock_executable": {
+      "path": "local/verify/issue53-bundle-20261102/issue53-original900-scoped-v1/original-world.exe",
+      "sha256": "de883aa52ce1f6692d53ffe34f90a285b1f9cb3d2bf940e77d6361eebb3f51a6",
+      "matches_build_json": true
+    },
+    "stock_build_sources": {
+      "original-world.c": {
+        "sha256": "3028f27d26fb59adac2217a50a2e07a4822d5339dc23b948d85e685807aea221",
+        "matches_build_json": true
+      },
+      "allocator-state.inc": {
+        "sha256": "0548578be8d3f9e2fa86db5e7404e5aa05dedb2e2f1e3bdd23b23786cfafc8ee",
+        "matches_build_json": true
+      },
+      "allocator-functions.inc": {
+        "sha256": "32773a740967303fb48a8db2737a57c43e1483c6c605e5903153d134712002c2",
+        "matches_build_json": true
+      },
+      "bridge.inc": {
+        "sha256": "0eeba3ab15a43ed3f56cfc7874c36a31d0c935d304b7c2e708ddc92ad737b421",
+        "matches_build_json": true
+      },
+      "dataset.h": {
+        "sha256": "4dea66e8ae75a5d46a5ffd38244c866f56283cfddac4c71ca6f3264f72e1c620",
+        "matches_build_json": true
+      },
+      "world-loop.inc": {
+        "sha256": "affdbfa241a11df0d1edfa6913dac0791244eae258731fe889503181e832cb50",
+        "matches_build_json": true
+      }
+    },
+    "current_production_files_differing_from_frozen_port_bindings_at_audit": [
+      "physics_multi_root_step.cpp",
+      "physics_contact_geometry.cpp",
+      "physics_contact_geometry.hpp",
+      "car_world_step.cpp",
+      "world_model.hpp"
+    ],
+    "historical_source_reconstruction_qualified": false,
+    "historical_source_limit": "The underlying report identifies car_world_step.cpp, physics_contact_geometry.cpp and world_model.hpp frozen uncommitted bytes as unavailable from exact current/index/HEAD sources. Later solver/header changes also differ from the frozen bindings. Exact body equality does not resolve this limitation."
+  },
+  "raw_passed_false_metadata": {
+    "raw_capture_result": "local/verify/issue53-bundle-20261102/issue53-original900-scoped-v1/capture-3f8c048a09/result.json",
+    "passed": false,
+    "execution_finished": true,
+    "container_exit": 0,
+    "case_exits": {
+      "first-0": "0"
+    },
+    "ephemeral_capture_complete": true,
+    "prepaid_preserved": true,
+    "explanation_independently_read_from_source": "Frozen capture.py:32 initializes passed=False and never assigns that field again. Line170 computes execution_finished from container/case exits, isolation, removal and preservation booleans. Line189 raises SystemExit(not execution_finished). Frozen driver.py accepts SystemExit0 and performs final budget checks and writes prepaid-audit.json in finally.",
+    "outer_final_scan_observation": {
+      "report_path": "local/verify/issue53-bundle-20261102/issue53-original900-scoped-v1/prepaid-audit.json",
+      "complete": true,
+      "entries_scanned": 112,
+      "child_bytes": 6640742,
+      "logical_parent_bytes": 54254752,
+      "child_max": 16777216,
+      "parent_max": 67108864
+    },
+    "interpretation": "Retained terminal observations support bounded process execution and the recorded preservation checks. The raw passed:false field remains visible; this audit does not declare overall adapter acceptance or parity from it."
+  },
+  "jev_follow_up": {
+    "prior_report": "docs/evidence/physics900-claims-review-20261104.json",
+    "prior_equality_claim": {
+      "verdict": "verified",
+      "supports": 0.68,
+      "confidence": 0.52,
+      "action": "review"
+    },
+    "prior_terminal_claim": {
+      "verdict": "verified",
+      "supports": 0.59,
+      "confidence": 0.38,
+      "action": "review"
+    },
+    "same_judgment_rerolled": false,
+    "independent_review_resolution": "The exact frozen-binary body-state equality and the terminal failure of the original speed/sleep conditions are mechanically supported by raw parsing, direct float32 recomputation, layout checks and executable/producer hashes. This resolves the two narrow factual questions by additional independent evidence; it does not change Jev's recorded result or grant product completion approval."
+  },
+  "limitations": [
+    "A single complete original-constructor synthetic-floor Stock900 run is compared to one frozen Port900 binary. Independent full900 repeat/observer evidence was not established by this audit.",
+    "All2048syntheticfloorfaces substitute the retail sector/resource dispatcher; authentic retail discovery and whole-game acceptance remain unverified.",
+    "Root shape/dimension metadata and child prototype flags differ across fixture setups; ground material values also differ as documented. Equality of the captured state subset does not establish constructor/broadphase equivalence.",
+    "Activity outside the106words and full world/shape state were not captured by this comparison.",
+    "Scoped Stock world-loop.inc explicitly loads x87 controlword007f and checks it unchanged. Actual physics-worker/Windows FPU mode remains unqualified.",
+    "The frozen historical production source cannot be completely reconstructed from current/index/HEAD bytes. A stable current-source comparison remains required.",
+    "Original object settling and sleep assertions remain unchanged and unsatisfied by these terminal values.",
+    "The earlier900attempt remains a separate failed inherited256-discovery-limit capture, with an incomplete phase set and unexecuted final outer retention report; this completed pair does not rewrite that failure."
+  ],
+  "reproduction_algorithm": {
+    "language": "Python3 standard library",
+    "basis": "Minimal exact algorithm equivalent to the independently executed checks; no invented test log.",
+    "source": "import hashlib,json,math,struct\nfrom pathlib import Path\npaths=[Path(p) for p in INPUT_PATHS]\nexpected=[('constructor',0,i) for i in range(2)]+[(phase,s,i) for s in range(900) for phase in ('step-initial','step-final') for i in range(2)]\nassert len(set(expected))==3602\nseries=[]\nfor path in paths:\n    before=path.stat(); raw=path.read_bytes(); after=path.stat()\n    fingerprint=lambda s:(s.st_dev,s.st_ino,s.st_size,s.st_mtime_ns,s.st_ctime_ns)\n    assert fingerprint(before)==fingerprint(after)\n    rows=[r for r in map(json.loads,raw.splitlines()) if r.get('type')=='body']\n    assert len(rows)==3602\n    assert [(r['phase'],r['step'],r['index']) for r in rows]==expected\n    for r in rows:\n        assert all(type(r[k]) is int for k in ('step','index','flags','current'))\n        assert r['current']==(0 if r['phase']=='constructor' else (r['step']+(r['phase']=='step-final'))%2)\n        assert 0<=r['flags']<=0xffffffff\n        assert len(r['states'])==106 and all(type(w)is int and 0<=w<=0xffffffff for w in r['states'])\n    series.append(rows)\n    print(hashlib.sha256(raw).hexdigest())\nassert all((a['states'],a['flags'],a['current'])==(b['states'],b['flags'],b['current']) for a,b in zip(*series))\nf32=lambda x:struct.unpack('<f',struct.pack('<f',x))[0]\ndecode=lambda w:struct.unpack('<f',struct.pack('<I',w))[0]\nsquare=lambda v:f32(f32(f32(v[0]*v[0])+f32(v[1]*v[1]))+f32(v[2]*v[2]))\nfor rows in series:\n    root=rows[-1]\n    assert (root['phase'],root['step'],root['index'])==('step-final',899,1)\n    words=root['states'][53*root['current']:53*(root['current']+1)]\n    velocity=[decode(w) for w in words[3:6]]\n    omega=[decode(w) for w in words[28:31]]\n    speed=f32(math.sqrt(square(velocity)))\n    print(speed,speed<f32(.3),bool(root['flags']&0x80),square(omega))\n# Hash binding checks independently performed:\n# sha256(frozen native)==executable.json.native_sha256\n# sha256(driver.py/native.cpp)==bindings.json.producer entries\n# sha256(original-world.exe)==build.json.exe_sha256\n# sha256(each of six frozen Stock source files)==build.json.sources entries\n# Current production hashes were compared to bindings.json.production; mismatches are listed above."
+  },
+  "product_acceptance": false,
+  "goal_complete": false
+}

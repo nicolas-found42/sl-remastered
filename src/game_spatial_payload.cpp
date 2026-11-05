@@ -606,97 +606,120 @@ CarGroundContacts collectCarGroundContacts(ResourceWorld &resources,
   for (const auto &spatial : candidates.candidates) {
     auto &node = *spatial.node;
     const auto &geometry = *spatial.payload->physics;
-    for (size_t faceIndex = 0; faceIndex < geometry.triangles.size();
-         ++faceIndex) {
-      std::function<void(Body *)> visit = [&](Body *body) {
-        if (body != car->root.get() &&
-            ((body->flags & 0x20020u) || (body->proto->flags & 0x20u)))
-          return; // 004a0aa0 excludes these child branches.
-        const auto &children = car->bodyChildren.at(body);
-        if (!children.empty()) {
-          const auto mask =
-              queryParentFace(geometry, faceIndex, *body, *node.bounds, false);
-          if (mask == ParentFaceMask::Rejected)
+    // 004a0aa0 filters the whole face list at each parent, then walks
+    // children in sibling order. A leaf appends its accepted faces before
+    // the next sibling: 0049ec00 uses that order to break candidate ties.
+    std::function<void(Body*, const std::vector<bool>&)> visit =
+        [&](Body* body, const std::vector<bool>& inheritedRejected) {
+          if (body != car->root.get() &&
+              ((body->flags & 0x20020u) || (body->proto->flags & 0x20u)))
             return;
-          if (mask == ParentFaceMask::Unsupported) {
-            incomplete("compound parent face filter unsupported");
-            return;
-          }
-          for (auto *child : children)
-            visit(child);
-          return;
-        }
-        if (body->current > 1 ||
-            !std::isfinite(body->proto->shape.boundRadius) ||
-            body->proto->shape.boundRadius < 0) {
-          incomplete("child spatial bounds unsupported");
-          return;
-        }
-        for (size_t axis = 0; axis < 3; ++axis) {
-          const float coordinate = body->state[body->current ^ 1].pos[axis];
-          if (!std::isfinite(coordinate)) {
-            incomplete("child spatial bounds unsupported");
+          const auto& children = car->bodyChildren.at(body);
+          if (!children.empty()) {
+            auto rejected = inheritedRejected;
+            bool anyAccepted = false;
+            for (size_t faceIndex = 0; faceIndex < geometry.triangles.size(); ++faceIndex) {
+              const auto mask = queryParentFace(geometry, faceIndex, *body,
+                                                *node.bounds, rejected[faceIndex]);
+              if (mask == ParentFaceMask::Unsupported) {
+                incomplete("compound parent face filter unsupported");
+                rejected[faceIndex] = true;
+              } else {
+                rejected[faceIndex] = mask == ParentFaceMask::Rejected;
+                anyAccepted |= !rejected[faceIndex];
+              }
+            }
+            if (anyAccepted)
+              for (auto* child : children)
+                visit(child, rejected);
             return;
           }
-          if (body->proto->shape.boundRadius + node.bounds->values[axis + 3] <
-              std::fabs(coordinate - node.bounds->values[axis]))
-            return;
-        }
-        std::string error;
-        auto face = resolveSpatialGroundFace(resources, node, faceIndex, error);
-        if (!face) {
-          incomplete("ground face unavailable: " + error);
-          return;
-        }
-        if (body->flags & 0x40u) {
-          auto parent = std::shared_ptr<Body>(car, car->root.get());
-          auto parentProto =
-              std::shared_ptr<const BodyProto>(car, &car->rootPrototype);
-          auto wheel = std::shared_ptr<Body>(car, body);
-          auto wheelProto = std::shared_ptr<const BodyProto>(car, body->proto);
-          auto contact = makeWheelGroundContact(
-              std::move(face), std::move(parent), std::move(parentProto),
-              std::move(wheel), std::move(wheelProto), true);
-          if (contact.status == WheelGroundContactStatus::Unsupported)
-            incomplete(contact.detail);
-          else if (contact.status == WheelGroundContactStatus::Hit)
-            result.wheels.push_back({body, std::move(contact.contact)});
-          return;
-        }
-        if (body->flags & 0x800u) {
-          incomplete("segment-only child collision unsupported");
-          return;
-        }
-        auto ground = face->bodyOwner();
-        if (!ground) {
-          incomplete("ground body unavailable");
-          return;
-        }
-        const auto &triangle = geometry.triangles[faceIndex];
-        std::array<Vec3, 3> vertices{};
-        for (size_t i = 0; i < 3; ++i) {
-          if (triangle.vertices[i] >= geometry.vertices.size()) {
-            incomplete("ground face vertex unavailable");
-            return;
+          for (size_t faceIndex = 0; faceIndex < geometry.triangles.size(); ++faceIndex) {
+            if (inheritedRejected[faceIndex])
+              continue;
+            const auto visitFace = [&] {
+              if (body->current > 1 ||
+                  !std::isfinite(body->proto->shape.boundRadius) ||
+                  body->proto->shape.boundRadius < 0) {
+                incomplete("child spatial bounds unsupported");
+                return;
+              }
+              for (size_t axis = 0; axis < 3; ++axis) {
+                const float coordinate = body->state[body->current ^ 1].pos[axis];
+                if (!std::isfinite(coordinate)) {
+                  incomplete("child spatial bounds unsupported");
+                  return;
+                }
+                if (body->proto->shape.boundRadius + node.bounds->values[axis + 3] <
+                    std::fabs(coordinate - node.bounds->values[axis]))
+                  return;
+              }
+              if (!(body->flags & 0x40u)) {
+                const auto mask = queryBodyFace(geometry, faceIndex, *body, *node.bounds);
+                if (mask == ParentFaceMask::Rejected)
+                  return;
+                if (mask == ParentFaceMask::Unsupported) {
+                  incomplete("leaf face filter unsupported");
+                  return;
+                }
+              }
+              std::string error;
+              auto face = resolveSpatialGroundFace(resources, node, faceIndex, error);
+              if (!face) {
+                incomplete("ground face unavailable: " + error);
+                return;
+              }
+              if (body->flags & 0x40u) {
+                auto parent = std::shared_ptr<Body>(car, car->root.get());
+                auto parentProto =
+                    std::shared_ptr<const BodyProto>(car, &car->rootPrototype);
+                auto wheel = std::shared_ptr<Body>(car, body);
+                auto wheelProto = std::shared_ptr<const BodyProto>(car, body->proto);
+                auto contact = makeWheelGroundContact(
+                    std::move(face), std::move(parent), std::move(parentProto),
+                    std::move(wheel), std::move(wheelProto), true);
+                if (contact.status == WheelGroundContactStatus::Unsupported)
+                  incomplete(contact.detail);
+                else if (contact.status == WheelGroundContactStatus::Hit)
+                  result.wheels.push_back({body, std::move(contact.contact)});
+                return;
+              }
+              if (body->flags & 0x800u) {
+                incomplete("segment-only child collision unsupported");
+                return;
+              }
+              auto ground = face->bodyOwner();
+              if (!ground) {
+                incomplete("ground body unavailable");
+                return;
+              }
+              const auto& triangle = geometry.triangles[faceIndex];
+              std::array<Vec3, 3> vertices{};
+              for (size_t i = 0; i < 3; ++i) {
+                if (triangle.vertices[i] >= geometry.vertices.size()) {
+                  incomplete("ground face vertex unavailable");
+                  return;
+                }
+                vertices[i] = geometry.vertices[triangle.vertices[i]];
+              }
+              auto retained = std::make_unique<CarGroundFacePair>();
+              if (!createGroundFacePair(*body, ground->body, vertices,
+                                        triangle.normal, retained->pair, error)) {
+                incomplete("ground pair unsupported: " + error);
+                return;
+              }
+              retained->car = car;
+              retained->bodyObservation = car->bodyObservations.at(body);
+              retained->ground = std::move(ground);
+              retained->face = std::move(face);
+              retained->body = body;
+              retained->prototype = body->proto;
+              result.pairs.push_back(std::move(retained));
+            };
+            visitFace();
           }
-          vertices[i] = geometry.vertices[triangle.vertices[i]];
-        }
-        auto retained = std::make_unique<CarGroundFacePair>();
-        if (!createGroundFacePair(*body, ground->body, vertices,
-                                  triangle.normal, retained->pair, error)) {
-          incomplete("ground pair unsupported: " + error);
-          return;
-        }
-        retained->car = car;
-        retained->bodyObservation = car->bodyObservations.at(body);
-        retained->ground = std::move(ground);
-        retained->face = std::move(face);
-        retained->body = body;
-        retained->prototype = body->proto;
-        result.pairs.push_back(std::move(retained));
-      };
-      visit(car->root.get());
-    }
+        };
+    visit(car->root.get(), std::vector<bool>(geometry.triangles.size(), false));
   }
   return result;
 }

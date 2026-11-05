@@ -3702,6 +3702,323 @@
           "equals": false
         }
       ]
+    },
+    {
+      "id": "physics-phase-and900-audit-20261104",
+      "deliverable": "3",
+      "sequence": 29,
+      "scope": "Resumed physics phase repair: guarded64 and scoped900 original-constructor synthetic2048floor body comparisons. Frozen900 body states match but Stock also fails the existing settling/sleep expectation. Retail queue, constructor metadata, activity, FPU mode and complete source reconstruction remain limited; current source requires a new frozen comparison. Earlier256-bound capture failure remains retained. No D3 or product acceptance.",
+      "outcome": "incomplete",
+      "review": "pending",
+      "evidence": {
+        "audit": {
+          "path": "docs/evidence/physics-parity64-20261103.json",
+          "sha256": "9212ec738822a1fc55e2cbf9d6dadba6ce329dec62ba7d33af221b31eb370c8f"
+        },
+        "claims_review": {
+          "path": "docs/evidence/physics900-claims-review-20261104.json",
+          "sha256": "d0c9a68b12b5e814edafb46308a521dd110febe9db2325dcc41a2602a4b699a8"
+        }
+      },
+      "assertions": [
+        {
+          "evidence": "audit",
+          "pointer": "/phase_split_production64/equal",
+          "equals": true
+        },
+        {
+          "evidence": "audit",
+          "pointer": "/scoped900_complete_comparison/equal",
+          "equals": true
+        },
+        {
+          "evidence": "audit",
+          "pointer": "/scoped900_complete_comparison/steps",
+          "equals": 900
+        },
+        {
+          "evidence": "audit",
+          "pointer": "/scoped900_terminal/flags",
+          "equals": 9
+        },
+        {
+          "evidence": "audit",
+          "pointer": "/extended900_attempt/stock_execution_finished",
+          "equals": false
+        }
+      ]
+    },
+    {
+      "id": "physics900-independent-raw-audit-20261104",
+      "deliverable": "3",
+      "sequence": 30,
+      "scope": "Independent raw audit supports only conditional frozen900body equality and terminal failure of unchanged settling/sleep assertions, resolving narrow Jev lowconfidence questions without reroll. Subsequent original900observer independently repeats everybody snapshot and captures activity/world/shape metadata. Raw adapter passed:false persists despite execution_finishedtrue/exit0/preservation terminal checks. Actual retailqueue/physicsworkerFPU/current-source and whole-game acceptance remain missing.",
+      "outcome": "incomplete",
+      "review": "accepted",
+      "evidence": {
+        "independent": {
+          "path": "docs/evidence/physics900-independent-audit-20261104.json",
+          "sha256": "3a11235bf52f978e9bcd171d8450e90e217365ce4a277d3c410c64bee5ff43d3"
+        },
+        "metadata": {
+          "path": "docs/evidence/physics-fixture-metadata-20261103.json",
+          "sha256": "01f8c54d47e6fe83bdb54b35c3c27a02a003e8e5d215da999fa15b63f2d9976d"
+        }
+      },
+      "assertions": [
+        {
+          "evidence": "independent",
+          "pointer": "/independent_raw_checks/all_states_flags_current_equal",
+          "equals": true
+        },
+        {
+          "evidence": "independent",
+          "pointer": "/terminal/speed_less_than_threshold",
+          "equals": false
+        },
+        {
+          "evidence": "independent",
+          "pointer": "/terminal/asleep_flag_present",
+          "equals": false
+        },
+        {
+          "evidence": "independent",
+          "pointer": "/terminal/original_test/assertions_unchanged",
+          "equals": true
+        }
+      ]
+    },
+    {
+      "id": "resumed-physics-full-gate-129of130-20261104",
+      "deliverable": "8",
+      "sequence": 17,
+      "scope": "Complete resumed gate invocation failed at original object settling speed assertion:129/130CTest pass including fullcarworldtest. Trackedsourcepatch unchanged across invocation; later tools/check.sh stages unexecuted. No assertion/tolerance weakened; no completephysics/productacceptance.",
+      "outcome": "failed",
+      "review": "pending",
+      "evidence": {
+        "result": {
+          "path": "docs/evidence/physics-gate-20261104-result.json",
+          "sha256": "71acb809e0afd97ecc88c130f725d4de1707f7566a4a52ce4ea5196dce76dc3a"
+        }
+      },
+      "assertions": [
+        {
+          "evidence": "result",
+          "pointer": "/exit_code",
+          "equals": 8
+        },
+        {
+          "evidence": "result",
+          "pointer": "/ctest/passed",
+          "equals": 129
+        },
+        {
+          "evidence": "result",
+          "pointer": "/ctest/failed",
+          "equals": [
+            "object_world_step_unit"
+          ]
+        },
+        {
+          "evidence": "result",
+          "pointer": "/source_patch_unchanged",
+          "equals": true
+        }
+      ]
+    },
+    {
+      "id": "physics-current900-source-reconstructed-20261104",
+      "deliverable": "3",
+      "sequence": 31,
+      "scope": "Current rebuilt Port900 matches independently repeated conditional Stock all3602bodyrecords, activity andruntimegravity/airdensity. All256 trackedsource/config files reconstruct from frozenHEAD+patch and match afterexecution. Rootvolume8vs4.18879, childCreatedflag, groundfriction andsubstitutedretailqueue remain explicit metadata/scope gaps. Diagnostic excludes unchangedsettlingassertions; actual fullgate remains129/130failed.",
+      "outcome": "incomplete",
+      "review": "pending",
+      "evidence": {
+        "current": {
+          "path": "docs/evidence/physics-current900-20261103.json",
+          "sha256": "0d3f1d9aa43357a5ebf53e7a29aac09bf43277c6f86d003e906bb1a183457b7e"
+        }
+      },
+      "assertions": [
+        {
+          "evidence": "current",
+          "pointer": "/body_comparison/equal",
+          "equals": true
+        },
+        {
+          "evidence": "current",
+          "pointer": "/body_comparison/steps",
+          "equals": 900
+        }
+      ]
+    },
+    {
+      "id": "stock-vision10-passive-expiry-20261104",
+      "deliverable": "4",
+      "sequence": 12,
+      "scope": "New10-second request lifetimes and passive screenshots observed in isolated Stock. All3 requests expired without consumed responses;3 passive frames exposed loading-to-inventory transition. Scenario failed before purchase; final preservation/accounting verified. Scoped independent review resolves Jev low confidence without reroll; no paired or full-game acceptance.",
+      "outcome": "failed",
+      "review": "pending",
+      "evidence": {
+        "run": {
+          "path": "docs/evidence/stock-vision10-20261104.json",
+          "sha256": "5e79e768fee8a2049c14d60b2b2f56fd50ecdc802c0dd60021e03fc2ab8fa4e5"
+        },
+        "review": {
+          "path": "docs/evidence/stock-vision10-review-20261104.json",
+          "sha256": "223cc3c9c63614a72f263e1078e204f4b9dd5ca4836acd1aad16f2e69a4c9b5e"
+        }
+      },
+      "assertions": [
+        {
+          "evidence": "run",
+          "pointer": "/result/passed",
+          "equals": false
+        },
+        {
+          "evidence": "run",
+          "pointer": "/passive_count",
+          "equals": 3
+        },
+        {
+          "evidence": "run",
+          "pointer": "/result/artifact_finalization",
+          "equals": "verified"
+        }
+      ]
+    },
+    {
+      "id": "stock-vision10-preparation-refusal-20261104",
+      "deliverable": "4",
+      "sequence": 13,
+      "scope": "Private game copy stopped by unchanged periodic child-directory retry bound; final parent hash deadline also failed. No game frames, vision requests or reviewer responses. Source preservation does not repair failed final artifact accounting; preparation requires diagnosis before another attempt.",
+      "outcome": "failed",
+      "review": "pending",
+      "evidence": {
+        "failure": {
+          "path": "docs/evidence/stock-vision10-preparation-failure-20261104.json",
+          "sha256": "7b1015927f638de235725be0a0decfc577a52a6ae824ee47230f165cae880532",
+          "bytes": 5570
+        }
+      },
+      "assertions": [
+        {
+          "evidence": "failure",
+          "pointer": "/frames",
+          "equals": 0
+        },
+        {
+          "evidence": "failure",
+          "pointer": "/vision_requests",
+          "equals": 0
+        },
+        {
+          "evidence": "failure",
+          "pointer": "/result/artifact_finalization",
+          "equals": "failed"
+        }
+      ]
+    },
+    {
+      "id": "physics-deep-lint-pass-gate-open-20261104",
+      "deliverable": "8",
+      "sequence": 18,
+      "scope": "Current staged native deep lint passes all admitted compile variants after explicit narrowing fixes and edited-range formatter repair. Latest complete integration gate remains failed at the original object settling assertion; later gate stages unexecuted. No whole-game acceptance.",
+      "outcome": "failed",
+      "review": "pending",
+      "evidence": {
+        "deep_lint": {
+          "path": "docs/evidence/physics-deep-lint-20261104.json",
+          "sha256": "a910eaa81b1c00bbad979352e05b1c4b45cb1a8bc3e8279459875bf28f37737d"
+        },
+        "latest_gate": {
+          "path": "docs/evidence/physics-gate-20261104-result.json",
+          "sha256": "71acb809e0afd97ecc88c130f725d4de1707f7566a4a52ce4ea5196dce76dc3a"
+        }
+      },
+      "assertions": [
+        {
+          "evidence": "deep_lint",
+          "pointer": "/exit_code",
+          "equals": 0
+        },
+        {
+          "evidence": "deep_lint",
+          "pointer": "/selected_source_files",
+          "equals": 38
+        },
+        {
+          "evidence": "latest_gate",
+          "pointer": "/exit_code",
+          "equals": 8
+        }
+      ]
+    },
+    {
+      "id": "observability-retained-failure-audit-20261104",
+      "deliverable": "8",
+      "sequence": 19,
+      "scope": "Codebase-wide boundary inventory and prioritized shared observability changes, with actual retained fault/retrieval controls. Full integration gate remains failed at original object settling; uninspected/inaccessible areas and unexecuted checks are explicit. No product or deliverable completion.",
+      "outcome": "incomplete",
+      "review": "escalated",
+      "evidence": {
+        "audit": {
+          "path": "docs/evidence/observability-20261104.json",
+          "sha256": "4680577628eeca5d95e34123845ac7f62efe5fe3f1be7e49bdf1ea12ae32dcb4"
+        }
+      },
+      "assertions": [
+        {
+          "evidence": "audit",
+          "pointer": "/schema",
+          "equals": 1
+        },
+        {
+          "evidence": "audit",
+          "pointer": "/codebase_wide_complete",
+          "equals": false
+        },
+        {
+          "evidence": "audit",
+          "pointer": "/product_completion",
+          "equals": false
+        },
+        {
+          "evidence": "audit",
+          "pointer": "/validation/gate/exit_code",
+          "equals": 8
+        },
+        {
+          "evidence": "audit",
+          "pointer": "/validation/gate/ctests_total",
+          "equals": 131
+        },
+        {
+          "evidence": "audit",
+          "pointer": "/validation/gate/passed",
+          "equals": 130
+        },
+        {
+          "evidence": "audit",
+          "pointer": "/validation/gate/post_ctest_unexecuted",
+          "equals": true
+        },
+        {
+          "evidence": "audit",
+          "pointer": "/validation/incident/tests",
+          "equals": 14
+        },
+        {
+          "evidence": "audit",
+          "pointer": "/validation/incident/skipped",
+          "equals": 0
+        },
+        {
+          "evidence": "audit",
+          "pointer": "/review/automatic_approval",
+          "equals": false
+        }
+      ]
     }
   ]
 }

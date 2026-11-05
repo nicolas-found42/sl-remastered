@@ -13,6 +13,7 @@
 #include "physics_compound.hpp"
 #include "physics_compound_step.hpp"
 #include "resource_world.hpp"
+#include "run_log.hpp"
 #include "world_model.hpp"
 
 #include <cassert>
@@ -23,6 +24,19 @@
 #include <string>
 
 int main() {
+  const auto dumpContacts = [] {
+    for (const char* name : {"cartrace", "contacttrace"}) {
+      const auto* trace = runlog::traceChannel(name);
+      if (!trace)
+        continue;
+      const auto end = trace->written();
+      const uint64_t limit = std::strcmp(name, "cartrace") == 0 ? 2 : 24;
+      const auto begin = end > limit ? end - limit : 0;
+      for (auto index = begin; index < end; ++index)
+        if (const auto* line = trace->line(index))
+          std::fprintf(stderr, "%s\n", line);
+    }
+  };
   // Same pack layout as car_runtime_test: the installed 2005 tree, whose
   // slots the resource ids are expressed against (first-seen order via
   // resolveLiteral, not the hardcoded production slots).
@@ -257,6 +271,8 @@ int main() {
   assert(std::fabs(root.state[root.current].vel[1]) < 0.5f);
   // The hard landing must have driven the chassis into the plane, leaving
   // retained pairs: proof the collector path (not just wheel witnesses) ran.
+  if (stepper.debugPairCount() == 0)
+    dumpContacts();
   assert(stepper.debugPairCount() > 0);
 
   // --- Failure/retry: a failed step must not corrupt the collector --------
@@ -361,8 +377,16 @@ int main() {
     const auto parkedFlags = parkedRoot.flags;
     const float timeBefore = world.physicsTime();
 
-    for (int i = 0; i < 60; ++i)
+    bool reportedParkedWake = false;
+    for (int i = 0; i < 60; ++i) {
       assert(stepper.step(1.0f / 60.0f, error) && error.empty());
+      if (!reportedParkedWake && parkedRoot.flags != parkedFlags) {
+        reportedParkedWake = true;
+        std::fprintf(stderr, "parked transition step=%d flags=%x->%x current=%u->%u\n",
+                     i, parkedFlags, parkedRoot.flags, parkedCurrent, parkedRoot.current);
+        dumpContacts();
+      }
+    }
 
     // The awake car was integrated: it fell from the lifted pose.
     assert(settledRoot.state[settledRoot.current].pos[1] < 2.0f);
@@ -422,8 +446,14 @@ int main() {
     assert(stepper.step(stepSeconds, error) && error.empty());
     assert(stepper.debugDynamicPairCount() == 0);
     placeImpact(2.2f, 3);
-    for (int i = 0; i < 25; ++i)
-      assert(stepper.step(stepSeconds, error) && error.empty());
+    for (int i = 0; i < 25; ++i) {
+      const bool advanced = stepper.step(stepSeconds, error);
+      if (!advanced) {
+        std::fprintf(stderr, "dynamic Car approach %d step %d: %s\n", approach, i, error.c_str());
+        dumpContacts();
+      }
+      assert(advanced && error.empty());
+    }
     const auto& a = *impactA->carInstance->carPhysics->root;
     const auto& b = *impactB->carInstance->carPhysics->root;
     const auto& sa = a.state[a.current];

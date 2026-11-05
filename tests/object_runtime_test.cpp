@@ -508,6 +508,28 @@ int main() {
       }
     }
   }
+  {
+    // Original 00465bd0 creates a mass-1 unit Box aggregate placeholder.
+    // 0049a050 changes its mass/bounds but preserves the constructor volume;
+    // the finalized root volume is neither a mesh fallback nor child volume.
+    auto aggregate = object::ObjectPhysics::create();
+    object_config::ObjectSlot child;
+    child.kind = object_config::SlotKind::Body;
+    child.shape.kind = object_config::ShapeKind::Box;
+    child.shape.mass = 20;
+    child.shape.params = {0.25f, 0.25f, 0.25f};
+    CHECK(aggregate->addBody(child, 0, nullptr, error) == 0);
+    auto finalized = aggregate->instantiate({2.5f, 2.5f, 0}, {0, 0, 0}, error);
+    CHECK(finalized.has_value() && error.empty());
+    if (finalized) {
+      const auto& root = *finalized->root->proto;
+      CHECK(root.volume == 8.0f);
+      CHECK(root.shape.volume == 8.0f);
+      CHECK(finalized->children[0]->proto->volume == 0.125f);
+      CHECK(root.invMass == 0.05f);
+      CHECK(root.shape.type == physics::ShapeType::Mesh);
+    }
+  }
   auto physics = object::ObjectPhysics::create();
   object_config::ObjectSlot bad;
   bad.kind = object_config::SlotKind::Body;

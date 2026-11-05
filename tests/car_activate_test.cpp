@@ -185,7 +185,7 @@ int main() {
       renderBody.kind = CarBodyRecord::Render;
       renderBody.renderResource = entry.first;
       for (const auto c : entry.second)
-        renderBody.colors.push_back(c);
+        renderBody.colors.push_back(static_cast<int32_t>(c));
       script->car->config.bodies.push_back(renderBody);
     }
     CarBodyRecord steeringMount;

@@ -11,10 +11,15 @@
 #include <unistd.h>
 #include <utility>
 
+namespace {
+std::atomic<uint64_t> nextDiagnosticScope{0};
+}
+
 FileState::FileState(std::filesystem::path dataRoot,
                      std::filesystem::path referenceRoot,
                      std::filesystem::path gameRoot)
     : gameRoot_(std::move(gameRoot)), dataRoot_(std::move(dataRoot)), referenceRoot_(std::move(referenceRoot)) {
+  diagnosticScope_ = nextDiagnosticScope.fetch_add(1, std::memory_order_relaxed) + 1;
 }
 
 bool FileState::exists(const std::string& name, bool& result,
@@ -92,23 +97,33 @@ bool FileState::exists(const std::string& name, bool& result,
 FileOpenResult FileState::openRead(const VmObject* owner,
                                    const std::string& name,
                                    std::string& error) {
+  runlog::Operation operation(runlog::OperationKind::FileRead, 0, diagnosticScope_);
+  auto observed = [&](FileOpenResult result) {
+    const auto outcome = result == FileOpenResult::opened    ? runlog::OperationResult::Ok
+                         : result == FileOpenResult::missing ? runlog::OperationResult::Missing
+                                                             : runlog::OperationResult::Rejected;
+    operation.finish(outcome, result == FileOpenResult::opened
+                                  ? static_cast<uint32_t>(files_.at(owner).handle)
+                                  : 0);
+    return result;
+  };
   error.clear();
   if (!owner) {
     error = "missing file owner";
-    return FileOpenResult::error;
+    return observed(FileOpenResult::error);
   }
   files_.erase(owner);
   GameFile file;
   if (!file.open(dataRoot_, referenceRoot_, name, error))
-    return error == "save file not found" ? FileOpenResult::missing
-                                          : FileOpenResult::error;
+    return observed(error == "save file not found" ? FileOpenResult::missing
+                                                   : FileOpenResult::error);
   if (nextHandle_ > INT32_MAX) {
     error = "file handle table exhausted";
-    return FileOpenResult::error;
+    return observed(FileOpenResult::error);
   }
   files_.emplace(owner,
                  Entry{std::move(file), static_cast<int32_t>(nextHandle_++)});
-  return FileOpenResult::opened;
+  return observed(FileOpenResult::opened);
 }
 
 bool FileState::readInt(const VmObject* owner, int32_t& value,
@@ -242,10 +257,20 @@ bool FileState::movePath(const std::string& from, const std::string& to,
 FileOpenResult FileState::openWrite(const VmObject* owner,
                                     const std::string& name,
                                     std::string& error) {
+  runlog::Operation operation(runlog::OperationKind::FileWrite, 0, diagnosticScope_);
+  auto observed = [&](FileOpenResult result) {
+    const auto outcome = result == FileOpenResult::opened    ? runlog::OperationResult::Ok
+                         : result == FileOpenResult::missing ? runlog::OperationResult::Missing
+                                                             : runlog::OperationResult::Rejected;
+    operation.finish(outcome, result == FileOpenResult::opened
+                                  ? static_cast<uint32_t>(writers_.at(owner).handle)
+                                  : 0);
+    return result;
+  };
   error.clear();
   if (!owner) {
     error = "missing file owner";
-    return FileOpenResult::error;
+    return observed(FileOpenResult::error);
   }
   // Stock File.open (FUN_00485440) retires a previous handle with
   // FUN_0054cca0, which closes it and returns void: no failure is reported and
@@ -259,7 +284,7 @@ FileOpenResult FileState::openWrite(const VmObject* owner,
       name.front() == '\\' || name.find(':') != std::string::npos ||
       name.find('\0') != std::string::npos) {
     error = "invalid save path";
-    return FileOpenResult::error;
+    return observed(FileOpenResult::error);
   }
   std::string normalized = name;
   std::replace(normalized.begin(), normalized.end(), '\\', '/');
@@ -267,7 +292,7 @@ FileOpenResult FileState::openWrite(const VmObject* owner,
   auto part = relative.begin();
   if (part == relative.end() || *part != "save" || ++part == relative.end()) {
     error = "File.open(write) path is not beneath save";
-    return FileOpenResult::error;
+    return observed(FileOpenResult::error);
   }
   // Stock File.open write mode (FUN_00485440 -> FUN_0054caf0) performs no
   // dot-segment validation; the OS resolves "." / "..". Resolve through
@@ -284,31 +309,31 @@ FileOpenResult FileState::openWrite(const VmObject* owner,
   const auto ref = std::filesystem::canonical(referenceRoot_, ec);
   if (ec) {
     error = "invalid reference root";
-    return FileOpenResult::error;
+    return observed(FileOpenResult::error);
   }
   const auto root = std::filesystem::canonical(dataRoot_, ec);
   if (ec || within(ref, root)) {
     error = "invalid or reference data root";
-    return FileOpenResult::error;
+    return observed(FileOpenResult::error);
   }
   const auto save = std::filesystem::weakly_canonical(root / "save", ec);
   if (ec || !within(root, save) || within(ref, save)) {
     error = "invalid save directory";
-    return FileOpenResult::error;
+    return observed(FileOpenResult::error);
   }
   const auto path = std::filesystem::weakly_canonical(root / relative, ec);
   if (ec || !within(save, path) || within(ref, path)) {
     error = "File.open(write) path escapes data root";
-    return FileOpenResult::error;
+    return observed(FileOpenResult::error);
   }
   if (nextHandle_ > INT32_MAX) {
     error = "file handle table exhausted";
-    return FileOpenResult::error;
+    return observed(FileOpenResult::error);
   }
   std::filesystem::create_directories(path.parent_path(), ec);
   if (ec) {
     error = "cannot create save directory: " + ec.message();
-    return FileOpenResult::error;
+    return observed(FileOpenResult::error);
   }
   // Build everything that can throw before the descriptor exists, then let the
   // Writer take ownership of it: nothing after a successful ::open can strand
@@ -332,11 +357,11 @@ FileOpenResult FileState::openWrite(const VmObject* owner,
              0666);
   if (writer.fd < 0) {
     // Stock logs a Save error and File.open reports failure (returns 0).
-    return FileOpenResult::missing;
+    return observed(FileOpenResult::missing);
   }
   writer.handle = static_cast<int32_t>(nextHandle_++);
   writers_.emplace(owner, std::move(writer));
-  return FileOpenResult::opened;
+  return observed(FileOpenResult::opened);
 }
 
 bool FileState::writeBytes(const VmObject* owner, const void* data,
@@ -391,10 +416,15 @@ FileState::readPacks(const VmObject* owner) const {
 FileState::~FileState() = default;
 
 std::string FileState::close(const VmObject* owner) {
+  const uint32_t observedHandle = static_cast<uint32_t>(handle(owner).value_or(0));
+  runlog::Operation operation(runlog::OperationKind::FileClose, observedHandle, diagnosticScope_);
   files_.erase(owner);
   const auto found = writers_.find(owner);
-  if (found == writers_.end())
+  if (found == writers_.end()) {
+    operation.finish(observedHandle ? runlog::OperationResult::Ok
+                                    : runlog::OperationResult::NoHandle);
     return {};
+  }
   // FUN_00485870 type 2: unsaved-resource count (0: unsaved resources are an
   // explicit gap and refused at write time), pack count, pack records, then
   // the trailer size excluding the size field itself.
@@ -447,6 +477,9 @@ std::string FileState::close(const VmObject* owner) {
   // FUN_00485870), so the caller needs the path that failed.
   if (!failure.empty())
     failure += ": " + writer.path.string();
+  operation.finish(failure.empty() ? runlog::OperationResult::Ok
+                                   : runlog::OperationResult::IoError,
+                   observedHandle, written);
   return failure;
 }
 

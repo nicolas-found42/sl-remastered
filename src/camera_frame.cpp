@@ -82,7 +82,7 @@ bool CameraFrame::draw(WorldNode& cameraInstance, const ViewportInstance& viewpo
 	}
 	int width, height;
 	if (!renderer_.outputSize(width, height, error)) return false;
-	const float pixelWidth = viewport.width * width, pixelHeight = viewport.height * height;
+  const float pixelWidth = viewport.width * static_cast<float>(width), pixelHeight = viewport.height * static_cast<float>(height);
 	if (!std::isfinite(pixelWidth) || !std::isfinite(pixelHeight) || pixelWidth <= 0 || pixelHeight <= 0) {
 		error = "camera frame: invalid viewport"; return false;
 	}

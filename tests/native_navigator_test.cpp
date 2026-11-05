@@ -90,7 +90,7 @@ int main() {
     SceneRenderInstance instance(&type);
     instance.setNavigatorCameraBone(100.0f, 200.0f, 0.0f);
     const auto& matrix = instance.boneMatrix();
-    const float s1 = std::sin(-1.5);
+    const float s1 = static_cast<float>(std::sin(-1.5));
     const float c1 = static_cast<float>(std::cos(-1.5));
     // basis[2] = cos(pitch) sin(yaw), basis[6] = -sin(pitch),
     // basis[10] = cos(pitch) cos(yaw).

@@ -584,6 +584,12 @@ target_link_libraries(run_log_test PRIVATE sl_run_log)
 add_test(NAME run_log_unit COMMAND run_log_test)
 set_tests_properties(run_log_unit PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 
+add_executable(diagnostic_operations_test tests/diagnostic_operations_test.cpp)
+target_link_libraries(diagnostic_operations_test PRIVATE sl_run_log sl_data)
+target_compile_options(diagnostic_operations_test PRIVATE -fsanitize=address,undefined -fno-sanitize-recover=undefined)
+target_link_options(diagnostic_operations_test PRIVATE -fsanitize=address,undefined)
+add_test(NAME diagnostic_operations_unit COMMAND diagnostic_operations_test)
+
 # Shared by the game-frame renderer and standalone rasterizer tools.
 target_sources(sl_data PRIVATE src/raster3d.cpp)
 target_sources(sl_data PRIVATE src/scene_raster3d.cpp)

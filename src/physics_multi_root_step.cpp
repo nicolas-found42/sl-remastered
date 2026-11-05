@@ -2,6 +2,7 @@
 #include "physics_compound_step.hpp"
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <cstdio>
 #include <set>
 
@@ -44,8 +45,8 @@ bool validate(const std::vector<BodyTree>& roots, std::string& error) {
           return false;
         }
       } else if (!(b->flags & kBodyChild) || !b->attachment ||
-                 std::find(tree.begin(), tree.begin() + i,
-                           b->attachment->parent) == tree.begin() + i) {
+                 std::find(tree.begin(), tree.begin() + static_cast<std::ptrdiff_t>(i),
+                           b->attachment->parent) == tree.begin() + static_cast<std::ptrdiff_t>(i)) {
         error = "multi-root: invalid child";
         return false;
       }
@@ -90,8 +91,8 @@ bool discoverDynamicRootPairs(const World& world,
     if (roots[i].empty() || !roots[i][0] || roots[i][0] != world.bodies[i] ||
         !roots[i][0]->proto || roots[i][0]->current > 1 ||
         roots[i][0]->attachment || (roots[i][0]->flags & kBodyChild) ||
-        std::find(world.bodies.begin(), world.bodies.begin() + i,
-                  roots[i][0]) != world.bodies.begin() + i) {
+        std::find(world.bodies.begin(), world.bodies.begin() + static_cast<std::ptrdiff_t>(i),
+                  roots[i][0]) != world.bodies.begin() + static_cast<std::ptrdiff_t>(i)) {
       error = "dynamic pairs: invalid registration";
       return false;
     }
@@ -292,8 +293,8 @@ FreeBodyStepResult stepMultiRootWorld(World& world,
     const auto* s = work.suspensions[i];
     if (!s || !isRegistered(s->wheelBody) ||
         (s->contactBody && !usableContactBody(s->contactBody)) ||
-        std::find(work.suspensions.begin(), work.suspensions.begin() + i, s) !=
-            work.suspensions.begin() + i)
+        std::find(work.suspensions.begin(), work.suspensions.begin() + static_cast<std::ptrdiff_t>(i), s) !=
+            work.suspensions.begin() + static_cast<std::ptrdiff_t>(i))
       return fail("multi-root: unsupported suspension");
   }
   // A follow's look/move targets are only read (pose copies below), never
@@ -458,6 +459,78 @@ FreeBodyStepResult stepMultiRootWorld(World& world,
       // FUN_004a35d0 admit new pending impacts; retained resting rows that
       // keep correcting do not extend it.
       bool admittedNew = false;
+      // FUN_004a3900: compute all resting RHS/diagonal results before
+      // applying any force. Pending impacts (004a35d0) follow this batch.
+      for (const auto& contact : contacts) {
+        if (!usableContactBody(contact.a) || !usableContactBody(contact.b)) {
+          rollback();
+          return fail("multi-root: unsupported contact body");
+        }
+      }
+      if (solveRestingContacts(contacts, contactWorld) < 0) {
+        rollback();
+        return fail("multi-root: resting contact unsupported");
+      }
+      // 004a2d10 wake band, applied after the row solve as in 004a5190: the
+      // predicted-state flags drop here, not before FUN_004a3900.
+      for (Body* body : woken)
+        body->state[body->current ^ 1].stepFlags &= ~1u;
+      // 004a5190 (all.c 121090-121110): when 004a2d10 cleared the settled
+      // flag, the +0x10 slot (00496fe0 -> 00496050) sweeps every retained
+      // record (5 < state < 8). Resting records receive the drive support
+      // ((0.03-sep)*10 force when the pair is not both predicted) and the
+      // positional shift; admitted impact records also receive their state-6
+      // impulse here. Only 004a35d0 changes consumed state 6 to state 7.
+      // Stock contact records never enter the world+0xb8 row list,
+      // so FUN_004a3900 applies nothing for them in this adapter.
+      bool swept = false;
+      if (!woken.empty()) {
+        for (auto& contact : contacts) {
+          // Split collection returns only admitted rows (states 6 and 7).
+          // Legacy mixed collection also returns unadmitted candidates.
+          if (!contact.resting && !work.gatherPendingContacts)
+            continue;
+          if (!usableContactBody(contact.a) || !usableContactBody(contact.b)) {
+            rollback();
+            return fail("multi-root: unsupported contact body");
+          }
+          const int result = correctDirectContact(contact, contactWorld);
+          if (result < 0) {
+            rollback();
+            return fail("multi-root: contact correction unsupported");
+          }
+          contact.processed = true;
+          contact.correctionResult = result;
+          swept |= result != 0;
+        }
+      }
+      // FUN_004a5190 (LAB_004a53cb, all.c 121096-121147): the pending stage
+      // (004a2540 discovery, 004a35d0 state-6 correction) runs only while the
+      // settled flag is still set -- 004a2d10 woke nothing, or it woke
+      // bodies but the +0x10 sweep re-settled (sum == 0). When the sweep
+      // corrected something the pass jumps straight to re-prediction; the
+      // count-19 escape (004a53c5) forces the pending stage on the last
+      // pass. 004a35d0 admitting a new impact is the only result that
+      // clears the flag and extends the loop.
+      const bool runPending =
+          woken.empty() || !swept || iteration == 18;
+      if (runPending && work.gatherPendingContacts) {
+        // FUN_004a5190 publishes the retained sweep before 00498dd0 and
+        // 004a2540 discover/admit new contacts. Their prediction invalidation
+        // must not be mistaken for a retained-contact wake in this pass.
+        if (work.finishContacts)
+          work.finishContacts(contacts);
+        for (auto& contact : contacts) {
+          contact.processed = false;
+          contact.correctionResult = 0;
+        }
+        if (!work.gatherPendingContacts(contacts, error)) {
+          rollback();
+          if (error.empty())
+            error = "multi-root: incomplete pending collision traversal";
+          return FreeBodyStepResult::Unsupported;
+        }
+      }
       // Contacts that may be corrected in this pass (indexes into `contacts`).
       std::vector<bool> allowed(contacts.size(), true);
       if (work.onePendingContactPerRoot) {
@@ -504,58 +577,6 @@ FreeBodyStepResult stepMultiRootWorld(World& world,
           allowed[i] = true;
         }
       }
-      // FUN_004a3900: compute all resting RHS/diagonal results before
-      // applying any force. Pending impacts (004a35d0) follow this batch.
-      for (const auto& contact : contacts) {
-        if (!usableContactBody(contact.a) || !usableContactBody(contact.b)) {
-          rollback();
-          return fail("multi-root: unsupported contact body");
-        }
-      }
-      if (solveRestingContacts(contacts, contactWorld) < 0) {
-        rollback();
-        return fail("multi-root: resting contact unsupported");
-      }
-      // 004a2d10 wake band, applied after the row solve as in 004a5190: the
-      // predicted-state flags drop here, not before FUN_004a3900.
-      for (Body* body : woken)
-        body->state[body->current ^ 1].stepFlags &= ~1u;
-      // 004a5190 (all.c 121090-121110): when 004a2d10 cleared the settled
-      // flag, the +0x10 slot (00496fe0 -> 00496050) sweeps every retained
-      // record (5 < state < 8). Resting records receive the drive support
-      // ((0.03-sep)*10 force when the pair is not both predicted) and the
-      // positional shift; impact records are left to the 004a35d0 stage
-      // below. Stock contact records never enter the world+0xb8 row list,
-      // so FUN_004a3900 applies nothing for them in this adapter.
-      bool swept = false;
-      if (!woken.empty()) {
-        for (auto& contact : contacts) {
-          if (!contact.resting)
-            continue;
-          if (!usableContactBody(contact.a) || !usableContactBody(contact.b)) {
-            rollback();
-            return fail("multi-root: unsupported contact body");
-          }
-          const int result = correctDirectContact(contact, contactWorld);
-          if (result < 0) {
-            rollback();
-            return fail("multi-root: contact correction unsupported");
-          }
-          contact.processed = true;
-          contact.correctionResult = result;
-          swept |= result != 0;
-        }
-      }
-      // FUN_004a5190 (LAB_004a53cb, all.c 121096-121147): the pending stage
-      // (004a2540 discovery, 004a35d0 state-6 correction) runs only while the
-      // settled flag is still set -- 004a2d10 woke nothing, or it woke
-      // bodies but the +0x10 sweep re-settled (sum == 0). When the sweep
-      // corrected something the pass jumps straight to re-prediction; the
-      // count-19 escape (004a53c5) forces the pending stage on the last
-      // pass. 004a35d0 admitting a new impact is the only result that
-      // clears the flag and extends the loop.
-      const bool runPending =
-          woken.empty() || !swept || iteration == 18;
       for (unsigned stage = 1; stage < 2 && runPending; ++stage) {
         // The shipped count-19 escape (004a53c5 -> 004a53cb) still
         // discovers new impacts even when retained rows keep correcting.

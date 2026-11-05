@@ -56,12 +56,13 @@ bool prepareGameApplicationPaths(const std::filesystem::path& resources,
     return false;
   }
   fs::create_directories(save, ec);
-  if (!ec)
-    fs::create_directories(logs, ec);
   if (ec) {
     error = "cannot prepare per-user state: " + ec.message();
     return false;
   }
+  // Save storage is required; diagnostic storage is best effort. The recorder
+  // reports an unavailable log directory without blocking application startup.
+  fs::create_directories(logs, ec);
   out = {game, data, logs, cursors};
   return true;
 }

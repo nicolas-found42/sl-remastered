@@ -278,9 +278,9 @@ cameraViewportPoint(const std::array<float, 3> &point,
       point[1] > 1.0f || point[2] < 0.0f || point[2] > 1.0f)
     return std::nullopt;
   const float x =
-      (viewport.left + (point[0] + 1.0f) * 0.5f * viewport.width) * outputWidth;
+      (viewport.left + (point[0] + 1.0f) * 0.5f * viewport.width) * static_cast<float>(outputWidth);
   const float y = (viewport.top + (1.0f - point[1]) * 0.5f * viewport.height) *
-                  outputHeight;
+                  static_cast<float>(outputHeight);
   if (!std::isfinite(x) || !std::isfinite(y))
     return std::nullopt;
   return std::array<float, 2>{x, y};
@@ -2082,6 +2082,7 @@ bool GameWorld::stepRegisteredCars(float seconds, const LiveCarStepHooks &hooks,
   work.contacts = static_cast<bool>(hooks.gatherContacts);
   work.wheelConstraints = !awakeSuspensions.empty();
   work.gatherContacts = hooks.gatherContacts;
+  work.gatherPendingContacts = hooks.gatherPendingContacts;
   work.finishContacts = hooks.finishContacts;
   work.onePendingContactPerRoot = hooks.onePendingContactPerRoot;
   work.beforePrediction = hooks.beforePrediction;

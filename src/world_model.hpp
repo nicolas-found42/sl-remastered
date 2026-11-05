@@ -24,11 +24,15 @@ struct GroundRuntime;
 // Per-frame work a car needs inside the world step, in stock order: callbacks
 // (controls, drivetrain, tires) before prediction, then collision traversal
 // that selects wheel contacts into the suspensions and returns the body
-// contacts. Suspension records must stay valid for the whole call.
+// contacts. The optional pending callback separates discovery/admission from
+// retained refresh and its correction sweep. Suspension records must stay valid
+// for the whole call.
 struct LiveCarStepHooks {
   std::function<bool(std::string &)> beforePrediction;
   std::function<bool(std::vector<physics::DirectContact> &, std::string &)>
       gatherContacts;
+  std::function<bool(std::vector<physics::DirectContact>&, std::string&)>
+      gatherPendingContacts;
   std::function<void(const std::vector<physics::DirectContact> &)>
       finishContacts;
   std::vector<physics::SuspensionUpdate *> suspensions;
@@ -664,6 +668,8 @@ public:
   bool directCameraFollowReady(const CameraDeviceResources &camera,
                                const char **block = nullptr);
   float physicsTime() const { return physicsWorld_.time; }
+  // Read-only runtime settings for diagnostics; borrowed until this world dies.
+  const physics::WorldParams& physicsParameters() const { return physicsWorld_.params; }
   // Stock player getInfo(0x43): normalized sampled value for axes 1..75.
   // nullopt means the target, axis-zero scratch value, or input mode is
   // unsupported.

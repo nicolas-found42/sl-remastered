@@ -149,7 +149,8 @@ WheelGroundContacts collectWheelGroundContacts(
 struct CarPhysics;
 struct CarBodyObservation;
 struct GroundRuntime;
-// Owns the ground face and car; observation detects part removal/reindexing.
+// A geometry candidate, not an admitted contact. Owns the ground face and car;
+// observation detects part removal/reindexing. CarWorldStepper owns admission.
 // Check valid() before accessing pair after any world or compound mutation.
 struct CarGroundFacePair {
   std::shared_ptr<CarPhysics> car;
@@ -159,12 +160,6 @@ struct CarGroundFacePair {
   physics::Body *body = nullptr;
   const physics::BodyProto *prototype = nullptr;
   physics::GroundFacePair pair;
-  // 004a35d0 corrects only state-6 contacts and moves them to state 7;
-  // state-7 contacts are never re-corrected. Each retained pair therefore
-  // offers exactly one correction in its lifetime. (The separate expiry
-  // stamp in 004b4250's record walk is not ported; the seen-based cleanup
-  // drops departed pairs.)
-  bool correctedOnce = false;
   bool valid() const;
 };
 struct CarWheelGroundHit {

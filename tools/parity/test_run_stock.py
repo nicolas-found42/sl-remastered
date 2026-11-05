@@ -1,5 +1,6 @@
 """Counterfactual evidence checks, not fabricated Stock execution evidence."""
 import copy
+import contextlib
 import json
 import importlib.util
 from pathlib import Path
@@ -7,6 +8,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 spec = importlib.util.spec_from_file_location('run_stock', Path(__file__).with_name('run_stock.py'))
 stock = importlib.util.module_from_spec(spec)
@@ -14,6 +16,70 @@ spec.loader.exec_module(stock)
 
 
 class StockEvidenceTest(unittest.TestCase):
+    @unittest.skipUnless(sys.platform == 'darwin', 'APFS clone adapter requires Darwin cp -c')
+    def test_bounded_clone_keeps_bytes_and_private_inodes(self):
+        with tempfile.TemporaryDirectory() as name:
+            root = Path(name).resolve()
+            source = root/'source'
+            source.mkdir()
+            (source/'nested').mkdir()
+            for i in range(35):
+                (source/'nested'/str(i)).write_bytes(str(i).encode())
+            before = stock.manifest(source)
+            with (root/'log').open('wb') as log:
+                stock.clone_preparation(source, root/'copy', before, None, log)
+            self.assertEqual(stock.manifest(root/'copy'), before)
+            self.assertEqual(stock.manifest(source), before)
+            for path in (source/'nested').iterdir():
+                self.assertNotEqual(path.stat().st_ino, (root/'copy/nested'/path.name).stat().st_ino)
+
+    def test_clone_does_not_mutate_after_wait_consumes_copy_deadline(self):
+        with tempfile.TemporaryDirectory() as name:
+            root = Path(name).resolve()
+            source = root/'source'
+            source.mkdir()
+            (source/'file').write_bytes(b'fixture')
+            before = stock.manifest(source)
+            clock, limits = [0.0], []
+            class DelayedWriter:
+                def __init__(self, binding):
+                    pass
+                def __enter__(self):
+                    return self
+                def __exit__(self, *args):
+                    pass
+                @contextlib.contextmanager
+                def batch(self, *, deadline):
+                    limits.append(deadline)
+                    clock[0] = 30.0
+                    yield
+            with mock.patch.object(stock.prepaid, 'PreparationWriter', DelayedWriter), \
+                    mock.patch.object(stock.time, 'monotonic', lambda: clock[0]), \
+                    (root/'log').open('wb') as log:
+                with self.assertRaisesRegex(TimeoutError, 'clone preparation deadline'):
+                    stock.clone_preparation(source, root/'copy', before, {'child': str(root)}, log)
+            self.assertEqual(limits, [30.0])
+            self.assertFalse((root/'copy').exists())
+            self.assertEqual(stock.manifest(source), before)
+
+    def test_clone_refuses_aliases_and_failure_without_fallback(self):
+        with tempfile.TemporaryDirectory() as name:
+            root = Path(name).resolve()
+            source = root/'source'
+            source.mkdir()
+            (source/'file').write_bytes(b'fixture')
+            before = stock.manifest(source)
+            with (root/'log').open('wb') as log:
+                with mock.patch.object(stock.subprocess, 'run', side_effect=subprocess.CalledProcessError(1, 'cp')) as run:
+                    with self.assertRaises(subprocess.CalledProcessError):
+                        stock.clone_preparation(source, root/'failed', before, None, log)
+                    self.assertEqual(run.call_count, 1)
+                    self.assertEqual(run.call_args.args[0][:3], ['cp', '-c', '-p'])
+                (source/'alias').symlink_to(source/'file')
+                with self.assertRaisesRegex(ValueError, 'alias or special'):
+                    stock.clone_preparation(source, root/'alias-copy', before, None, log)
+                self.assertFalse((root/'alias-copy').exists())
+
     def test_native_return_witness_refuses_loss_reordering_injection_and_wrong_key(self):
         rows = [{'sequence': n, 'source': 'native', 'device': 1, 'offset': 28,
                  'data': value, 'state_call': n * 10, 'tick': n * 100}

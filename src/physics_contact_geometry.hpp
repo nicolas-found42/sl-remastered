@@ -32,7 +32,7 @@ ContactGeometryResult updateDirectContactGeometryWithSearch(
 // This represents one pair only, not collision traversal or clearance.
 struct GroundFacePair {
   CollisionCore triangle;
-  Vec3 faceNormal{}; // stored PHYS normal, kept for the contact normal check
+  Vec3 faceNormal{}; // stored PHYS triangle normal; not a separating-normal constraint
   std::optional<std::size_t> bodyFeature, triangleFeature;
   DirectContact contact;
 };
@@ -48,11 +48,9 @@ bool createGroundFacePair(Body &body, Body &ground,
 ContactGeometryResult selectGroundFaceCandidate(
     const std::vector<GroundFacePair*>& candidates,
     ContactGeometryWorld& world, std::optional<std::size_t>& selected);
-// Orients a ground contact normal to the stored PHYS face normal. Returns
-// nullopt when the closest-core normal deviates from the face normal by more
-// than 45 degrees: the core query matched a non-ground feature, and stock
-// (which constructs body/face contacts from the face data) would never create
-// such a contact, so the pair is dropped.
+// Legacy alignment utility, retained for callers that explicitly request face
+// alignment. This is not the Stock retained-contact normal rule: 004a2d10
+// consumes the separating normal directly, without this 45-degree gate.
 std::optional<Vec3> groundFaceContactNormal(const Vec3 &coreNormal,
                                             const Vec3 &faceNormal);
 // Updates the tracked pair through the 004a2d10 closest-core/search path.
@@ -66,9 +64,18 @@ struct DynamicBodyPair {
   std::optional<std::size_t> firstFeature, secondFeature;
   DirectContact contact;
 };
-bool createDynamicBodyPair(Body &first, Body &second, DynamicBodyPair &out,
-                           std::string &error);
-ContactGeometryResult updateDynamicBodyPair(DynamicBodyPair &pair,
-                                            ContactGeometryWorld &world,
-                                            Vec3 &worldPoint);
+bool createDynamicBodyPair(Body& first, Body& second, DynamicBodyPair& out,
+                           std::string& error);
+// Candidate/renewal query. Its feature cache can move; it does not establish
+// that the candidate has become a 0049b830 admitted row.
+ContactGeometryResult updateDynamicBodyPair(DynamicBodyPair& pair,
+                                            ContactGeometryWorld& world,
+                                            Vec3& worldPoint);
+// Fixed 004af970 refresh of an admitted row (state 6 or 7), independently
+// of contact.resting. Invalid fixed regions drop even with positive radii.
+// Unported ordinary fixed feature combinations return Unsupported. Wheel and
+// swept replacement cores keep their separately qualified specialized paths.
+ContactGeometryResult updateRetainedDynamicBodyPair(DynamicBodyPair& pair,
+                                                    ContactGeometryWorld& world,
+                                                    Vec3& worldPoint);
 } // namespace physics

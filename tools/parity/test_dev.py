@@ -118,6 +118,13 @@ class DevTest(unittest.TestCase):
         self.assertIn('tools/parity/stock/test_stock_input_tape.py', names)
         self.assertIn('tools/parity/test_storage.py', names)
 
+    def test_corpus_preserves_native_incident_probe_arguments(self):
+        script = Path(self.temp.name) / 'check.sh'
+        script.write_text('python3 -I tests/incident_test.py --probe build/diagnostic_operations_test '
+                          '--startup-probe build/startup_probe\n')
+        self.assertEqual(dev.corpus_commands(script), [[sys.executable, '-I', 'tests/incident_test.py',
+            '--probe', 'build/diagnostic_operations_test', '--startup-probe', 'build/startup_probe']])
+
     def test_corpus_preserves_pool_limits_and_interpreter(self):
         script = Path(self.temp.name) / 'check.sh'
         script.write_text('python3 -I tools/parity/resource_pool.py --wait 5 --cpu 1 '

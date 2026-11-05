@@ -58,6 +58,7 @@ jobs:
           python3 -I tests/guardrails_test.py
           python3 -I tests/devtools_test.py
           python3 -I tests/portable_checks_test.py
+          python3 -I tests/incident_test.py
           python3 -I tools/parity/test_experiment_result.py
           python3 -I tools/parity/test_capacity.py
           python3 -I tools/parity/test_jev_packet.py

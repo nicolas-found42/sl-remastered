@@ -224,7 +224,7 @@ bool VideoPlayer::draw(double now, std::string& error) {
   }
   int width, height;
   if (!renderer_.outputSize(width, height, error)) return false;
-  const float scale = std::min(static_cast<float>(width) / current_.width, static_cast<float>(height) / current_.height);
-  const float w = current_.width * scale, h = current_.height * scale;
-  return renderer_.draw(*texture_, {(width - w) * 0.5f, (height - h) * 0.5f, w, h}, error);
+  const float scale = std::min(static_cast<float>(width) / static_cast<float>(current_.width), static_cast<float>(height) / static_cast<float>(current_.height));
+  const float w = static_cast<float>(current_.width) * scale, h = static_cast<float>(current_.height) * scale;
+  return renderer_.draw(*texture_, {(static_cast<float>(width) - w) * 0.5f, (static_cast<float>(height) - h) * 0.5f, w, h}, error);
 }

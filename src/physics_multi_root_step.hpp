@@ -33,6 +33,12 @@ struct MultiRootWork {
   // Any other collector state is managed transactionally by the caller.
   std::function<bool(std::vector<DirectContact> &, std::string &)>
       gatherContacts;
+  // Optional split for FUN_00498dd0/004a2540: append new pending contacts
+  // only after retained refresh and its direct-correction sweep permit it.
+  // With this callback, gatherContacts refreshes retained contacts only.
+  // Both callbacks share the caller's transactional collector state.
+  std::function<bool(std::vector<DirectContact>&, std::string&)>
+      gatherPendingContacts;
   // Receives corrected contact records in collector order so retained pairs
   // preserve their impulse/force accumulators between iterations.
   std::function<void(const std::vector<DirectContact> &)> finishContacts;

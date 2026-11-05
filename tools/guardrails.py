@@ -14,6 +14,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
 CPP = {'.c', '.cpp', '.cc', '.h', '.hpp', '.m', '.mm'}
@@ -143,8 +144,59 @@ def edited_lines(original, content):
         None, before, after, autojunk=False
     ).get_opcodes():
         if tag != 'equal' and after:
-            ranges.append((min(start + 1, len(after)), max(start + 1, end)))
+            ranges.append((min(start + 1, len(after)), min(max(start + 1, end), len(after))))
     return ranges
+
+
+def formatting_touches_lines(content, replacements, ranges):
+    """Check changed source bytes, excluding formatter expansion into other lines."""
+    try:
+        document = ET.fromstring(replacements)
+    except ET.ParseError as error:
+        raise ValueError('clang-format returned invalid replacements XML') from error
+    if document.tag != 'replacements' or document.get('incomplete_format') != 'false':
+        raise ValueError('clang-format returned incomplete replacements')
+    changes = []
+    previous_end = 0
+    for replacement in document:
+        offset, length = replacement.get('offset', ''), replacement.get('length', '')
+        if (replacement.tag != 'replacement' or len(replacement) or
+                not re.fullmatch(r'[0-9]+', offset) or not re.fullmatch(r'[0-9]+', length)):
+            raise ValueError('clang-format returned invalid replacement bounds')
+        offset, length = int(offset), int(length)
+        if offset < previous_end or offset > len(content) or length > len(content) - offset:
+            raise ValueError('clang-format returned invalid replacement bounds')
+        previous_end = offset + length
+        before = content[offset:previous_end]
+        after = (replacement.text or '').encode('utf-8')
+        # A replacement may include an unchanged newline before the next
+        # line's indentation. That newline does not make the neighbor's tabs
+        # part of an edited declaration. Keep every actually changed newline.
+        prefix = 0
+        while prefix < min(len(before), len(after)) and before[prefix] == after[prefix]:
+            prefix += 1
+        suffix = 0
+        while (suffix < min(len(before) - prefix, len(after) - prefix) and
+               before[len(before) - suffix - 1] == after[len(after) - suffix - 1]):
+            suffix += 1
+        start, end = offset + prefix, previous_end - suffix
+        if start != end or len(after) - prefix - suffix:
+            changes.append((start, end))
+    if ranges is None:
+        return bool(changes)
+    bounds = [0]
+    for line in content.splitlines(keepends=True):
+        bounds.append(bounds[-1] + len(line))
+    intervals = [(bounds[start - 1], bounds[end]) for start, end in ranges]
+    for start, end in changes:
+        for first, last in intervals:
+            if start < last and end > first:
+                return True
+            # Insertions belong to the line beginning at their byte offset;
+            # EOF belongs to the final line, including its missing newline.
+            if start == end and (first <= start < last or start == last == len(content)):
+                return True
+    return False
 
 
 def ensure_configuration(revision):
@@ -182,10 +234,11 @@ def check_file(path, content, *, original=None, tidy=False):
             tool('clang-format'),
             '--style=file:' + str(ROOT / '.clang-format'),
             '--assume-filename=' + str(path),
+            '--output-replacements-xml',
         ]
         command += [f'--lines={start}:{end}' for start, end in ranges or []]
         formatted = run(command, input=content, capture_output=True)
-        if formatted.stdout != content:
+        if formatting_touches_lines(content, formatted.stdout, ranges):
             raise ValueError(f'{path}: clang-format check failed; format the edited lines')
     elif path.suffix == '.sh' or path.name == 'pre-commit':
         # Detect the dialect from selected bytes, never a conflicting working file.

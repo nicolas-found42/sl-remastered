@@ -8,6 +8,15 @@ import subprocess
 import time
 
 
+
+def passive_capture_timeout(remaining, deadline):
+    """Each raw subprocess shares the original request and global deadlines."""
+    limit = min(2, remaining, deadline - time.monotonic())
+    if limit <= 0:
+        raise TimeoutError('capture deadline')
+    return limit
+
+
 def press_observed_button(guest, remaining, read_log, record=None):
     """One private press, bounded by fresh native down/up observations.
 
@@ -84,12 +93,12 @@ def run(container, out, process, deadline, ordinary_exit=False, career_flow=None
     def remaining():
         return max(0.0, deadline - time.monotonic())
 
-    def guest(args):
+    def guest(args, timeout=8):
         if remaining() <= 0 or process.poll() is not None:
             raise TimeoutError('scenario deadline')
         command = ['docker', 'exec', '-e', 'DISPLAY=:99', container, *args]
         done = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                              timeout=min(8, remaining()))
+                              timeout=min(timeout, remaining()))
         if done.returncode:
             (out / 'guest-command-error.json').write_text(json.dumps({
                 'command': command, 'returncode': done.returncode,
@@ -98,15 +107,26 @@ def run(container, out, process, deadline, ordinary_exit=False, career_flow=None
             done.check_returncode()
         return done
 
-    def capture(stage):
+    def capture(stage, raw=False, capture_deadline=None):
         nonlocal sequence
         sequence += 1
         name = f'state-{sequence:03d}-{stage}'
         observed_at = time.time_ns()
-        guest(['xwd', '-root', '-silent', '-out', '/work/' + name + '.xwd'])
+        def capture_timeout():
+            if raw:
+                return passive_capture_timeout(remaining(), capture_deadline)
+            return 8
+        guest(['xwd', '-root', '-silent', '-out', '/work/' + name + '.xwd'],
+              timeout=capture_timeout())
         image = out / (name + '.png')
         subprocess.run(['ffmpeg', '-loglevel', 'error', '-threads', '1', '-y', '-i', str(out / (name + '.xwd')),
-                        '-frames:v', '1', str(image)], check=True, timeout=8)
+                        '-frames:v', '1', str(image)], check=True, timeout=capture_timeout())
+        if raw:
+            row = {'stage': stage, 'image': image.name, 'wall_time_ns': observed_at,
+                   'elapsed': time.monotonic() - start, 'raw': True,
+                   'image_sha256': hashlib.sha256(image.read_bytes()).hexdigest()}
+            result['observations'].append(row)
+            return row
         roi = out / (name + '-ocr')
         roi.mkdir()
         labels = detector.evaluate(image, roi, deadline)
@@ -115,6 +135,8 @@ def run(container, out, process, deadline, ordinary_exit=False, career_flow=None
                'menu': labels, 'dialog': dialog, 'elapsed': time.monotonic() - start}
         result['observations'].append(row)
         return row
+
+    capture.raw = lambda stage, deadline: capture(stage, raw=True, capture_deadline=deadline)
 
     def click(label, x, y, actions=None):
         # Coordinates refer exclusively to the private virtual display.

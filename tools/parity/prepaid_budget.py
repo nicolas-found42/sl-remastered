@@ -72,6 +72,63 @@ def attributes(path):
             for name in sorted(os.listxattr(path, follow_symlinks=False))}
 
 
+def acquire_preparation(fd, deadline):
+    while True:
+        require(time.monotonic() < deadline, 'preparation lock deadline bound')
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            return
+        except BlockingIOError:
+            time.sleep(min(.005, max(0, deadline-time.monotonic())))
+
+
+class PreparationWriter:
+    """Short cooperative preparation batches; no exemption from any scan."""
+    def __init__(self, binding):
+        self.binding = binding
+        self.path = canonical(binding['path'])
+        self.fd = os.open(self.path, os.O_RDWR | os.O_NOFOLLOW)
+        try:
+            self.verify()
+        except BaseException:
+            os.close(self.fd)
+            raise
+
+    def verify(self):
+        info = os.fstat(self.fd)
+        require(stat.S_ISREG(info.st_mode) and info.st_nlink == 1 and
+                list(identity(info)) == self.binding['identity'] and
+                identity(self.path.lstat()) == identity(info), 'preparation lock replaced')
+        child = canonical(self.binding['child'])
+        require(list(identity(child.stat())) == self.binding['child_identity'], 'preparation child replaced')
+
+    @contextlib.contextmanager
+    def batch(self, *, deadline=None):
+        # A batch must itself be bounded by its caller. Waiting never receives
+        # a larger allowance than a normal observation.
+        limit = time.monotonic()+5
+        if deadline is not None:
+            require(isinstance(deadline, (int, float)) and math.isfinite(deadline),
+                    'finite preparation caller deadline required')
+            limit = min(limit, deadline)
+        acquire_preparation(self.fd, limit)
+        try:
+            self.verify()
+            require(time.monotonic() < limit, 'preparation lock deadline bound')
+            yield
+            self.verify()
+        finally:
+            fcntl.flock(self.fd, fcntl.LOCK_UN)
+        # Give an already waiting observer an opportunity between batches.
+        time.sleep(.005)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        os.close(self.fd)
+
+
 class PrepaidCapture:
     """Composite budget requiring LeaseBudgetAdapter at the Lease seam.
 
@@ -131,6 +188,9 @@ class PrepaidCapture:
                     and self.root_before_child['xattrs'] == self.root_after_child['xattrs'],
                     'unexpected parent metadata transition')
             self.old['.'] = self.root_after_child
+            self.preparation_path = self.state/('preparation-%s-%s.lock' % self.child_identity)
+            self.preparation_fd = self._lock(self.preparation_path, fcntl.LOCK_EX, create=True)
+            fcntl.flock(self.preparation_fd, fcntl.LOCK_UN)
             self.check('prelaunch')
         except BaseException as error:
             error.prepaid_diagnostics = dict(parent=str(getattr(self, 'parent', parent)),
@@ -214,9 +274,24 @@ class PrepaidCapture:
                 os.close(fd)
         return record
 
+    def preparation_binding(self):
+        return dict(path=str(self.preparation_path), identity=list(identity(os.fstat(self.preparation_fd))),
+                    child=str(self.child), child_identity=list(self.child_identity))
+
     def scan(self, *, hashes=False, old_hashes_only=False, attempts=None):
-        self.lookup()
         started = time.monotonic()
+        fd = getattr(self, 'preparation_fd', None)
+        if fd is not None:
+            acquire_preparation(fd, started+self.scan_seconds)
+        try:
+            return self._scan(hashes=hashes, old_hashes_only=old_hashes_only,
+                              attempts=attempts, started=started)
+        finally:
+            if fd is not None:
+                fcntl.flock(fd, fcntl.LOCK_UN)
+
+    def _scan(self, *, hashes=False, old_hashes_only=False, attempts=None, started):
+        self.lookup()
         deadline = started+self.scan_seconds
         if attempts is None:
             attempts = []

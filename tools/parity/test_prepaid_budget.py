@@ -11,6 +11,7 @@ import sqlite3
 import subprocess
 import sys
 import tempfile
+import threading
 import unittest
 import time
 from unittest import mock
@@ -171,6 +172,196 @@ class Tests(unittest.TestCase):
 
         with mock.patch.object(Path, 'lstat', raced):
             yield
+
+    def test_scanner_waits_for_bounded_preparation_batch(self):
+        budget = self.budget()
+        self.addCleanup(budget.close)
+        entered, scanning, release = threading.Event(), threading.Event(), threading.Event()
+        errors, samples = [], []
+        original = prepaid.acquire_preparation
+        original_scan = budget._scan
+        def guarded_scan(**kwargs):
+            if not release.is_set():
+                raise RuntimeError('scanner entered an active copy batch')
+            return original_scan(**kwargs)
+        def observe(fd, deadline):
+            if threading.current_thread().name == 'scanner':
+                scanning.set()
+            return original(fd, deadline)
+        def copy_batch():
+            try:
+                with prepaid.PreparationWriter(budget.preparation_binding()) as writer:
+                    with writer.batch():
+                        (budget.child/'first').write_bytes(b'first')
+                        entered.set()
+                        if not release.wait(2):
+                            raise RuntimeError('test barrier timeout')
+                        (budget.child/'second').write_bytes(b'second')
+            except BaseException as error:
+                errors.append(error)
+        def scan():
+            try:
+                samples.append(budget.check())
+            except BaseException as error:
+                errors.append(error)
+        with mock.patch.object(prepaid, 'acquire_preparation', observe), \
+                mock.patch.object(budget, '_scan', guarded_scan):
+            writer = threading.Thread(target=copy_batch)
+            scanner = threading.Thread(target=scan, name='scanner')
+            writer.start()
+            self.assertTrue(entered.wait(2))
+            scanner.start()
+            try:
+                self.assertTrue(scanning.wait(2))
+                self.assertEqual(samples, [])
+            finally:
+                release.set()
+                writer.join(2)
+                scanner.join(2)
+        self.assertFalse(writer.is_alive() or scanner.is_alive())
+        self.assertEqual(errors, [])
+        self.assertEqual(len(samples), 1)
+        self.assertEqual(samples[0]['child_bytes'], 11)
+        self.assertEqual(len(samples[0]['scan_attempts']), 1)
+        self.assertLedgerUnchanged()
+
+    @unittest.skipUnless(sys.platform == 'darwin', 'APFS clone adapter requires Darwin cp -c')
+    def test_real_clone_cooperates_with_periodic_observer(self):
+        budget = self.budget()
+        self.addCleanup(budget.close)
+        spec = importlib.util.spec_from_file_location('stock_copy_test', Path(__file__).with_name('run_stock.py'))
+        stock = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(stock)
+        source = self.root/'source'
+        source.mkdir()
+        for i in range(7):
+            (source/str(i)).write_bytes(b'x')
+        attempting, samples, errors = threading.Event(), [], []
+        original_acquire, original_run = prepaid.acquire_preparation, stock.subprocess.run
+        def observe(fd, deadline):
+            if threading.current_thread().name == 'copy-observer':
+                attempting.set()
+            return original_acquire(fd, deadline)
+        def scan():
+            try:
+                samples.append(budget.check())
+            except BaseException as error:
+                errors.append(error)
+        observer = threading.Thread(target=scan, name='copy-observer')
+        def cp(*args, **kwargs):
+            observer.start()
+            if not attempting.wait(2):
+                raise RuntimeError('observer did not attempt bounded acquisition')
+            return original_run(*args, **kwargs)
+        with mock.patch.object(prepaid, 'acquire_preparation', observe), \
+                mock.patch.object(stock.subprocess, 'run', cp), (self.root/'copy.log').open('wb') as log:
+            try:
+                stock.clone_preparation(source, budget.child/'game', stock.manifest(source),
+                                        budget.preparation_binding(), log)
+            finally:
+                if observer.ident is not None:
+                    observer.join(2)
+        self.assertFalse(observer.is_alive())
+        self.assertEqual(errors, [])
+        self.assertEqual(len(samples), 1)
+        self.assertEqual(samples[0]['child_bytes'], 7)
+        self.assertEqual(len(samples[0]['scan_attempts']), 1)
+        self.assertEqual(stock.manifest(budget.child/'game'), stock.manifest(source))
+        self.assertLedgerUnchanged()
+
+    def test_preparation_caller_deadline_refuses_before_mutation(self):
+        budget = self.budget()
+        self.addCleanup(budget.close)
+        with prepaid.PreparationWriter(budget.preparation_binding()) as writer:
+            clock = [10.0]
+            acquired = []
+            def late_acquisition(fd, deadline):
+                acquired.append(deadline)
+                clock[0] = 10.5
+            with mock.patch.object(prepaid.time, 'monotonic', lambda: clock[0]), \
+                    mock.patch.object(prepaid, 'acquire_preparation', late_acquisition):
+                with self.assertRaisesRegex(Refused, 'deadline bound'):
+                    with writer.batch(deadline=10.5):
+                        (budget.child/'late').write_bytes(b'forbidden')
+            self.assertEqual(acquired, [10.5])
+            self.assertFalse((budget.child/'late').exists())
+            with mock.patch.object(prepaid.time, 'monotonic', lambda: 20.0):
+                with self.assertRaisesRegex(Refused, 'deadline bound'):
+                    with writer.batch(deadline=19.0):
+                        (budget.child/'expired').mkdir()
+            self.assertFalse((budget.child/'expired').exists())
+        self.assertTrue(budget.check()['complete'])
+
+    def test_preparation_replaced_lock_or_child_refuses_before_mutation(self):
+        budget = self.budget()
+        self.addCleanup(budget.close)
+        binding = budget.preparation_binding()
+        with prepaid.PreparationWriter(binding) as writer:
+            lock = Path(binding['path'])
+            saved = lock.with_name(lock.name+'.saved')
+            lock.rename(saved)
+            lock.touch()
+            try:
+                with self.assertRaisesRegex(Refused, 'preparation lock replaced'):
+                    with writer.batch():
+                        (budget.child/'unbound').touch()
+            finally:
+                lock.unlink()
+                saved.rename(lock)
+            displaced = self.parent/'displaced'
+            budget.child.rename(displaced)
+            budget.child.mkdir()
+            try:
+                with self.assertRaisesRegex(Refused, 'preparation child replaced'):
+                    with writer.batch():
+                        (budget.child/'unbound').touch()
+                self.assertFalse((budget.child/'unbound').exists())
+            finally:
+                budget.child.rmdir()
+                displaced.rename(budget.child)
+        # Replacing the child also changes the parent namespace; the old-tree
+        # guard must continue to refuse that transition.
+        with self.assertRaisesRegex(Refused, 'old metadata changed'):
+            budget.check()
+
+    def test_preparation_wait_uses_existing_scan_deadline(self):
+        budget = self.budget(scan_seconds=.05)
+        self.addCleanup(budget.close)
+        clock = [0.0]
+        def acquired_after_deadline(fd, deadline):
+            self.assertEqual(deadline, .05)
+            clock[0] = .051
+        with mock.patch.object(prepaid.time, 'monotonic', lambda: clock[0]), \
+                mock.patch.object(prepaid, 'acquire_preparation', acquired_after_deadline):
+            with self.assertRaisesRegex(Refused, 'deadline bound'):
+                budget.check()
+        self.assertFalse(budget.last_sample['complete'])
+        self.assertEqual(budget.scan_seconds, .05)
+
+    def test_preparation_writer_failure_releases_lock(self):
+        budget = self.budget()
+        self.addCleanup(budget.close)
+        with prepaid.PreparationWriter(budget.preparation_binding()) as writer:
+            with self.assertRaisesRegex(RuntimeError, 'copy failed'):
+                with writer.batch():
+                    (budget.child/'copied').write_bytes(b'copy')
+                    raise RuntimeError('copy failed')
+            self.assertTrue(budget.check()['complete'])
+        self.assertLedgerUnchanged()
+
+    def test_preparation_writer_does_not_hide_old_bytes_or_overflow(self):
+        budget = self.budget()
+        self.addCleanup(budget.close)
+        with prepaid.PreparationWriter(budget.preparation_binding()) as writer:
+            with writer.batch():
+                (budget.child/'copied').write_bytes(bytes(17))
+            with self.assertRaisesRegex(Refused, 'child budget'):
+                budget.check()
+            with writer.batch():
+                (budget.child/'copied').unlink()
+                (self.parent/'old').write_bytes(b'other evidence')
+            with self.assertRaisesRegex(Refused, 'old metadata changed|old bytes changed'):
+                budget.check('final')
 
     def test_one_new_child_directory_race_restarts_complete_scan(self):
         budget = self.budget()

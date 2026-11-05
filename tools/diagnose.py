@@ -403,6 +403,14 @@ def diagnose(run, raw_mode=False):
 
     process = missing_process_status(meta) if result is None else "unknown"
     out.append(verdict_line(result, crash_header, last_time, process))
+    try:
+        health = json.loads(read_text(run / 'telemetry.json') or '{}')
+        for key in ('dropped_lines', 'dropped_context_lines', 'io_failures', 'capture_unavailable'):
+            value = health.get(key)
+            if type(value) is int and value > 0:
+                out.append(f'  EVIDENCE INCOMPLETE: recorder {key}={value}; inspect telemetry.json')
+    except (ValueError, AttributeError):
+        out.append('  EVIDENCE UNKNOWN: malformed recorder telemetry.json')
     counters_early = read_kv(run / "counters.txt") or {}
     if counters_early.get("sound_dropped", "0") not in ("0", ""):
         out.append(f"  sound dropped: {counters_early['sound_dropped']}  (the 64-voice limit discarded sound requests)")

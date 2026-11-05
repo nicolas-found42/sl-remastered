@@ -493,6 +493,64 @@ inline void event(EventKind kind, const char* fmt, ...) {
   hub->emit(kind, text);
 }
 
+// Closed vocabularies keep operation history free of paths, save contents and
+// user input. IDs are process-local; the run directory supplies their scope.
+enum class OperationKind : uint8_t { FileRead = 1,
+                                     FileWrite,
+                                     FileClose };
+enum class OperationResult : uint8_t {
+  Unknown = 0,
+  Ok,
+  Missing,
+  Rejected,
+  IoError,
+  NoHandle
+};
+inline std::atomic<uint64_t> g_operationSequence{0};
+inline thread_local uint64_t g_parentOperation = 0;
+
+class Operation {
+public:
+  explicit Operation(OperationKind kind, uint32_t handle = 0, uint64_t scope = 0) noexcept
+      : kind_(kind), handle_(handle), scope_(scope) {
+    if (!active()) return;
+    id_ = g_operationSequence.fetch_add(1, std::memory_order_relaxed) + 1;
+    parent_ = g_parentOperation;
+    g_parentOperation = id_;
+    emit(0, OperationResult::Unknown, 0);
+  }
+  ~Operation() { finish(OperationResult::Unknown); }
+  Operation(const Operation&) = delete;
+  Operation& operator=(const Operation&) = delete;
+  void finish(OperationResult result, uint32_t handle = 0, size_t bytes = 0) noexcept {
+    if (!id_ || finished_) return;
+    if (handle) handle_ = handle;
+    emit(1, result, bytes);
+    if (g_parentOperation == id_) g_parentOperation = parent_;
+    finished_ = true;
+  }
+
+private:
+  void emit(unsigned end, OperationResult result, size_t bytes) noexcept {
+    // A diagnostic must not turn a successful save into an exception.
+    try {
+      event(EventKind::Note,
+            "op1 {\"v\":1,\"i\":%llu,\"p\":%llu,\"s\":%llu,\"k\":%u,\"e\":%u,\"h\":%u,\"r\":%u,\"n\":%llu}",
+            static_cast<unsigned long long>(id_), static_cast<unsigned long long>(parent_),
+            static_cast<unsigned long long>(scope_),
+            static_cast<unsigned>(kind_), end, handle_, static_cast<unsigned>(result),
+            static_cast<unsigned long long>(bytes));
+    } catch (...) {
+      // Logging has no recovery authority over the operation it observes.
+    }
+  }
+  OperationKind kind_;
+  uint32_t handle_;
+  uint64_t scope_;
+  uint64_t id_ = 0, parent_ = 0;
+  bool finished_ = false;
+};
+
 // "[+SS.mmm fFRAME] tag text"
 std::string formatLine(double t, uint32_t frame, const char* tag,
                        const char* text);
@@ -526,6 +584,7 @@ struct RunOptions {
   bool captureDeveloperSource = true;
   bool captureStreams = true;
   bool installHandlers = true;
+  size_t maxLogBytes = 16 * 1024 * 1024; // excess lines are counted, not persisted
 };
 
 class RunRecorder {

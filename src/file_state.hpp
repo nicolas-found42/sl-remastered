@@ -133,4 +133,5 @@ private:
   };
   std::unordered_map<const VmObject*, Writer> writers_;
   int64_t nextHandle_ = 1;
+  uint64_t diagnosticScope_ = 0; // process-local FileState lifetime, never a pointer
 };

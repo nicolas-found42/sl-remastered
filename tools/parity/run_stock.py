@@ -5,6 +5,7 @@ This is a functional capture, not deterministic playback or a Parity Proof.
 No host display/audio/input sockets or devices are exposed to the container.
 """
 import argparse
+import contextlib
 import hashlib
 import importlib.util
 import json
@@ -13,6 +14,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import stat
 import subprocess
 import sys
 import time
@@ -63,6 +65,72 @@ def manifest(root):
     if not result['complete']:
         raise ValueError(f'incomplete source inventory: {result["errors"][:3]}')
     return result['files']
+
+
+def clone_preparation(source, target, before, binding, log):
+    """Clone only prevalidated regular files, yielding between bounded batches."""
+    source, target = Path(source), Path(target)
+    if source.resolve(strict=True) != source or target.exists() or target.is_symlink():
+        raise ValueError('private clone paths are not independent canonical paths')
+    if target.parent.resolve(strict=True) != target.parent or source == target or source in target.parents:
+        raise ValueError('private clone target aliases or overlaps source')
+    if binding and target.parent != Path(binding['child']):
+        raise ValueError('private clone outside admitted child')
+    directories, files = [], {}
+    # Do not follow aliases or permit special files absent from byte accounting.
+    for root, names, leaves in os.walk(source, followlinks=False):
+        for name in names + leaves:
+            path = Path(root)/name
+            info = path.lstat()
+            if stat.S_ISDIR(info.st_mode):
+                directories.append(path.relative_to(source))
+            elif stat.S_ISREG(info.st_mode) and info.st_nlink == 1:
+                key = str(path.relative_to(source))
+                if key not in before or before[key] != {'size': info.st_size, 'sha256': digest(path)}:
+                    raise ValueError('clone source differs from prevalidated inventory')
+                files.setdefault(path.parent, []).append(path)
+            else:
+                raise ValueError('clone source alias or special file refused')
+    if {str(p.relative_to(source)) for group in files.values() for p in group} != set(before):
+        raise ValueError('clone source membership differs from inventory')
+    writer = prepaid.PreparationWriter(binding) if binding else contextlib.nullcontext(None)
+    copy_deadline = time.monotonic()+30
+    with writer as cooperative:
+        @contextlib.contextmanager
+        def batch():
+            if time.monotonic() >= copy_deadline:
+                raise TimeoutError('private clone preparation deadline')
+            with cooperative.batch(deadline=copy_deadline) if cooperative else contextlib.nullcontext():
+                if time.monotonic() >= copy_deadline:
+                    raise TimeoutError('private clone preparation deadline')
+                yield
+            if time.monotonic() >= copy_deadline:
+                raise TimeoutError('private clone preparation deadline')
+        with batch():
+            target.mkdir(exist_ok=False)
+        for relative in sorted(directories, key=lambda p: (len(p.parts), str(p))):
+            with batch():
+                (target/relative).mkdir(exist_ok=False)
+        for parent, group in sorted(files.items()):
+            destination = target/parent.relative_to(source)
+            for offset in range(0, len(group), 16):
+                sources = group[offset:offset+16]
+                with batch():
+                    # A failed/slow clone is retained as failure, never a full
+                    # copy fallback. Each batch is shorter than the scan bound.
+                    if destination.resolve(strict=True) != destination or any(
+                            path.resolve(strict=True) != path for path in sources):
+                        raise ValueError('clone batch path aliases changed')
+                    subprocess.run(['cp', '-c', '-p', *map(str, sources), str(destination)],
+                                   stdout=log, stderr=subprocess.STDOUT, check=True, timeout=min(1, max(.001, copy_deadline-time.monotonic())))
+                    for path in sources:
+                        copied = destination/path.name
+                        info = copied.lstat()
+                        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+                            raise ValueError('private clone type or alias changed')
+                        copied.chmod(stat.S_IMODE(info.st_mode) | stat.S_IWUSR)
+    if manifest(target) != before or manifest(source) != before:
+        raise ValueError('private clone/source final inventory differs')
 
 
 def prefix_manifest(root):
@@ -404,13 +472,8 @@ def worker(config_path):
         save(out / 'instrumentation-source.json', frozen_manifest)
         with (out / 'prepare.log').open('wb') as log:
             execute([compiler, '--version'], stdout=log, stderr=subprocess.STDOUT)
-            copied = subprocess.run(['cp', '-c', '-R', str(source), str(out / 'game')],
-                                    stdout=log, stderr=subprocess.STDOUT, timeout=30)
-            if copied.returncode:
-                raise ValueError('APFS private clone failed; full-copy fallback refused to prevent storage amplification')
-            if manifest(out / 'game') != before:
-                raise ValueError('private copy does not match source inventory')
-            execute(['chmod', '-R', 'u+w', out / 'game'], stdout=log, stderr=subprocess.STDOUT)
+            clone_preparation(source, out / 'game', before,
+                              config.get('preparation_binding'), log)
             shutil.copy2(stock, out / 'game/StreetLegal_Redline.exe')
             execute([sys.executable, '-I', frozen / 'synthetic_metadata.py', stock, texture,
                      out / 'metadata.txt', out / 'SYNTHETIC-metadata.txt'], stdout=log, stderr=subprocess.STDOUT)
@@ -756,6 +819,7 @@ def main():
                       'native_clock_observer': args.native_clock_observer,
                       'ephemeral_prefix': args.ephemeral_prefix,
                       'guest_memory_bytes': 20 * 1024**3,
+                      'preparation_binding': prepaid_budget.budget.preparation_binding() if prepaid_budget else None,
                       'prefix_seed': str(args.prefix_seed.resolve(strict=True)) if args.prefix_seed else None,
                       'prefix_seed_checks': str(args.prefix_seed_checks.resolve(strict=True)) if args.prefix_seed_checks else None,
                       'ordinary_exit': args.ordinary_exit, 'career_flow': args.career_flow,

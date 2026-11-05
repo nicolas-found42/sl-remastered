@@ -230,11 +230,10 @@ ObjectPhysics::instantiate(const physics::Vec3 &position,
 
   Instance out;
   out.owner = shared_from_this();
-  // Compound root placeholder, as buildPartPhysics does: finalizeCompound
-  // (0049a050) recomputes the mass aggregate from the attached children and
-  // rewrites the root shape with the compound bounds.
+  // 00465bd0 creates the compound root as a mass-1 unit Box. 0049a050
+  // replaces aggregate mass/bounds while preserving its constructor volume.
   auto rootProto = physics::createBodyProto(
-      1, static_cast<uint32_t>(physics::ShapeType::Mesh), 0, 0, 0, nullptr,
+      1, static_cast<uint32_t>(physics::ShapeType::Box), 1, 1, 1, nullptr,
       error);
   if (!rootProto) {
     error = "object root prototype: " + error;

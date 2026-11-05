@@ -25,6 +25,7 @@ below are run from the repository root; replace bracketed placeholders.
 | Run ordered Python suites independently | `python3 -I tools/parity/dev.py corpus` | Every suite succeeds in gate order. This is not a replacement for a failed complete invocation. |
 | Finish implementation/review with private prerequisites available | `python3 -I tools/parity/dev.py gate` | One complete invocation succeeds. Otherwise report the failed stage, actual failures and unexecuted stages separately. |
 | Check a resumed handoff or an evidence claim | `python3 -I tools/parity/dev.py evidence-index tools/parity/session-evidence.json --markdown` | All bindings/assertions validate; missing private evidence remains unverified. |
+| Investigate a historical/intermittent failure | `python3 -I tools/parity/dev.py incident -- --record <retained-run> --events` | Inspect evidence loss, identities, operation halves and source hashes using [the investigation runbook](../../docs/observability.md). Query success is not incident resolution. |
 
 Normal sequence: read the task and preserve existing edits → diagnose/configure
 as needed → edit and run focused tests → stage intended files and run fast lint →
@@ -233,3 +234,15 @@ refuse. It reads retained files only; it never calls cache lookups that could
 change LRU state. Offsets are explicit fixture knowledge, not inferred layouts.
 Contact comparisons require the applicable captured words and explicit identity
 fields; header observations alone do not establish contact/cache lifecycle.
+
+For the constructor/initial/final body fixture, compare complete series with:
+
+`python3 -I tools/parity/dev.py trace-inspect LEFT.jsonl --body-series RIGHT.jsonl --steps 64`
+
+This mode requires two 53-word state buffers per body, initial `current=0`,
+ordered constructor and initial/final phases, and the declared number of complete
+steps on both sides. `--bodies` defaults to two. Duplicate/missing phases,
+invalid words, wrong buffer identity and changed input files refuse. The report
+includes both hashes and the first differing body snapshot; exit zero means the
+inspection completed, so inspect `equal` rather than treating it as a parity gate.
+No intermediate contact causality follows from equal boundary snapshots.

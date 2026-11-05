@@ -361,6 +361,13 @@ ContactGeometryResult updateGroundFacePair(GroundFacePair &pair,
     if ((pair.triangleFeature && *pair.triangleFeature >= pair.triangle.features.size()) ||
         (pair.bodyFeature && *pair.bodyFeature >= core.features.size()))
       return std::nullopt;
+    // FUN_004af970 dispatches 0x202 to fixed-edge validation (004af630),
+    // not the closest-feature walk used by new candidates.
+    if (pair.bodyFeature && pair.triangleFeature &&
+        core.features[*pair.bodyFeature].ref.kind == CoreFeatureKind::Edge &&
+        pair.triangle.features[*pair.triangleFeature].ref.kind == CoreFeatureKind::Edge)
+      return cachedEdgeEdge(core, a, *pair.bodyFeature, pair.triangle, b,
+                            *pair.triangleFeature);
     // FUN_004af970 keeps valid cached vertex/face geometry. Rewalking a
     // different closest body feature here would discard a valid state-7 row.
     if (pair.triangleFeature) {
@@ -467,9 +474,8 @@ ContactGeometryResult updateGroundFacePair(GroundFacePair &pair,
   auto result = updateDirectContactGeometryWithSearch(
       contact, *predicted, body->proto->shape.radius, 0, worldPoint, world,
       query);
-  // A body/ground-face contact carries the face normal in stock (0049b830
-  // stores the face data on creation); a deviating closest-core normal means
-  // the core query matched a non-ground feature and the pair is dropped.
+  // 004a2d10 consumes 004af970's separating normal directly, including
+  // edge/edge normals that differ from the stored PHYS face normal.
   if (result == ContactGeometryResult::Updated) {
     // FUN_004a2d10 uses fixed cached features through 004af970. Once a
     // feature leaves its Voronoi region the old row is destroyed; the full
@@ -477,11 +483,6 @@ ContactGeometryResult updateGroundFacePair(GroundFacePair &pair,
     if (pair.triangleFeature && (bodyFeature != pair.bodyFeature ||
                                  triangleFeature != pair.triangleFeature))
       return ContactGeometryResult::Dropped;
-    const auto oriented = groundFaceContactNormal(contact.normal,
-                                                  pair.faceNormal);
-    if (!oriented)
-      return ContactGeometryResult::Dropped;
-    contact.normal = *oriented;
   }
   if (result != ContactGeometryResult::Unsupported) {
     pair.bodyFeature = bodyFeature;
@@ -739,9 +740,9 @@ bool createDynamicBodyPair(Body &first, Body &second, DynamicBodyPair &out,
   return true;
 }
 
-ContactGeometryResult updateDynamicBodyPair(DynamicBodyPair &pair,
-                                            ContactGeometryWorld &world,
-                                            Vec3 &worldPoint) {
+static ContactGeometryResult updateDynamicBodyPairImpl(DynamicBodyPair& pair,
+                                                       ContactGeometryWorld& world,
+                                                       Vec3& worldPoint, bool retainedRow) {
   Body *a = pair.contact.a, *b = pair.contact.b;
   if (!a || !b || !a->proto || !b->proto || a->current > 1 || b->current > 1 ||
       ((a->flags | b->flags) &
@@ -789,6 +790,65 @@ ContactGeometryResult updateDynamicBodyPair(DynamicBodyPair &pair,
   auto fb = (b->flags & 0x800u) ? std::optional<std::size_t>{} : pair.secondFeature;
   const auto query = [&](const State& pa,
                          const State& pb) -> std::optional<CorePair> {
+    if (retainedRow && !((a->flags | b->flags) & (0x40u | 0x800u))) {
+      // 004a2d10 calls 004af970 for admitted states 6 and 7. Invalid
+      // fixed geometry returns zero before either rounding radius is used.
+      fa = pair.firstFeature;
+      fb = pair.secondFeature;
+      if (ka == 0 && kb == 0)
+        return sphereCoreClosest(pa, pb);
+      const auto feature = [](const CollisionCore* core, const std::optional<std::size_t>& index)
+          -> std::optional<CoreFeatureKind> {
+        if (!core || !index || *index >= core->features.size()) return std::nullopt;
+        const auto& fixed = core->features[*index];
+        const auto ref = fixed.ref;
+        if (ref.kind == CoreFeatureKind::Vertex && ref.index >= core->vertices.size())
+          return std::nullopt;
+        if (ref.kind == CoreFeatureKind::Face) {
+          if (ref.index >= core->faces.size() || core->faces[ref.index].vertices.empty() ||
+              core->faces[ref.index].vertices.front() >= core->vertices.size())
+            return std::nullopt;
+          for (const auto& plane : fixed.adjacent)
+            if (plane.anchorVertex >= core->vertices.size()) return std::nullopt;
+        }
+        return ref.kind;
+      };
+      const auto firstKind = feature(ca, fa), secondKind = feature(cb, fb);
+      std::optional<CorePair> fixed;
+      bool supported = false;
+      if (ka == 0 && secondKind == CoreFeatureKind::Face) {
+        supported = true;
+        fixed = cachedPointFace(pa, *cb, pb, *fb);
+      } else if (kb == 0 && firstKind == CoreFeatureKind::Face) {
+        supported = true;
+        fixed = cachedPointFace(pb, *ca, pa, *fa, false);
+      } else if (firstKind == CoreFeatureKind::Vertex && secondKind == CoreFeatureKind::Face) {
+        supported = true;
+        fixed = cachedVertexFace(*ca, pa, *fa, *cb, pb, *fb);
+      } else if (firstKind == CoreFeatureKind::Face && secondKind == CoreFeatureKind::Vertex) {
+        supported = true;
+        fixed = cachedVertexFace(*cb, pb, *fb, *ca, pa, *fa, false);
+      } else if (ka == 0 && secondKind == CoreFeatureKind::Edge) {
+        return cachedPointEdge(pa, *cb, pb, *fb);
+      } else if (kb == 0 && firstKind == CoreFeatureKind::Edge) {
+        return cachedPointEdge(pb, *ca, pa, *fa, false);
+      } else if (firstKind == CoreFeatureKind::Vertex && secondKind == CoreFeatureKind::Edge) {
+        return cachedVertexEdge(*ca, pa, *fa, *cb, pb, *fb);
+      } else if (firstKind == CoreFeatureKind::Edge && secondKind == CoreFeatureKind::Vertex) {
+        return cachedVertexEdge(*cb, pb, *fb, *ca, pa, *fa, false);
+      } else if (firstKind == CoreFeatureKind::Edge && secondKind == CoreFeatureKind::Edge) {
+        return cachedEdgeEdge(*ca, pa, *fa, *cb, pb, *fb);
+      }
+      if (supported)
+        return fixed ? fixed : std::optional<CorePair>{CorePair{}};
+      static bool noted = false;
+      if (!noted) {
+        noted = true;
+        runlog::event(runlog::EventKind::Note,
+                      "retained dynamic contact gap: FUN_004af970 fixed feature dispatch unsupported");
+      }
+      return std::nullopt;
+    }
     // Ordinary retained 004af970 rows preserve valid vertex/face pairs.
     // Wheel and swept replacement-core dispatch retain their own paths.
     if (pair.contact.resting && !((a->flags | b->flags) & (0x40u | 0x800u))) {
@@ -1013,6 +1073,18 @@ ContactGeometryResult updateDynamicBodyPair(DynamicBodyPair &pair,
     pair.contact = contact;
   }
   return result;
+}
+
+ContactGeometryResult updateDynamicBodyPair(DynamicBodyPair& pair,
+                                            ContactGeometryWorld& world,
+                                            Vec3& worldPoint) {
+  return updateDynamicBodyPairImpl(pair, world, worldPoint, false);
+}
+
+ContactGeometryResult updateRetainedDynamicBodyPair(DynamicBodyPair& pair,
+                                                    ContactGeometryWorld& world,
+                                                    Vec3& worldPoint) {
+  return updateDynamicBodyPairImpl(pair, world, worldPoint, true);
 }
 
 } // namespace physics

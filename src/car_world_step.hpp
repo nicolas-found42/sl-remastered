@@ -34,9 +34,14 @@ public:
   // path only builds wheel-contact witnesses unless a leaf body (e.g. the
   // chassis bottoming out) touches the ground, so a fixture asserts this to
   // prove the pair collector path ran.
-  size_t debugPairCount() const { return pairs_.size(); }
+  size_t debugPairCount() const {
+    size_t count = 0;
+    for (const auto& [key, row] : groundPairs_)
+      count += bool(row->carOwner);
+    return count;
+  }
   // Retained object body/ground-face pairs (settled cones, barrels, ...).
-  size_t debugObjectPairCount() const { return objectPairs_.size(); }
+  size_t debugObjectPairCount() const { return groundPairs_.size() - debugPairCount(); }
   // Retained body/body contacts between stepped objects and cars/objects.
   size_t debugDynamicPairCount() const { return dynamicPairs_.size(); }
 
@@ -70,72 +75,84 @@ private:
              std::tie(o.body, o.leaf, o.face, o.bodyFeature, o.triangleFeature, o.serial);
     }
   };
-  std::map<PairKey, std::unique_ptr<CarGroundFacePair>> pairs_;
   // 00497280 closest-feature caches and 0049b830 admitted rows have separate
   // lifetimes. More than one feature pair can be admitted for one triangle.
-  struct ObjectGroundFacePair {
+  struct RetainedGroundPair {
+    // Keeps the Car and its part-removal observation alive. Validate this
+    // before dereferencing a body that may have been detached or reindexed.
+    std::shared_ptr<CarGroundFacePair> carOwner;
     std::shared_ptr<SpatialGroundFace> face;
     physics::GroundFacePair pair;
     const physics::BodyProto *prototype = nullptr;
     bool correctedOnce = false;
     uint64_t serial = 0;
     bool valid() const {
-      return face && face->valid() && pair.contact.a &&
+      return (!carOwner || carOwner->valid()) && face && face->valid() && pair.contact.a &&
              pair.contact.a->proto == prototype;
     }
   };
-  std::map<PairKey, std::unique_ptr<ObjectGroundFacePair>> objectPairs_;
-  std::map<PairKey, std::unique_ptr<ObjectGroundFacePair>> objectCandidates_;
-  uint64_t nextObjectSerial_ = 0;
+  std::map<PairKey, std::unique_ptr<RetainedGroundPair>> groundPairs_;
+  std::map<PairKey, std::unique_ptr<RetainedGroundPair>> groundCandidates_;
+  // One admission order for ground and body/body records (0049b830).
+  // Candidate-cache touches may consume values but never reorder live rows.
+  uint64_t nextContactSerial_ = 0;
   // Retained body/body contact between a stepped object body and another
   // stepped root's body (stock queues these as 0049b830 pending records).
   // Wheel and swept replacement segments use the dynamic narrow phase.
   struct RetainedDynamicPair {
     physics::DynamicBodyPair pair;
-    const physics::BodyProto *firstPrototype = nullptr;
-    const physics::BodyProto *secondPrototype = nullptr;
+    const physics::BodyProto* firstPrototype = nullptr;
+    const physics::BodyProto* secondPrototype = nullptr;
+    uint64_t serial = 0;
   };
   struct DynamicPairKey {
-    const physics::Body *first;
-    const physics::Body *second;
-    bool operator<(const DynamicPairKey &o) const {
+    const physics::Body* first;
+    const physics::Body* second;
+    bool operator<(const DynamicPairKey& o) const {
       return std::tie(first, second) < std::tie(o.first, o.second);
     }
   };
-  std::map<DynamicPairKey, std::unique_ptr<RetainedDynamicPair>> dynamicPairs_;
+  struct DynamicRowKey : DynamicPairKey {
+    size_t firstFeature;
+    size_t secondFeature;
+    uint64_t serial;
+    bool operator<(const DynamicRowKey& other) const {
+      return std::tie(first, second, firstFeature, secondFeature, serial) <
+             std::tie(other.first, other.second, other.firstFeature, other.secondFeature, other.serial);
+    }
+  };
+  // Closest-feature caches are independent of admitted state-6/7 rows.
+  std::map<DynamicPairKey, std::unique_ptr<RetainedDynamicPair>> dynamicCandidates_;
+  std::map<DynamicRowKey, std::unique_ptr<RetainedDynamicPair>> dynamicPairs_;
+  // Offers selected by the solver become admitted rows in finishContacts;
+  // losing offers remain cache-only and can never shadow an admitted row.
+  std::map<DynamicRowKey, std::unique_ptr<RetainedDynamicPair>> pendingDynamicPairs_;
   // 0049c8f0 sphere/oriented-bound rejection plus 0049b830 pending-record
   // retention for one object body against one body of another stepped root.
   // Returns false (with why) on an unsupported correction path. Remaining
   // special body flags are reported explicitly rather than offered as boxes.
-  bool considerDynamicPair(physics::Body *objectBody, physics::Body *other,
-                           physics::ContactGeometryWorld &geometryWorld,
-                           std::vector<physics::DirectContact> &contacts,
-                           std::set<DynamicPairKey> &seen,
-                           std::set<DynamicPairKey> &pendingErase,
-                           std::string &why);
+  bool considerDynamicPair(physics::Body* objectBody, physics::Body* other,
+                           physics::ContactGeometryWorld& geometryWorld,
+                           std::vector<physics::DirectContact>& contacts,
+                           std::set<DynamicPairKey>& seen,
+                           std::string& why);
   // Pairs offered to the corrector in the current physics step (transactional:
   // applied only when the step succeeds, so a failed step retries with the
   // pairs still state 6).
   // Transactional collector state: applied after a successful step, restored
   // on failure (stepMultiRootWorld's rollback covers bodies/world only).
-  std::set<PairKey> pendingErase_; // pairs scheduled for removal this step
-  std::set<PairKey> pendingObjectErase_;
-  std::set<DynamicPairKey> pendingDynamicErase_;
-  std::map<PairKey, std::array<float, 5>>
-      accumulatorSnapshot_; // normalImpulse, frictionForce, correctedOnce, normalForce, resting
-  std::map<DynamicPairKey, std::array<float, 4>>
-      dynamicAccumulatorSnapshot_; // normalImpulse, frictionForce, normalForce, resting
   // One entry per offered contact in collector order: the write-back target
   // for finishContacts (done[i] maps to entry i).
   struct OfferedContact {
-    CarGroundFacePair *carPair = nullptr;
-    ObjectGroundFacePair *objectPair = nullptr;
-    RetainedDynamicPair *dynamicPair = nullptr;
-};
+    RetainedGroundPair* groundPair = nullptr;
+    RetainedDynamicPair* dynamicPair = nullptr;
+    bool dynamicPending = false;
+  };
   std::vector<OfferedContact> lastOffers_;
   // Last object registration generation seen; a change means retained object
   // and dynamic pairs may hold dangling bodies, so they are dropped.
   uint64_t lastObjectGeneration_ = 0;
   bool notedDynamicSkip_ = false;
+  bool notedDynamicPriority_ = false;
   bool notedWheelEdgewalk_ = false;
 };

@@ -1,0 +1,210 @@
+{
+  "schema": 1,
+  "scope": "Observed failed Stock dealer entry; ten-second requests and passive visibility only. No purchase, City fixture or parity acceptance.",
+  "capture": "local/verify/parity-goal-20261102-092437/factory-fifth/issue53-stock-vision10-passive-v2",
+  "bindings": {
+    "local/verify/parity-goal-20261102-092437/factory-fifth/issue53-stock-vision10-passive-v2/result.json": {
+      "sha256": "17e3d3707e1f70489c4e109dce02e86099e1083a5c011dd6abeef9aef6d782a7",
+      "bytes": 46492
+    },
+    "local/verify/parity-goal-20261102-092437/factory-fifth/issue53-stock-vision10-passive-v2/prepaid-audit.json": {
+      "sha256": "f5b73e571edf6ed2d4d398f334e43d940aa7fc7a92ea4b1d6256f72d685add4b",
+      "bytes": 8234836
+    },
+    "local/verify/parity-goal-20261102-092437/factory-fifth/issue53-stock-vision10-passive-v2/instrumentation-source.json": {
+      "sha256": "b70a71e6954fcb0ae60b413266f0325b7677ebbdb8de3166eb996b5ed95481db",
+      "bytes": 1895
+    },
+    "local/verify/parity-goal-20261102-092437/factory-fifth/issue53-stock-vision10-passive-v2/instrumentation-source/career_flow.py": {
+      "sha256": "25b0d1bf30675f91c443d4730c9c10ed6a6c0df1b4c802e714251acf8d29ba5a",
+      "bytes": 32135
+    },
+    "local/verify/parity-goal-20261102-092437/factory-fifth/issue53-stock-vision10-passive-v2/instrumentation-source/state_flow.py": {
+      "sha256": "a2a4502d29ad63fc983509be136d11dbe33617ecd8307ef7d4d5e3b16d65fe56",
+      "bytes": 14486
+    }
+  },
+  "result": {
+    "passed": false,
+    "status": "incomplete",
+    "timed_out": false,
+    "error": "scenario incomplete: vision review budget exhausted or deadline reached: dealer-open; valid waits=0, introductions=0, expired=3",
+    "container_exit": 66,
+    "observer_exit": 1,
+    "artifact_finalization": "verified",
+    "producer_unchanged": true,
+    "source_preserved": true,
+    "stock_preserved": true,
+    "disc_preserved": true,
+    "texture_preserved": true,
+    "save_fixture_preserved": true,
+    "container_removed": true,
+    "outer_container_removed": true
+  },
+  "reviews": [
+    {
+      "request_id": "28c72b5b7466a438d07df217be7de1c96b4252f54e6d0c7cc1ad52b62556ab37",
+      "image": "state-039-vision-dealer-open.png",
+      "image_sha256": "d39f4b06560f94da940a1ebfa797547c39e0819347bfaefd5f33d3168cfac1c9",
+      "created_monotonic": 386164.99147775,
+      "expires_monotonic": 386174.99147775,
+      "expired": true,
+      "response_consumed": false,
+      "response_file_exists": false,
+      "response_mtime_ns": null,
+      "passive_frames": [
+        {
+          "request_id": "28c72b5b7466a438d07df217be7de1c96b4252f54e6d0c7cc1ad52b62556ab37",
+          "sequence": 1,
+          "started_monotonic": 386168.058286458,
+          "authorizes_input": false,
+          "frame": {
+            "stage": "vision-passive",
+            "image": "state-040-vision-passive.png",
+            "wall_time_ns": 1793762038173706000,
+            "elapsed": 94.4704602920101,
+            "raw": true,
+            "image_sha256": "28da41f8a0c606d6f4837e791e838bb162602bda5b41091c79037138cb069c66"
+          },
+          "image_sha256": "28da41f8a0c606d6f4837e791e838bb162602bda5b41091c79037138cb069c66",
+          "finished_monotonic": 386168.250248041
+        }
+      ]
+    },
+    {
+      "request_id": "7fe9acb3dd07448709bf8a23d5b6eb6d04fb39655a4d539ce21750bf4196f801",
+      "image": "state-041-vision-dealer-open.png",
+      "image_sha256": "bfc93d18d849974a54ea5313ae8c93f0ed877b7fa191d403f328035d83532fa4",
+      "created_monotonic": 386178.100081291,
+      "expires_monotonic": 386188.100081291,
+      "expired": true,
+      "response_consumed": false,
+      "response_file_exists": false,
+      "response_mtime_ns": null,
+      "passive_frames": [
+        {
+          "request_id": "7fe9acb3dd07448709bf8a23d5b6eb6d04fb39655a4d539ce21750bf4196f801",
+          "sequence": 2,
+          "started_monotonic": 386181.166991625,
+          "authorizes_input": false,
+          "frame": {
+            "stage": "vision-passive",
+            "image": "state-042-vision-passive.png",
+            "wall_time_ns": 1793762051282441000,
+            "elapsed": 107.58391645899974,
+            "raw": true,
+            "image_sha256": "93062d8f344dff6423d90f1766899c51037e4ce596ac8b1cb3049d43fd8dfa51"
+          },
+          "image_sha256": "93062d8f344dff6423d90f1766899c51037e4ce596ac8b1cb3049d43fd8dfa51",
+          "finished_monotonic": 386181.36322275
+        }
+      ]
+    },
+    {
+      "request_id": "c5782ce7bc587aac11cd742844389d6c723a4e91fbfdc5c9636d200627d16294",
+      "image": "state-043-vision-dealer-open.png",
+      "image_sha256": "7a1493c40daff22a2ec6888585bec407ab4bccd6cb6385c550e995e7824a36f5",
+      "created_monotonic": 386191.374853208,
+      "expires_monotonic": 386201.374853208,
+      "expired": true,
+      "response_consumed": false,
+      "response_file_exists": true,
+      "response_mtime_ns": 1793762073884980427,
+      "passive_frames": [
+        {
+          "request_id": "c5782ce7bc587aac11cd742844389d6c723a4e91fbfdc5c9636d200627d16294",
+          "sequence": 3,
+          "started_monotonic": 386194.445458708,
+          "authorizes_input": false,
+          "frame": {
+            "stage": "vision-passive",
+            "image": "state-044-vision-passive.png",
+            "wall_time_ns": 1793762064560955000,
+            "elapsed": 120.84485804196447,
+            "raw": true,
+            "image_sha256": "7a1493c40daff22a2ec6888585bec407ab4bccd6cb6385c550e995e7824a36f5"
+          },
+          "image_sha256": "7a1493c40daff22a2ec6888585bec407ab4bccd6cb6385c550e995e7824a36f5",
+          "finished_monotonic": 386194.62412575
+        }
+      ]
+    }
+  ],
+  "input_labels": [
+    "Load Career",
+    "Select SaveProof",
+    "Load selected Career",
+    "Used Car Dealer"
+  ],
+  "all_native_click_acknowledgments": [
+    [
+      128,
+      0
+    ],
+    [
+      128,
+      0
+    ],
+    [
+      128,
+      0
+    ],
+    [
+      128,
+      0
+    ]
+  ],
+  "passive_count": 3,
+  "observed_frames": {
+    "state-040-vision-passive.png": "Directly viewed: Joe card, LOADING..., no PRESS ENTER or inventory.",
+    "state-043-vision-dealer-open.png": "Directly viewed: Car Dealer, Duhen SunStrip1.8 DVC $15581, balance $20000, cart icon."
+  },
+  "findings": [
+    "All three requests expired; no response consumed, no Open purchase or Return action.",
+    "Only response003 exists. Its mtime is about2.4 seconds after expiry mapped from passive044 wall/monotonic timestamps; this is observational clock mapping, not proof of writer command chronology. Controller records expiry, not validation rejection of that late file.",
+    "Inventory arrived without an introduction Return action.",
+    "Parent reports stale-ID guard prevented response002 write; that failed host command is outside retained capture, so not independently verified here.",
+    "Final artifact finalization verified; observed scenario remains incomplete with container66 and observer1."
+  ],
+  "limits": [
+    "No change to failed raw capture or old physics reports.",
+    "Filesystem mtime cannot prove when host began composing response.",
+    "Passive frames cannot authorize input bound to another image; three passive frames do not establish all intermediate states.",
+    "Additional screenshots improved visibility, but no completed dealership purchase was demonstrated."
+  ],
+  "final_prepaid_sample": {
+    "stage": "final",
+    "complete": true,
+    "parent": "/Users/nicolas/Documents/github/sl-remastered/local/verify/parity-goal-20261102-092437/factory-fifth",
+    "child": "/Users/nicolas/Documents/github/sl-remastered/local/verify/parity-goal-20261102-092437/factory-fifth/issue53-stock-vision10-passive-v2",
+    "parent_identity": [
+      16777233,
+      76677611
+    ],
+    "child_identity": [
+      16777233,
+      85274871
+    ],
+    "parent_max": 4294967296,
+    "child_max": 838860800,
+    "scan_seconds": 5,
+    "scan_attempts": [
+      {
+        "number": 1,
+        "complete": true,
+        "elapsed": 4.239100583014078,
+        "entries_scanned": 20984
+      }
+    ],
+    "logical_bytes": 3867704012,
+    "child_bytes": 685573367,
+    "elapsed": 4.239102166029625,
+    "old_atime_deltas": {
+      ".": [
+        1793653890612951683,
+        1793761932513008667
+      ]
+    },
+    "hash_scope": "all_preexisting_regular_files; new_child_fully_accounted_without_unused_hashes"
+  }
+}

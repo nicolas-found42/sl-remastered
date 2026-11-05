@@ -97,7 +97,8 @@ int main(int argc, char** argv) {
       if (entry.resType != 8 || (entry.typeId >> 16) != 0 || !(entry.typeId & 0xffff)) continue;
       const size_t offset = entry.payloadOffset, size = entry.payloadSize;
       if (offset > view.bytes->size() || size > view.bytes->size() - offset) continue;
-      std::string payload(view.bytes->begin() + offset, view.bytes->begin() + offset + size);
+      const auto first = view.bytes->begin() + static_cast<std::vector<uint8_t>::difference_type>(offset);
+      std::string payload(first, first + static_cast<std::vector<uint8_t>::difference_type>(size));
       if (payload.find('\0') != std::string::npos) continue;
       std::istringstream lines(payload);
       std::string line;

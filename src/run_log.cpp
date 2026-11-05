@@ -1001,8 +1001,48 @@ struct RunRecorder::Impl {
   std::mutex logMutex;
   double start = 0;
   bool finished = false;
+  bool activated = false;
   bool capturing = false;
+  bool captureRequested = false, captureUnavailable = false;
   uint64_t checkpointSequence = 0;
+  size_t maxLogBytes = 16 * 1024 * 1024;
+  uint64_t logBytes = 0, droppedLines = 0, ioFailures = 0;
+  std::atomic<uint64_t> droppedContextLines{0};
+  int firstIoError = 0;
+
+  void ioFailure() {
+    ++ioFailures;
+    if (!firstIoError) firstIoError = errno ? errno : EIO;
+  }
+
+  void health(const char* phase) {
+    std::lock_guard<std::mutex> lock(logMutex);
+    char text[1024];
+    const int size = std::snprintf(text, sizeof text,
+                                   "{\"schema\":1,\"phase\":\"%s\",\"elapsed_seconds\":%.6f,"
+                                   "\"log_limit_bytes\":%zu,\"log_bytes_attempted\":%llu,"
+                                   "\"dropped_lines\":%llu,\"dropped_context_lines\":%llu,\"io_failures\":%llu,\"first_errno\":%d,"
+                                   "\"checkpoint_sequence\":%llu,\"ring_capacity\":%zu,"
+                                   "\"capture_requested\":%d,\"capture_unavailable\":%d}\n",
+                                   phase, monotonicSeconds() - start, maxLogBytes,
+                                   static_cast<unsigned long long>(logBytes), static_cast<unsigned long long>(droppedLines),
+                                   static_cast<unsigned long long>(droppedContextLines.load()),
+                                   static_cast<unsigned long long>(ioFailures), firstIoError,
+                                   static_cast<unsigned long long>(checkpointSequence), kRingCapacity,
+                                   captureRequested, captureUnavailable);
+    const std::string temporary = dir + "/telemetry.tmp";
+    const int fd = ::open(temporary.c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC | O_NOFOLLOW, 0600);
+    if (fd < 0) {
+      ioFailure();
+      return;
+    }
+    const bool written = writeAll(fd, text, static_cast<size_t>(size)) && ::fsync(fd) == 0;
+    const bool closed = ::close(fd) == 0;
+    if (!written || !closed || ::rename(temporary.c_str(), (dir + "/telemetry.json").c_str()) != 0) {
+      ioFailure();
+      ::unlink(temporary.c_str());
+    }
+  }
 
   struct Stream {
     int original = -1, pipeRead = -1, pipeWrite = -1;
@@ -1018,9 +1058,14 @@ struct RunRecorder::Impl {
     std::lock_guard<std::mutex> lock(logMutex);
     if (logFd < 0)
       return;
+    if (line.size() + 1 > maxLogBytes - logBytes) {
+      ++droppedLines;
+      return;
+    }
     std::string withNewline = line;
     withNewline += '\n';
-    writeAll(logFd, withNewline.data(), withNewline.size());
+    logBytes += withNewline.size();
+    if (!writeAll(logFd, withNewline.data(), withNewline.size())) ioFailure();
   }
 
   void checkpoint() {
@@ -1044,19 +1089,30 @@ struct RunRecorder::Impl {
     const int fd =
         ::open(temporary.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0600);
     if (fd < 0) {
+      {
+        std::lock_guard<std::mutex> lock(logMutex);
+        ioFailure();
+      }
       writeLogLine(formatLine(monotonicSeconds() - start, g_frame.load(),
                               "note", "flight checkpoint open failed"));
+      health("checkpoint_failed");
       return;
     }
     const bool ok = writeAll(fd, data.data(), data.size()) && ::fsync(fd) == 0;
     const bool closed = ::close(fd) == 0;
     if (!ok || !closed || ::rename(temporary.c_str(), target.c_str()) != 0) {
+      {
+        std::lock_guard<std::mutex> lock(logMutex);
+        ioFailure();
+      }
       ::unlink(temporary.c_str());
       writeLogLine(formatLine(monotonicSeconds() - start, g_frame.load(),
                               "note", "flight checkpoint write failed"));
+      health("checkpoint_failed");
       return;
     }
     checkpointSequence = sequence;
+    health("checkpoint");
   }
 
   void onCapturedLine(int index, const std::string& line) {
@@ -1067,11 +1123,17 @@ struct RunRecorder::Impl {
     Stream& s = streams[index];
     std::lock_guard<std::mutex> lock(reasonMutex);
     if (line.rfind("startup probe:", 0) == 0) {
-      s.reason = line;
+      s.reason = line.substr(0, 1024);
+      if (line.size() > 1024) ++droppedContextLines;
       s.stack.clear();
       s.tracking = true;
     } else if (s.tracking && line.rfind("  ", 0) == 0) {
-      s.stack.push_back(line);
+      if (s.stack.size() < 64) {
+        s.stack.push_back(line.substr(0, 1024));
+        if (line.size() > 1024) ++droppedContextLines;
+      } else {
+        ++droppedContextLines;
+      }
     } else {
       s.tracking = false;
     }
@@ -1129,18 +1191,34 @@ struct RunRecorder::Impl {
   bool startCapture() {
     std::fflush(stdout);
     std::fflush(stderr);
+    auto rollback = [&] {
+      const int failure = errno ? errno : EIO;
+      for (int i = 0; i < 2; ++i) {
+        auto& stream = streams[i];
+        if (stream.original >= 0) {
+          ::dup2(stream.original, i + 1);
+          ::close(stream.original);
+        }
+        if (stream.pipeRead >= 0) ::close(stream.pipeRead);
+        if (stream.pipeWrite >= 0) ::close(stream.pipeWrite);
+        stream.original = stream.pipeRead = stream.pipeWrite = -1;
+      }
+      errno = failure;
+      ioFailure();
+      return false;
+    };
     for (int i = 0; i < 2; ++i) {
       int fds[2];
       if (::pipe(fds) != 0)
-        return false;
+        return rollback();
       streams[i].pipeRead = fds[0];
       streams[i].pipeWrite = fds[1];
       streams[i].original = ::dup(i + 1);
       if (streams[i].original < 0)
-        return false;
+        return rollback();
     }
     for (int i = 0; i < 2; ++i)
-      ::dup2(streams[i].pipeWrite, i + 1);
+      if (::dup2(streams[i].pipeWrite, i + 1) < 0) return rollback();
     // stdout was line buffered on a terminal; a pipe would make it block
     // buffered and hide the last lines of a crash.
     std::setvbuf(stdout, nullptr, _IOLBF, 0);
@@ -1151,7 +1229,13 @@ struct RunRecorder::Impl {
     for (int sig : kStopSignals)
       sigaddset(&block, sig);
     pthread_sigmask(SIG_BLOCK, &block, &previous);
-    reader = std::thread([this] { readerLoop(); });
+    try {
+      reader = std::thread([this] { readerLoop(); });
+    } catch (...) {
+      pthread_sigmask(SIG_SETMASK, &previous, nullptr);
+      errno = EAGAIN;
+      return rollback();
+    }
     pthread_sigmask(SIG_SETMASK, &previous, nullptr);
     capturing = true;
     return true;
@@ -1192,6 +1276,10 @@ struct RunRecorder::Impl {
 RunRecorder::RunRecorder() : impl_(new Impl) {}
 
 RunRecorder::~RunRecorder() {
+  if (!impl_->activated) {
+    if (impl_->logFd >= 0) ::close(impl_->logFd);
+    return;
+  }
   if (!impl_->finished)
     finish(1);
   g_hub.store(nullptr, std::memory_order_release);
@@ -1261,6 +1349,7 @@ std::unique_ptr<RunRecorder> RunRecorder::start(const RunOptions& options,
 
   std::unique_ptr<RunRecorder> recorder(new RunRecorder);
   Impl& impl = *recorder->impl_;
+  impl.maxLogBytes = std::clamp(options.maxLogBytes, size_t{128}, size_t{64 * 1024 * 1024});
   impl.dir = absolute.string();
   impl.logPath = (absolute / "run.log").string();
   impl.logFd =
@@ -1407,9 +1496,14 @@ std::unique_ptr<RunRecorder> RunRecorder::start(const RunOptions& options,
   meta << "script: "
        << (options.scriptPath.empty() ? "none" : options.scriptPath) << "\n";
   meta << "run_dir: " << impl.dir << "\n";
+  meta << "run_id: " << absolute.filename().string() << "\n";
+  meta << "telemetry_schema: 1\nlog_limit_bytes: " << impl.maxLogBytes
+       << "\noperation_schema: op1-v1; process-local IDs; file handles scoped to FileState\n";
   {
     std::ofstream out(absolute / "meta.txt");
     out << meta.str();
+    out.close();
+    if (!out) impl.ioFailure();
   }
   if (!options.scriptPath.empty()) {
     fs::copy_file(options.scriptPath, absolute / "script.txt",
@@ -1463,6 +1557,7 @@ std::unique_ptr<RunRecorder> RunRecorder::start(const RunOptions& options,
   g_traceSaveHook = &traceSaveImpl;
   g_traceFlushHook = &flushDiagnostics;
   g_hub.store(&hub, std::memory_order_release);
+  impl.activated = true;
 
   if (options.installHandlers) {
     std::snprintf(g_crash.crashPath, sizeof g_crash.crashPath, "%s",
@@ -1475,9 +1570,13 @@ std::unique_ptr<RunRecorder> RunRecorder::start(const RunOptions& options,
     g_crash.note[0] = 0;
     installHandlers();
   }
-  if (options.captureStreams && !impl.startCapture())
+  impl.captureRequested = options.captureStreams;
+  if (options.captureStreams && !impl.startCapture()) {
+    impl.captureUnavailable = true;
     error = "stdout capture unavailable; terminal output only";
+  }
   eventText(EventKind::Note, "run started");
+  impl.health("started");
   return recorder;
 }
 
@@ -1518,6 +1617,11 @@ int RunRecorder::finish(int exitCode) {
   for (size_t i = 1; !ok && i < reason.size(); ++i)
     result << "stack=" << reason[i] << "\n";
   result.close();
+  if (!result) {
+    std::lock_guard<std::mutex> lock(impl.logMutex);
+    impl.ioFailure();
+  }
+  impl.health("finished");
   return exitCode;
 }
 

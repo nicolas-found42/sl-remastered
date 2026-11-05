@@ -1,0 +1,55 @@
+{
+  "schema": 1,
+  "scope": "Stock aggregate-root placeholder metadata correction and explicit narrowing conversions; original settling assertion remains failing.",
+  "constructor_change": {
+    "path": "src/object_physics.cpp",
+    "stock_function": "00465bd0",
+    "source": "local/census/all.c:75801-75813",
+    "before": {
+      "shape": "Mesh",
+      "dimensions": [
+        0,
+        0,
+        0
+      ],
+      "volume": 4.188790321350098
+    },
+    "after": {
+      "shape": "Box",
+      "dimensions": [
+        1,
+        1,
+        1
+      ],
+      "volume": 8
+    },
+    "final_shape": "Mesh after unchanged compound finalization",
+    "regression": "Public object Runtime factory with mass 20 and child Box half extents 0.25 preserves child volume 0.125, aggregate inverse mass 0.05 and root volumes 8.",
+    "red_green": {
+      "reported_by": "car_contact_design subagent",
+      "command": "python3 -I tools/parity/dev.py test '^object_runtime_unit$'",
+      "red_exit": 8,
+      "red_failures": [
+        "new root.volume == 8 check",
+        "new root.shape.volume == 8 check"
+      ],
+      "green_exit": 0,
+      "green_tests_passed": 1,
+      "limitation": "This summary records the subagent's executed test report; its transient RED stdout was not frozen in this file."
+    }
+  },
+  "focused_invocation": {
+    "chunk_id": "f1c609",
+    "wall_time_seconds": 0.000011333,
+    "exit_code": 8,
+    "original_token_count": 463,
+    "output": "Test project /Users/nicolas/Documents/github/sl-remastered/build\n      Start  57: car_activate_unit\n 1/11 Test  #57: car_activate_unit ................   Passed    0.18 sec\n      Start  60: resource_ref_set_unit\n 2/11 Test  #60: resource_ref_set_unit ............   Passed    0.42 sec\n      Start  63: native_navigator_unit\n 3/11 Test  #63: native_navigator_unit ............   Passed    0.10 sec\n      Start  67: scene_2d_unit\n 4/11 Test  #67: scene_2d_unit ....................   Passed    0.25 sec\n      Start  68: native_render_change_vm_unit\n 5/11 Test  #68: native_render_change_vm_unit .....   Passed    0.11 sec\n      Start  69: camera_traversal_unit\n 6/11 Test  #69: camera_traversal_unit ............   Passed    0.08 sec\n      Start  83: video_player_unit\n 7/11 Test  #83: video_player_unit ................   Passed    0.22 sec\n      Start 117: physics_multi_root_step_unit\n 8/11 Test #117: physics_multi_root_step_unit .....   Passed    0.08 sec\n      Start 126: object_runtime_unit\n 9/11 Test #126: object_runtime_unit ..............   Passed    0.09 sec\n      Start 127: car_world_step_unit\n10/11 Test #127: car_world_step_unit ..............   Passed    0.29 sec\n      Start 128: object_world_step_unit\n11/11 Test #128: object_world_step_unit ...........Subprocess aborted***Exception:   0.39 sec\nAssertion failed: (speed < 0.3f), function main, file object_world_step_test.cpp, line 240.\nbox: lowestY=0.281 finalY=0.300 vel=0.468 pairs=3\nbox rest gate: omegaSq=10.2992 scaledTorqueSq=0 scaledActivitySq=96.8411 flags=0x9\nbox support: lastForce=(-0.00639248,-196.171,0.0118693) omega=(2.34968,-1.80417,1.23417) activity=(8.94239,-196.164,-13.278)\n\n\n91% tests passed, 1 tests failed out of 11\n\nTotal Test time (real) =   2.21 sec\n\nThe following tests FAILED:\n\t128 - object_world_step_unit (Subprocess aborted)\nErrors while running CTest\n"
+  },
+  "original_object_settling_fixed": false,
+  "latest_complete_full_gate": "docs/evidence/physics-gate-20261104-result.json",
+  "limitations": [
+    "The focused invocation is not a passing full gate. It passed 10 tests and failed the unchanged original object_world_step_unit assertion.",
+    "No 900-step diagnostic was rerun after the constructor correction; the prior bound source snapshot remains historical.",
+    "Explicit numeric casts preserve conversion points and operation grouping. Native deep lint must be rerun after the fixes."
+  ]
+}

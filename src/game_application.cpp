@@ -2511,7 +2511,8 @@ int runGameApplication(int argc, char** argv, const GameApplicationPaths* player
     recorder = runlog::RunRecorder::start(options, error);
     if (!recorder || !error.empty()) {
       std::fprintf(stderr, "startup probe: run log: %s\n", error.c_str());
-      return 2;
+      // Recording is best effort. Failure to open diagnostic storage must not
+      // prevent the player's normal startup or change its eventual exit code.
     }
   }
   const int code =

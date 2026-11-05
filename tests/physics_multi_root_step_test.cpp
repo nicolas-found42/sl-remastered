@@ -1,5 +1,6 @@
 #include "physics_multi_root_step.hpp"
 #include "physics_suspension.hpp"
+#include <array>
 #include <cmath>
 #include <cstdio>
 #include <string>
@@ -382,6 +383,131 @@ int main() {
             FreeBodyStepResult::Advanced || (sleeper.flags & kBodyAsleep) ||
         sleeper.activity[1] < 1000 || sleeper.state[sleeper.current].vel[0] >= 0)
       return 25;
+  }
+  // FUN_004a5190: a retained sweep corrects pass one; a newly discovered
+  // impact may invalidate prediction only in pass two's pending stage.
+  // Merging discovery into retained refresh makes that new wake repeatedly
+  // sweep the old row and postpones the impact until the count-19 escape.
+  {
+    BodyProto dynamicProto;
+    dynamicProto.invMass = 1;
+    dynamicProto.flags = kProtoSimple;
+    BodyProto staticProto;
+    staticProto.flags = kProtoStatic;
+    Body moving, ground;
+    moving.proto = &dynamicProto;
+    ground.proto = &staticProto;
+    moving.flags = kBodyActive | kBodyNoRotation;
+    moving.state[0].vel = {-5, 0, 0};
+    World phasedWorld;
+    phasedWorld.params.gravityEnabled = false;
+    phasedWorld.bodies = {&moving};
+    MultiRootWork phasedWork;
+    phasedWork.contacts = true;
+    unsigned retainedPass = 0;
+    unsigned pendingPass = 0;
+    unsigned impactCorrection = 0;
+    bool failPending = true;
+    phasedWork.gatherContacts = [&](std::vector<DirectContact>& out, std::string&) {
+      DirectContact held;
+      held.a = &moving;
+      held.b = &ground;
+      held.normal = {0, 1, 0};
+      held.resting = true;
+      held.separation = retainedPass++ == 0 ? 0.018f : 0.025f;
+      if (retainedPass == 1)
+        moving.state[moving.current ^ 1].stepFlags &= ~1u;
+      out.push_back(held);
+      return true;
+    };
+    phasedWork.gatherPendingContacts = [&](std::vector<DirectContact>& out, std::string& why) {
+      if (pendingPass++)
+        return true;
+      if (retainedPass != 2)
+        return false;
+      DirectContact impact;
+      impact.a = &moving;
+      impact.b = &ground;
+      impact.normal = {1, 0, 0};
+      impact.separation = 0.025f;
+      moving.state[moving.current ^ 1].stepFlags &= ~1u;
+      out.push_back(impact);
+      if (failPending) {
+        why = "injected pending discovery failure";
+        return false;
+      }
+      return true;
+    };
+    phasedWork.finishContacts = [&](const std::vector<DirectContact>& done) {
+      for (const auto& contact : done)
+        if (contact.normalImpulse > 0)
+          ++impactCorrection;
+    };
+    const std::array<State, 2> original{moving.state[0], moving.state[1]};
+    if (stepMultiRootWorld(phasedWorld, {{&moving}}, 0.01f, phasedWork, error) !=
+            FreeBodyStepResult::Unsupported ||
+        moving.current != 0 ||
+        moving.state[0].pos != original[0].pos || moving.state[0].vel != original[0].vel ||
+        moving.state[0].force != original[0].force || moving.state[1].pos != original[1].pos ||
+        moving.state[1].stepFlags != original[1].stepFlags || phasedWorld.time != 0)
+      return 27;
+    failPending = false;
+    retainedPass = pendingPass = impactCorrection = 0;
+    if (stepMultiRootWorld(phasedWorld, {{&moving}}, 0.01f, phasedWork, error) !=
+            FreeBodyStepResult::Advanced ||
+        moving.state[moving.current].vel[0] <= -5 || impactCorrection != 1 ||
+        retainedPass != 3 || pendingPass != 2)
+      return 26;
+  }
+  // 00496fe0 dispatches admitted state 6 as well as state 7 to 00496050
+  // (all.c 111265-111268). A retained impact must receive that sweep before
+  // discovery; only the later 004a35d0 consumption changes state 6 to 7.
+  {
+    BodyProto dynamicProto;
+    dynamicProto.invMass = 1;
+    dynamicProto.flags = kProtoSimple;
+    BodyProto staticProto;
+    staticProto.flags = kProtoStatic;
+    Body moving, ground;
+    moving.proto = &dynamicProto;
+    ground.proto = &staticProto;
+    moving.flags = kBodyActive | kBodyNoRotation;
+    moving.state[0].vel = {-5, 0, 0};
+    World retainedWorld;
+    retainedWorld.params.gravityEnabled = false;
+    retainedWorld.bodies = {&moving};
+    DirectContact held;
+    held.a = &moving;
+    held.b = &ground;
+    held.normal = {1, 0, 0};
+    held.separation = 0.025f;
+    unsigned retainedPass = 0;
+    unsigned pendingPass = 0;
+    MultiRootWork retainedWork;
+    retainedWork.contacts = true;
+    retainedWork.gatherContacts = [&](std::vector<DirectContact>& out, std::string&) {
+      if (++retainedPass == 1)
+        moving.state[moving.current ^ 1].stepFlags &= ~1u;
+      out.push_back(held);
+      return true;
+    };
+    retainedWork.gatherPendingContacts = [&](std::vector<DirectContact>&, std::string& why) {
+      ++pendingPass;
+      if (retainedPass == 1 || !(held.normalImpulse > 0)) {
+        why = "discovery preceded the admitted state-6 sweep";
+        return false;
+      }
+      return true;
+    };
+    retainedWork.finishContacts = [&](const std::vector<DirectContact>& done) {
+      if (!done.empty())
+        held = done.front();
+    };
+    if (stepMultiRootWorld(retainedWorld, {{&moving}}, 0.01f, retainedWork, error) !=
+            FreeBodyStepResult::Advanced ||
+        !pendingPass || !held.resting || !(held.normalImpulse > 0) ||
+        moving.state[moving.current].vel[0] <= -5)
+      return 28;
   }
   return 0;
 }

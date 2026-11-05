@@ -94,7 +94,9 @@ int main() {
       }
     }
     CHECK(call < show->size());
-    std::vector<TufaNode> slice(show->begin() + call - 10, show->begin() + call + 1);
+    CHECK(call >= 10);
+    const auto callOffset = static_cast<std::vector<TufaNode>::difference_type>(call);
+    std::vector<TufaNode> slice(show->begin() + callOffset - 10, show->begin() + callOffset + 1);
     slice.push_back({0x2a, 0, false, 0});
     std::vector<const TufaClass*> classes{menu, &gfxFile.file.classes[0], &stringFile.file.classes[0]};
     std::vector<VmStaticFields> states{{&gfxFile.file.classes[0], {}}, {&stringFile.file.classes[0], {}}};

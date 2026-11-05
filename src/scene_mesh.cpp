@@ -44,8 +44,8 @@ static bool sceneLoadMeshImpl(ResourceWorld &world, uint32_t id,
     error = "invalid mesh payload";
     return false;
   }
-  const std::string payload(resource.packBytes->begin() + offset,
-                            resource.packBytes->begin() + offset + size);
+  const std::string payload(resource.packBytes->begin() + static_cast<std::vector<uint8_t>::difference_type>(offset),
+                            resource.packBytes->begin() + static_cast<std::vector<uint8_t>::difference_type>(offset + size));
   if (payload.find('\0') != std::string::npos) {
     error = "invalid mesh payload";
     return false;

@@ -51,6 +51,14 @@ int main() {
   assert(!prepareGameApplicationPaths(resources, root / "bad-logs", paths, error));
   assert(!fs::exists(root / "bad-logs/save"));
 
+  // A diagnostic-store failure must preserve access to valid save storage.
+  fs::create_directories(root / "blocked-logs");
+  std::ofstream(root / "blocked-logs/logs") << "occupied by a regular file";
+  assert(prepareGameApplicationPaths(resources, root / "blocked-logs", paths, error));
+  assert(error.empty());
+  assert(fs::is_directory(paths.dataRoot / "save/game"));
+  assert(fs::is_regular_file(paths.logRoot));
+
   fs::remove(resources / "StockCursorResources.exe");
   assert(!prepareGameApplicationPaths(resources, root / "missing-cursor-user", paths, error));
   assert(!fs::exists(root / "missing-cursor-user"));

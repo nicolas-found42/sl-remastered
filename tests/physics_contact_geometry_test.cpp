@@ -6,6 +6,180 @@
 using namespace physics;
 int main() {
   {
+    // 004af970 invalid fixed point/face returns zero; 004a2d10 drops
+    // it before subtracting the nonzero rounding radius, for states6/7.
+    BodyProto rounded, obstacleProto;
+    rounded.shape.type = ShapeType::Sphere;
+    rounded.shape.radius = 0.5f;
+    obstacleProto.flags = kProtoStatic;
+    obstacleProto.shape.type = ShapeType::Box;
+    obstacleProto.shape.core = std::make_shared<CollisionCore>(boxCore({1, 1, 1}));
+    Body moving, obstacle;
+    moving.proto = &rounded;
+    moving.flags = kBodyActive;
+    obstacle.proto = &obstacleProto;
+    moving.state[0].pos = moving.state[1].pos = {1.2f, 1.2f, 0};
+    std::optional<size_t> vertex, face;
+    for (size_t i = 0; i < obstacleProto.shape.core->features.size(); ++i) {
+      const auto ref = obstacleProto.shape.core->features[i].ref;
+      if (ref.kind == CoreFeatureKind::Face &&
+          obstacleProto.shape.core->faces[ref.index].normal == Vec3({1, 0, 0}))
+        face = i;
+    }
+    assert(face);
+    for (bool resting : {false, true}) {
+      DynamicBodyPair retained;
+      std::string error;
+      assert(createDynamicBodyPair(moving, obstacle, retained, error));
+      retained.firstFeature = vertex;
+      retained.secondFeature = face;
+      retained.contact.resting = resting;
+      retained.contact.normalImpulse = 3;
+      auto candidate = retained;
+      ContactGeometryWorld world;
+      Vec3 point{};
+      assert(updateDynamicBodyPair(candidate, world, point) == ContactGeometryResult::Updated);
+      assert(updateRetainedDynamicBodyPair(retained, world, point) == ContactGeometryResult::Dropped);
+      assert(retained.firstFeature == vertex && retained.secondFeature == face);
+      assert(retained.contact.normalImpulse == 3);
+      DynamicBodyPair reversed;
+      assert(createDynamicBodyPair(obstacle, moving, reversed, error));
+      reversed.firstFeature = face;
+      reversed.secondFeature = vertex;
+      reversed.contact.resting = resting;
+      assert(updateRetainedDynamicBodyPair(reversed, world, point) == ContactGeometryResult::Dropped);
+    }
+    // A corrupt feature reference is unavailable geometry, not an expired
+    // Voronoi region. It must not be converted into a successful miss.
+    auto malformedCore = std::make_shared<CollisionCore>(*obstacleProto.shape.core);
+    malformedCore->features[*face].ref.index = malformedCore->faces.size();
+    obstacleProto.shape.core = malformedCore;
+    DynamicBodyPair malformed;
+    std::string error;
+    assert(createDynamicBodyPair(moving, obstacle, malformed, error));
+    malformed.secondFeature = face;
+    ContactGeometryWorld world;
+    Vec3 point{};
+    assert(updateRetainedDynamicBodyPair(malformed, world, point) == ContactGeometryResult::Unsupported);
+  }
+  {
+    // The car/car regression reaches a fixed mesh vertex/edge row.
+    // 004af3a0 validates the edge planes without walking the vertex star.
+    BodyProto vertexProto, edgeProto;
+    vertexProto.shape.type = ShapeType::Box;
+    vertexProto.shape.core = std::make_shared<CollisionCore>(boxCore({1, 1, 1}));
+    edgeProto.shape.type = ShapeType::CylinderX;
+    edgeProto.shape.core = std::make_shared<CollisionCore>(segmentCore({-1, 0, 0}, {1, 0, 0}));
+    edgeProto.flags = kProtoStatic;
+    Body vertexBody, edgeBody;
+    vertexBody.proto = &vertexProto;
+    vertexBody.flags = kBodyActive;
+    edgeBody.proto = &edgeProto;
+    vertexBody.state[0].pos = vertexBody.state[1].pos = {1, 1, 1.03f};
+    std::optional<size_t> vertex;
+    for (size_t i = 0; i < vertexProto.shape.core->features.size(); ++i) {
+      const auto ref = vertexProto.shape.core->features[i].ref;
+      if (ref.kind == CoreFeatureKind::Vertex &&
+          vertexProto.shape.core->vertices[ref.index].position == Vec3({-1, -1, -1}))
+        vertex = i;
+    }
+    assert(vertex);
+    for (bool resting : {false, true}) {
+      DynamicBodyPair retained;
+      std::string error;
+      assert(createDynamicBodyPair(vertexBody, edgeBody, retained, error));
+      retained.firstFeature = vertex;
+      retained.secondFeature = 2;
+      retained.contact.resting = resting;
+      ContactGeometryWorld world;
+      Vec3 point{};
+      assert(updateRetainedDynamicBodyPair(retained, world, point) == ContactGeometryResult::Updated);
+      assert(retained.firstFeature == vertex && retained.secondFeature == 2);
+      assert(retained.contact.pointA == Vec3({-1, -1, -1}) && retained.contact.pointB == Vec3({0, 0, 0}));
+      assert(retained.contact.normal == Vec3({0, 0, 1}));
+      assert(retained.contact.separation == 1.03f - 1);
+      DynamicBodyPair reversed;
+      assert(createDynamicBodyPair(edgeBody, vertexBody, reversed, error));
+      reversed.firstFeature = 2;
+      reversed.secondFeature = vertex;
+      reversed.contact.resting = resting;
+      assert(updateRetainedDynamicBodyPair(reversed, world, point) == ContactGeometryResult::Updated);
+      assert(reversed.contact.pointB == Vec3({-1, -1, -1}) && reversed.contact.normal == Vec3({0, 0, -1}));
+    }
+  }
+  {
+    // Fixed edge/edge rows preserve the axis-cross normal in both admitted
+    // states; moving past an endpoint expires the row instead of rewalking.
+    BodyProto firstProto, secondProto;
+    firstProto.shape.type = ShapeType::CylinderX;
+    secondProto.shape.type = ShapeType::CylinderY;
+    firstProto.shape.core = std::make_shared<CollisionCore>(segmentCore({-1, 0, 0}, {1, 0, 0}));
+    secondProto.shape.core = std::make_shared<CollisionCore>(segmentCore({0, -1, 0}, {0, 1, 0}));
+    secondProto.flags = kProtoStatic;
+    Body first, second;
+    first.proto = &firstProto;
+    first.flags = kBodyActive;
+    second.proto = &secondProto;
+    second.state[0].pos = second.state[1].pos = {0, 0, 0.03f};
+    for (bool resting : {false, true}) {
+      DynamicBodyPair retained;
+      std::string error;
+      assert(createDynamicBodyPair(first, second, retained, error));
+      retained.firstFeature = retained.secondFeature = 2;
+      retained.contact.resting = resting;
+      ContactGeometryWorld world;
+      Vec3 point{};
+      assert(updateRetainedDynamicBodyPair(retained, world, point) == ContactGeometryResult::Updated);
+      assert(retained.firstFeature == 2 && retained.secondFeature == 2);
+      assert(retained.contact.normal == Vec3({0, 0, -1}));
+      assert(retained.contact.separation == 0.03f && retained.contact.resting == resting);
+      second.state[0].pos[0] = second.state[1].pos[0] = 2;
+      firstProto.shape.radius = 2;
+      auto candidate = retained;
+      assert(updateDynamicBodyPair(candidate, world, point) == ContactGeometryResult::Updated);
+      assert(updateRetainedDynamicBodyPair(retained, world, point) == ContactGeometryResult::Dropped);
+      firstProto.shape.radius = 0;
+      second.state[0].pos[0] = second.state[1].pos[0] = 0;
+    }
+  }
+  {
+    // A tilted cylinder axis against a triangle edge is a valid fixed pair
+    // whose separating normal is more than 45 degrees from the PHYS normal.
+    // 004a2d10 consumes 004af970's edge normal directly.
+    BodyProto cylinder, fixedGround;
+    cylinder.shape.type = ShapeType::CylinderX;
+    cylinder.shape.core = std::make_shared<CollisionCore>(segmentCore({-1, 0, 0}, {1, 0, 0}));
+    fixedGround.flags = kProtoStatic;
+    Body tilted, floor;
+    tilted.proto = &cylinder;
+    tilted.flags = kBodyActive;
+    floor.proto = &fixedGround;
+    tilted.state[0].pos = {0, 0.03f, 0};
+    tilted.state[0].quat = quatNormalize({0, 0, 1, 2});
+    tilted.state[0].rot = matrixFromQuat(tilted.state[0].quat);
+    tilted.state[1] = tilted.state[0];
+    GroundFacePair retained;
+    std::string error;
+    assert(createGroundFacePair(tilted, floor, {{{-2, 0, -2}, {2, 0, 2}, {2, 0, -2}}},
+                                {0, 1, 0}, retained, error));
+    retained.bodyFeature = 2;
+    for (size_t index = 0; index < retained.triangle.features.size(); ++index) {
+      const auto ref = retained.triangle.features[index].ref;
+      if (ref.kind == CoreFeatureKind::Edge &&
+          retained.triangle.edges[ref.index].vertices == std::array<size_t, 2>{0, 1})
+        retained.triangleFeature = index;
+    }
+    assert(retained.triangleFeature);
+    const auto edge = retained.triangleFeature;
+    retained.contact.resting = true;
+    ContactGeometryWorld geometry;
+    Vec3 point{};
+    assert(updateGroundFacePair(retained, geometry, point) == ContactGeometryResult::Updated);
+    assert(retained.bodyFeature == 2 && retained.triangleFeature == edge);
+    assert(retained.contact.normal[1] > 0 && retained.contact.normal[1] < 0.7071f);
+    assert(retained.contact.separation > 0 && retained.contact.separation < 0.03f);
+  }
+  {
     // Constructor-start original 0049ec00, step39 cache and first step40 row.
     // first-input analysis 43038a54...a364; original/repeat64/control32 agree.
     // Preserve native pending/Created flags and ground friction .6 here;
@@ -626,12 +800,24 @@ int main() {
     assert(reversed.firstFeature == triangleFeature && reversed.secondFeature == bodyFeature);
     assert(reversed.contact.pointB == vertex && reversed.contact.resting);
     assert(reversed.contact.normal == Vec3({0, -1, 0}));
+    // The captured vertex leaves the same fixed triangle's side planes.
+    // Both admitted states expire; a rounding radius cannot revive the row.
+    box.shape.radius = 0.5f;
+    landing.state[0].pos[0] += 2;
+    landing.state[1] = landing.state[0];
+    for (bool resting : {false, true}) {
+      auto expired = bodyPair;
+      expired.contact.resting = resting;
+      assert(updateRetainedDynamicBodyPair(expired, faceWorld, point) == ContactGeometryResult::Dropped);
+      assert(expired.firstFeature == bodyFeature && expired.secondFeature == triangleFeature);
+      assert(expired.contact.normalImpulse == 3 && expired.contact.normalForce == 4 &&
+             expired.contact.frictionForce == 5);
+    }
   }
-  // Ground contacts carry the stored PHYS face normal (0049b830 constructs
-  // them from the face); the aligned core normal passes the deviation check.
+  // This point/face pair's separating normal equals the PHYS face normal.
   assert(face.contact.normal == Vec3({0, 1, 0}));
-  // Deviation check: aligned and anti-aligned pass (anti-aligned flips),
-  // normals beyond 45 degrees from the face are rejected.
+  // Preserve the standalone legacy alignment utility's contract. It is not
+  // used to modify the normal of Stock's retained contacts.
   const auto up = groundFaceContactNormal({0.1f, 1, 0}, {0, 1, 0});
   assert(up && *up == Vec3({0, 1, 0}));
   const auto down = groundFaceContactNormal({0, -1, 0.2f}, {0, 1, 0});

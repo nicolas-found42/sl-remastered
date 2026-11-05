@@ -96,9 +96,9 @@ def corpus_commands(check_sh):
             child = words[split + 1:]
         if len(child) < 3 or child[:2] != ['python3', '-I'] or not found.fullmatch(child[2]):
             continue
-        if len(child) != 3:
+        if any(re.search(r'[;&|<>`$]', part) for part in child[3:]):
             raise ValueError('unsupported Python suite command in gate')
-        command = [sys.executable, '-I', child[2]]
+        command = [sys.executable, '-I', *child[2:]]
         if wrapped:
             command = [sys.executable, '-I', words[2], *words[3:split], '--', *command]
         commands.append(command)
@@ -477,6 +477,8 @@ def main(argv=None):
     for lane in ('evidence-index', 'trace-inspect'):
         p = sub.add_parser(lane, help='inspect retained evidence without executing targets')
         p.add_argument('args', nargs=argparse.REMAINDER)
+    p = sub.add_parser('incident', help='read bounded historical records by time/run/operation without launching targets')
+    p.add_argument('args', nargs=argparse.REMAINDER)
     p = sub.add_parser('jev-packet', help='build a bounded request from hashed evidence excerpts')
     p.add_argument('manifest', type=Path)
     p = sub.add_parser('capacity', help='read-only retention and existing-parent planning')
@@ -521,6 +523,9 @@ def main(argv=None):
             if args.no_build:
                 command.append('--no-build')
             return execute([command], args.dry_run)
+        if args.lane == 'incident':
+            forwarded = args.args[1:] if args.args[:1] == ['--'] else args.args
+            return execute([[sys.executable, '-I', str(ROOT / 'tools/incident.py'), *forwarded]], args.dry_run)
         if args.lane in ('evidence-index', 'trace-inspect'):
             script = args.lane.replace('-', '_') + '.py'
             return execute([[sys.executable, '-I', str(HERE / script), *args.args]], args.dry_run)
