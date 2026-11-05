@@ -1,0 +1,17 @@
+# Rung 2 fixture entry: LOAD CAREER from the main menu, open the CareerSix-1
+# save created by rung2-new-career.txt, and reach the Garage.
+0 wait splash 30
+0 keydown Escape
+0 wait menu 30
+0 keyup Escape
+0 clickn 0.35 0.26
+1.5 shot @run/r2-load-dialog.bmp
+1.7 clickn 0.53 0.32
+2.0 shot @run/r2-load-selected.bmp
+2.2 clickn 0.42 0.835
+5 shot @run/r2-load-garage.bmp
+7 clickn 0.5 0.72
+9 shot @run/r2-load-garage-after.bmp
+10 clickn 0.234375 0.079167
+12 shot @run/r2-load-carlot.bmp
+13 quit
