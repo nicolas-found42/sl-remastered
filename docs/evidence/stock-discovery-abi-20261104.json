@@ -1,0 +1,268 @@
+{
+  "schema": 1,
+  "scope": "Standalone owned PE32 actual discovery-generated entry/return stubs. No Stock graph, resource identity, game capture or parity acceptance.",
+  "failed_attempt": {
+    "path": "local/verify/issue53-native-clock-abi-v3-20261102/discovery-abi-v1",
+    "outer_exit": 1,
+    "reason": "4MiB child artifact guard refused inherited unrelated input/factory outputs before discovery helper execution. Also compiler exposed malformed test snapshot path literals; corrected in distinctv2.",
+    "execution_finished": false,
+    "container_removed": true,
+    "cleanup_exit": 0,
+    "seed_unchanged": true,
+    "producer_unchanged": true,
+    "helper_abi_result": "not established",
+    "retained_unchanged": true
+  },
+  "corrected_attempt": {
+    "path": "local/verify/issue53-bundle-20261102/discovery-abi-v2",
+    "outer_exit": 0,
+    "result": {
+      "passed": false,
+      "execution_finished": true,
+      "functional_execution_finished": true,
+      "container_exit": 0,
+      "helper_exits": {
+        "discovery": "0",
+        "discovery-no-fx": "1"
+      },
+      "seed_unchanged": true,
+      "producer_unchanged": true,
+      "container_removed": true,
+      "artifact_finalization": "verified",
+      "factory_raw_checks": {
+        "discovery": true,
+        "discovery-no-fx": true
+      }
+    },
+    "metadata_note": "Inherited adapter passed:false initialization remains inconsistent with execution_finished:true; no overall passed/acceptance claim.",
+    "limits": {
+      "child_bytes": 4194304,
+      "parent_bytes": 67108864,
+      "container_deadline_seconds": 90,
+      "outer_deadline_seconds": 120,
+      "compile_deadline_seconds": 30,
+      "pool": {
+        "cpu": 1,
+        "host_memory": 9,
+        "vm_memory": 9,
+        "stock": 1
+      },
+      "container_memory_bytes": 4831838208,
+      "private_prefix_bytes": 3221225472
+    },
+    "final_prepaid_sample": {
+      "stage": "final",
+      "complete": true,
+      "parent": "/Users/nicolas/Documents/github/sl-remastered/local/verify/issue53-bundle-20261102",
+      "child": "/Users/nicolas/Documents/github/sl-remastered/local/verify/issue53-bundle-20261102/discovery-abi-v2",
+      "parent_identity": [
+        16777233,
+        77326639
+      ],
+      "child_identity": [
+        16777233,
+        85333650
+      ],
+      "parent_max": 67108864,
+      "child_max": 4194304,
+      "scan_seconds": 5,
+      "scan_attempts": [
+        {
+          "number": 1,
+          "complete": true,
+          "elapsed": 0.08754679100820795,
+          "entries_scanned": 254
+        }
+      ],
+      "logical_bytes": 63761827,
+      "child_bytes": 2616556,
+      "elapsed": 0.08754879102343693,
+      "old_atime_deltas": {
+        ".": [
+          1793763035498377684,
+          1793763035547928807
+        ],
+        "discovery-abi-v2-runner.py": [
+          1793763035280526960,
+          1793763035695657006
+        ],
+        "issue53-original900-observer-v1/__pycache__/prefix_shell.cpython-315.pyc": [
+          1793759959932160021,
+          1793763035451636778
+        ],
+        "discovery-abi-v2-derivation.json": [
+          1793763035269838091,
+          1793763035472869557
+        ]
+      },
+      "hash_scope": "all_preexisting_regular_files; new_child_fully_accounted_without_unused_hashes"
+    }
+  },
+  "cases": {
+    "discovery": {
+      "exit": 0,
+      "helper": {
+        "scope": "owned_actual_discovery_stubs_only",
+        "cases": 384,
+        "unstable": 0,
+        "failures": 0,
+        "saved_failures": 0,
+        "reserved": 384,
+        "pending": 0,
+        "dropped": 0,
+        "stack_limits": 0
+      },
+      "snapshot_bytes_each": 221184,
+      "baseline_repeat_equal": true,
+      "baseline_observed_equal": true,
+      "differing_cases": 0
+    },
+    "discovery-no-fx": {
+      "exit": 1,
+      "helper": {
+        "scope": "owned_actual_discovery_stubs_only",
+        "cases": 384,
+        "unstable": 0,
+        "failures": 384,
+        "saved_failures": 288,
+        "reserved": 384,
+        "pending": 0,
+        "dropped": 0,
+        "stack_limits": 0
+      },
+      "snapshot_bytes_each": 221184,
+      "baseline_repeat_equal": true,
+      "baseline_observed_equal": false,
+      "differing_cases": 384
+    }
+  },
+  "negative_lineage": {
+    "exact_transform": "Replace both exact 'fxrstor (%esp)' anchors with 'nop'; no other source differences.",
+    "verified": true
+  },
+  "production_constraints": {
+    "hook_count": 8,
+    "plans_and_guard_table_unchanged": true,
+    "new_498dd0_hook": false,
+    "record_limit": 32768,
+    "output_limit_bytes": 100663296,
+    "schema_version": 2,
+    "saved_fp_layout": {
+      "cw_offset_bytes": 0,
+      "mxcsr_offset_bytes": 24,
+      "entry_and_return_separate": true
+    }
+  },
+  "formatted_source_equivalence": {
+    "tools/wine/capture/discovery_trace.c": {
+      "executed_source": "local/verify/issue53-bundle-20261102/discovery-abi-v2/source/discovery_trace.c",
+      "working_sha256": "2eb480a46266e738295848939bc8a87ee3dd2354f3a4f7d33a33ae4eaa961964",
+      "executed_sha256": "56c903cfadb4853193f0d6ea16586e5f4980c3cf8f0afe747a35365e200b6d33",
+      "lexical_tokens_equal": true,
+      "method": "C lexical tokens excluding whitespace and comments; quoted contents preserved. This is not a fresh execution of formatted bytes."
+    },
+    "tools/wine/capture/discovery_trace.h": {
+      "executed_source": "local/verify/issue53-bundle-20261102/discovery-abi-v2/source/discovery_trace.h",
+      "working_sha256": "4194c701cef7d40c32e70af45d5b05e821a2d3428d54f3374692d73f0d73ec5d",
+      "executed_sha256": "4194c701cef7d40c32e70af45d5b05e821a2d3428d54f3374692d73f0d73ec5d",
+      "lexical_tokens_equal": true,
+      "method": "C lexical tokens excluding whitespace and comments; quoted contents preserved. This is not a fresh execution of formatted bytes."
+    },
+    "tests/wine_discovery_test.c": {
+      "executed_source": "local/verify/issue53-bundle-20261102/discovery-abi-v2/source/wine_discovery_test.c",
+      "working_sha256": "010530db777b80fd9e264d82a305fd14ab0e3f31483bca6fa8f6e782a2adea3a",
+      "executed_sha256": "8fb5d79688cc784c21c87aab974220460f7e40374c54a6cb8ba746363d26feb2",
+      "lexical_tokens_equal": true,
+      "method": "C lexical tokens excluding whitespace and comments; quoted contents preserved. This is not a fresh execution of formatted bytes."
+    }
+  },
+  "bindings": {
+    "local/verify/issue53-native-clock-abi-v3-20261102/discovery-abi-v1/result.json": {
+      "sha256": "e301a448aba76f8526a6a9ea583b646a5ab3f0de81dc54ef96a6aed533dac6bc",
+      "bytes": 4312
+    },
+    "local/verify/issue53-native-clock-abi-v3-20261102/discovery-abi-v1/source-manifest.json": {
+      "sha256": "4a7ca3b6df935ec8e05acbe4ea17da7213799ab07d7c1c4b81cca1c45dceb915",
+      "bytes": 2500
+    },
+    "local/verify/issue53-native-clock-abi-v3-20261102/discovery-abi-v1/compile.log": {
+      "sha256": "8d6212bee48ed7f210b438bc84bbb93418906b3d919174ba59513cd7eb092614",
+      "bytes": 3228
+    },
+    "local/verify/issue53-bundle-20261102/discovery-abi-v2/result.json": {
+      "sha256": "1c79b71a701a56c2ca3a601e5c73cb8f6e99a1a835f4f80f143651d7f68ca244",
+      "bytes": 3502
+    },
+    "local/verify/issue53-bundle-20261102/discovery-abi-v2/source-manifest.json": {
+      "sha256": "3bfaa85deb716ad85a77b9ded30bab4ec9934c281184431caf71c527304e4254",
+      "bytes": 913
+    },
+    "local/verify/issue53-bundle-20261102/discovery-abi-v2/discovery-fault-manifest.json": {
+      "sha256": "7647cea6afbeee8ae6aeefd41ddfe99d769816d3a29a4252b1c8cb42f578fe97",
+      "bytes": 395
+    },
+    "local/verify/issue53-bundle-20261102/discovery-abi-v2/prepaid-audit.json.gz": {
+      "sha256": "c0564cbd46da90466c2132e02851bc6dd6ada707af4b3634efc25a3aa77193f1",
+      "bytes": 18710
+    },
+    "local/verify/issue53-bundle-20261102/discovery-abi-v2/source/discovery_trace.c": {
+      "sha256": "56c903cfadb4853193f0d6ea16586e5f4980c3cf8f0afe747a35365e200b6d33",
+      "bytes": 20879
+    },
+    "local/verify/issue53-bundle-20261102/discovery-abi-v2/source/discovery_trace.h": {
+      "sha256": "4194c701cef7d40c32e70af45d5b05e821a2d3428d54f3374692d73f0d73ec5d",
+      "bytes": 1066
+    },
+    "local/verify/issue53-bundle-20261102/discovery-abi-v2/source/wine_discovery_test.c": {
+      "sha256": "8fb5d79688cc784c21c87aab974220460f7e40374c54a6cb8ba746363d26feb2",
+      "bytes": 4631
+    },
+    "local/verify/issue53-bundle-20261102/discovery-abi-v2/discovery-fault-source/discovery_trace.c": {
+      "sha256": "90c154ad54b21436379ed6e2833835ecba5274c977b278a0821c8508717c257b",
+      "bytes": 20857
+    },
+    "local/verify/issue53-bundle-20261102/discovery-abi-v2/discovery.exe.compile.json": {
+      "sha256": "8d9da7b7ac8542fa994ffe30d18e5ea2623dd95638e0eb4aab235ab69d310141",
+      "bytes": 647
+    },
+    "local/verify/issue53-bundle-20261102/discovery-abi-v2/discovery-no-fx.exe.compile.json": {
+      "sha256": "5ffb6c77bc2cb371b3623edf635c5291faa28aa76a08b204f79e7ac771f81697",
+      "bytes": 701
+    },
+    "local/verify/issue53-bundle-20261102/discovery-abi-v2/discovery/baseline.bin.gz": {
+      "sha256": "0f3be74be689f24f93f648c618c02514ee8aa7a663c76759b0a60e8bf2da9ffe",
+      "bytes": 2275
+    },
+    "local/verify/issue53-bundle-20261102/discovery-abi-v2/discovery/repeat.bin.gz": {
+      "sha256": "0f3be74be689f24f93f648c618c02514ee8aa7a663c76759b0a60e8bf2da9ffe",
+      "bytes": 2275
+    },
+    "local/verify/issue53-bundle-20261102/discovery-abi-v2/discovery/observed.bin.gz": {
+      "sha256": "0f3be74be689f24f93f648c618c02514ee8aa7a663c76759b0a60e8bf2da9ffe",
+      "bytes": 2275
+    },
+    "local/verify/issue53-bundle-20261102/discovery-abi-v2/discovery-no-fx/baseline.bin.gz": {
+      "sha256": "a0f8bbf6ee67036909c2165883789a50e2f8e2309d3bb30cc660425e4e707e51",
+      "bytes": 2469
+    },
+    "local/verify/issue53-bundle-20261102/discovery-abi-v2/discovery-no-fx/repeat.bin.gz": {
+      "sha256": "a0f8bbf6ee67036909c2165883789a50e2f8e2309d3bb30cc660425e4e707e51",
+      "bytes": 2469
+    },
+    "local/verify/issue53-bundle-20261102/discovery-abi-v2/discovery-no-fx/observed.bin.gz": {
+      "sha256": "a1ff00db3b453009cc7b82fb689d80359452b643c43212598fa6ec0f90ff2f22",
+      "bytes": 2273
+    }
+  },
+  "validation": {
+    "selected_fast_lint": "passed for discovery_trace.c/h, wine_discovery_test.c and qualify_factory.py",
+    "foreign_deep_analysis": "not executed; captured real MinGW compile+link arguments have two translation units and are not represented as a per-TU compilation database. No native flags fabricated."
+  },
+  "limitations": [
+    "Fixture-only direct hook constructor bypasses executable admission and live-world traversal; production executable/PE/prefix guard path is unchanged and is not qualified by this control.",
+    "Each of eight generated stubs executes48 cases: four CW/MXCSR rounding modes, four EFLAGS patterns and three values, including extra x87 stack state; no nested, concurrent, exception/unwind or startup-publication qualification.",
+    "Snapshots compare all576 bytes: GPRs, EFLAGS, LastError, raw512-byte FX image, store bits, CW/SW and stack canaries. Raw FX images remain backend-specific.",
+    "No existing native-clock pass is used as discovery qualification.",
+    "No new body-to-type2resource/owner identity is established; no ninth hook added."
+  ]
+}

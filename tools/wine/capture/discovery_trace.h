@@ -20,6 +20,10 @@ struct discovery_trace_status {
   DWORD version, installed, armed, world_calls, reserved, pending;
   DWORD dropped, invalid_reads, traversal_limits, stack_limits, window_complete;
 };
+#ifdef DISCOVERY_TRACE_TEST
+void* discovery_trace_test_hook(unsigned hook, void* continuation);
+int discovery_trace_test_saved(DWORD cw, DWORD mxcsr, DWORD return_cw, DWORD return_mxcsr, DWORD seed);
+#endif
 int discovery_trace_install(HMODULE module, const char* image_path);
 int discovery_trace_arm(const char* nonce);
 int discovery_trace_flush(const char* path);

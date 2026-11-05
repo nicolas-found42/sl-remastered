@@ -28,6 +28,7 @@ struct record {
   volatile LONG state;
   DWORD sequence, order, return_order, thread, depth, world, kind, phase, address, ecx, caller;
   DWORD args[12], result, valid, bytes;
+  DWORD entry_cw, entry_mxcsr, return_cw, return_mxcsr;
   unsigned char payload[PAYLOAD];
 };
 struct frame {
@@ -240,7 +241,7 @@ static void world_records(struct thread_state* t, DWORD world, DWORD phase) {
 
 /* pushal registers: EDI,ESI,EBP,original ESP,EBX,EDX,ECX,EAX.
  * regs[3]+4 points at the original return address, below our saved EFLAGS. */
-__attribute__((used, noinline)) static void discovery_enter(DWORD hook, DWORD* regs) {
+__attribute__((used, noinline)) static void discovery_enter(DWORD hook, DWORD* regs, const unsigned char* fx) {
   DWORD error = GetLastError(), stack[13] = {0}, id = GetCurrentThreadId();
   struct thread_state* t;
   struct record* r;
@@ -262,6 +263,8 @@ __attribute__((used, noinline)) static void discovery_enter(DWORD hook, DWORD* r
   }
   r = reserve(t, hook, 0, (DWORD)(uintptr_t)image + plans[hook].rva);
   if (!r) goto done;
+  r->entry_cw = word(fx, 0) & 0xffffu;
+  r->entry_mxcsr = word(fx, 24);
   r->ecx = regs[6];
   r->caller = stack[0];
   memcpy(r->args, stack + 1, plans[hook].arguments * 4);
@@ -272,6 +275,7 @@ __attribute__((used, noinline)) static void discovery_enter(DWORD hook, DWORD* r
   if (hook == DISCOVERY_WORLD) t->world = (DWORD)world_calls;
   r->world = t->world;
   ++t->depth;
+#ifndef DISCOVERY_TRACE_TEST
   if (hook == DISCOVERY_WORLD) world_records(t, r->ecx, 0);
   if (hook == DISCOVERY_QUEUE) {
     DWORD head;
@@ -281,6 +285,7 @@ __attribute__((used, noinline)) static void discovery_enter(DWORD hook, DWORD* r
     DWORD head;
     if (read_memory(&head, (DWORD)(uintptr_t)image + 0x243808, 4)) list_records(t, CANDIDATE, 0, head, 0x58);
   }
+#endif
   *(DWORD*)(uintptr_t)original_stack = (DWORD)(uintptr_t)discovery_return_stub;
 done:
 #ifdef DISCOVERY_TRACE_TEST
@@ -289,7 +294,7 @@ done:
 #endif
   SetLastError(error);
 }
-__attribute__((used, noinline)) static DWORD discovery_leave(DWORD* regs) {
+__attribute__((used, noinline)) static DWORD discovery_leave(DWORD* regs, const unsigned char* fx) {
   DWORD error = GetLastError(), address;
   struct thread_state* t = thread_state(GetCurrentThreadId());
   struct record* r;
@@ -297,7 +302,10 @@ __attribute__((used, noinline)) static DWORD discovery_leave(DWORD* regs) {
   --t->depth;
   r = t->frames[t->depth].record;
   address = t->frames[t->depth].return_address;
+  r->return_cw = word(fx, 0) & 0xffffu;
+  r->return_mxcsr = word(fx, 24);
   r->result = regs[7];
+#ifndef DISCOVERY_TRACE_TEST
   if (r->kind == DISCOVERY_WORLD) world_records(t, r->ecx, 1);
   if (r->kind == DISCOVERY_INITIALIZE) body_record(t, r->args[0], 2);
   if (r->kind == DISCOVERY_FINALIZE) body_record(t, r->args[0], 3);
@@ -305,23 +313,58 @@ __attribute__((used, noinline)) static DWORD discovery_leave(DWORD* regs) {
     r->bytes = 0xb0;
     r->valid = read_memory(r->payload, r->result, r->bytes);
   }
+#endif
   r->return_order = (DWORD)InterlockedIncrement(&event_order);
   t->world = t->frames[t->depth].previous_world;
   InterlockedExchange(&r->state, 2);
+#ifdef DISCOVERY_TRACE_TEST
+  __asm__ volatile("fninit\n\tfld1\n\tpxor %xmm0,%xmm0\n\t");
+#endif
   SetLastError(error);
   return address;
 }
+/* Keep the naked assembly macro and its generated function declarations stable. */
+// clang-format off
 #define ENTRY(name, index, offset)                                                                                                                                                                                                                                                             \
   __attribute__((naked)) static void name(void) {                                                                                                                                                                                                                                              \
-    __asm__ volatile("pushfl\n\tpushal\n\tcld\n\tmovl %esp,%ebx\n\tsubl $528,%esp\n\tandl $-16,%esp\n\tfxsave (%esp)\n\tpushl %ebx\n\tpushl $" #index "\n\tcall _discovery_enter\n\taddl $8,%esp\n\tfxrstor (%esp)\n\tmovl %ebx,%esp\n\tpopal\n\tpopfl\n\tjmp *_trampolines+" #offset "\n\t"); \
+    __asm__ volatile("pushfl\n\tpushal\n\tcld\n\tmovl %esp,%ebx\n\tsubl $528,%esp\n\tandl $-16,%esp\n\tfxsave (%esp)\n\tpushl %esp\n\tpushl %ebx\n\tpushl $" #index "\n\tcall _discovery_enter\n\taddl $12,%esp\n\tfxrstor (%esp)\n\tmovl %ebx,%esp\n\tpopal\n\tpopfl\n\tjmp *_trampolines+" #offset "\n\t"); \
   }
 ENTRY(world_entry, 0, 0)
 ENTRY(queue_entry, 1, 4) ENTRY(register_entry, 2, 8)
     ENTRY(factory_entry, 3, 12) ENTRY(candidate_entry, 4, 16) ENTRY(admit_entry, 5, 20)
         ENTRY(initialize_entry, 6, 24) ENTRY(finalize_entry, 7, 28)
             __attribute__((naked)) static void discovery_return_stub(void) {
-  __asm__ volatile("pushfl\n\tpushal\n\tcld\n\tmovl %esp,%ebx\n\tsubl $528,%esp\n\tandl $-16,%esp\n\tfxsave (%esp)\n\tpushl %ebx\n\tcall _discovery_leave\n\taddl $4,%esp\n\tfxrstor (%esp)\n\tmovl %eax,-4(%ebx)\n\tmovl %ebx,%esp\n\tpopal\n\tpopfl\n\tpushl -40(%esp)\n\tret\n\t");
+  __asm__ volatile("pushfl\n\tpushal\n\tcld\n\tmovl %esp,%ebx\n\tsubl $528,%esp\n\tandl $-16,%esp\n\tfxsave (%esp)\n\tpushl %esp\n\tpushl %ebx\n\tcall _discovery_leave\n\taddl $8,%esp\n\tfxrstor (%esp)\n\tmovl %eax,-4(%ebx)\n\tmovl %ebx,%esp\n\tpopal\n\tpopfl\n\tpushl -40(%esp)\n\tret\n\t");
 }
+
+// clang-format on
+
+#ifdef DISCOVERY_TRACE_TEST
+/* Fixture only: bypass executable admission, never production guards. The
+ * exact generated entry/return stubs and original hook plans remain in use.
+ * Live-world dereferences are excluded because this owns no Stock graph. */
+void* discovery_trace_test_hook(unsigned hook, void* continuation) {
+  static void* entries[] = {world_entry, queue_entry, register_entry, factory_entry,
+                            candidate_entry, admit_entry, initialize_entry, finalize_entry};
+  if (hook >= DISCOVERY_HOOK_COUNT || !continuation) return NULL;
+  trampolines[hook] = continuation;
+  installed = 1;
+  armed = 1;
+  return entries[hook];
+}
+int discovery_trace_test_saved(DWORD cw, DWORD mxcsr, DWORD return_cw, DWORD return_mxcsr, DWORD seed) {
+  unsigned i;
+  LONG index = reserved - 1;
+  struct record* r;
+  if (index < 0 || index >= RECORDS) return 0;
+  r = &records[index];
+  if (r->kind >= DISCOVERY_HOOK_COUNT) return 0;
+  for (i = 0; i < plans[r->kind].arguments; ++i)
+    if (r->args[i] != seed + i) return 0;
+  return r->state == 2 && r->entry_cw == cw && r->return_cw == return_cw &&
+         r->entry_mxcsr == mxcsr && r->return_mxcsr == return_mxcsr;
+}
+#endif
 
 static int verify_file(const char* path) {
   static const BYTE expected[32] = {0x7d, 0x77, 0x46, 0x6a, 0x8c, 0x1a, 0x34, 0xd1, 0x6a, 0x59, 0xd9, 0xcc, 0xf2, 0xe8, 0x05, 0x96, 0x64, 0xdf, 0xf1, 0xbf, 0xb4, 0x21, 0x33, 0x80, 0x74, 0xa4, 0x61, 0xa9, 0x32, 0xe8, 0xed, 0xde};
@@ -404,7 +447,7 @@ int discovery_trace_arm(const char* nonce) {
 void discovery_trace_status(struct discovery_trace_status* s) {
   unsigned i;
   memset(s, 0, sizeof *s);
-  s->version = 1;
+  s->version = 2;
   s->installed = installed;
   s->armed = InterlockedCompareExchange(&armed, 0, 0) == 1;
   s->world_calls = (DWORD)world_calls;
@@ -427,7 +470,7 @@ int discovery_trace_flush(const char* path) {
   if (!installed || InterlockedCompareExchange(&armed, 0, 0) != 1) return 0;
   if (!(f = fopen(path, "ab"))) return -1;
   if (!header_written) {
-    int n = fprintf(f, "{\"event\":\"discovery_header\",\"version\":1,\"nonce\":\"%s\",\"image_sha256\":\"7d77466a8c1a34d16a59d9ccf2e8059664dff1bfb421338074a461a932e8edde\",\"record_limit\":%u,\"node_limit\":%u,\"world_limit\":%u}\n", arm_nonce, RECORDS, NODES, WORLD_CALLS);
+    int n = fprintf(f, "{\"event\":\"discovery_header\",\"version\":2,\"nonce\":\"%s\",\"image_sha256\":\"7d77466a8c1a34d16a59d9ccf2e8059664dff1bfb421338074a461a932e8edde\",\"record_limit\":%u,\"node_limit\":%u,\"world_limit\":%u}\n", arm_nonce, RECORDS, NODES, WORLD_CALLS);
     if (n < 0) goto failed;
     output_bytes += (DWORD)n;
     header_written = 1;
@@ -440,7 +483,11 @@ int discovery_trace_flush(const char* path) {
       increment(&dropped);
       goto failed;
     }
-    n = fprintf(f, "{\"event\":\"discovery_record\",\"seq\":%lu,\"order\":%lu,\"return_order\":%lu,\"thread\":%lu,\"depth\":%lu,\"world\":%lu,\"kind\":%lu,\"phase\":%lu,\"address\":%lu,\"ecx\":%lu,\"caller\":%lu,\"result\":%lu,\"valid\":%lu,\"args\":[", r->sequence, r->order, r->return_order, r->thread, r->depth, r->world, r->kind, r->phase, r->address, r->ecx, r->caller, r->result, r->valid);
+    n = fprintf(f, "{\"event\":\"discovery_record\",\"seq\":%lu,\"order\":%lu,\"return_order\":%lu,\"thread\":%lu,\"depth\":%lu,\"world\":%lu,\"kind\":%lu,\"phase\":%lu,\"address\":%lu,\"ecx\":%lu,\"caller\":%lu,\"result\":%lu,\"valid\":%lu", r->sequence, r->order, r->return_order, r->thread, r->depth, r->world, r->kind, r->phase, r->address, r->ecx, r->caller, r->result, r->valid);
+    if (n < 0) goto failed;
+    output_bytes += (DWORD)n;
+    n = fprintf(f, ",\"saved_fp\":{\"entry_cw\":%lu,\"entry_mxcsr\":%lu,\"return_cw\":%lu,\"return_mxcsr\":%lu},\"args\":[",
+                r->entry_cw, r->entry_mxcsr, r->return_cw, r->return_mxcsr);
     if (n < 0) goto failed;
     output_bytes += (DWORD)n;
     for (j = 0; j < 12; ++j) {

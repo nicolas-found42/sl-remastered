@@ -10,8 +10,11 @@ The failure was cumulative: a 4 GiB per-run limit does not limit hundreds of
 retained runs. Fresh Wine initialization repeatedly materializes DLLs, while
 the older background recorder had no finite capture deadline or storage budget.
 The old game-copy fallback also silently switched from APFS clones to full
-copies. All historical evidence remains required; deleting failed runs is not
-the retention policy.
+copies. Historical retention is curated under the owner-approved November 4, 2026
+policy (UTC November 5) below. Preserve original inputs, source and Git history, saved analysis
+databases, findings, and evidence required by current work. Older unreferenced
+run environments and bulk captures may be explicitly retired after review.
+Execution failure alone never establishes that a run is disposable.
 
 ## Prevention
 
@@ -38,6 +41,36 @@ manual maintenance still requires checking for legacy or orphan writers.
 Owned input qualification and visible native captures now use the same runtime
 artifact supervision. The old unbounded `run_capture.sh` refuses immediately
 and directs callers to the isolated, bounded `run_stock.py`.
+
+## Curated historical retention
+
+The owner approved replacing the earlier keep-every-run policy with curated
+retention. This permits reviewed cleanup, not automatic age-based eviction.
+
+1. Stop capture writers and check container mounts. Hold the existing exclusive
+   storage maintenance lock while removing reviewed output.
+2. Preserve canonical inputs and installers, reference trees, source and Git
+   history, saved analysis databases, findings, and current supporting evidence.
+   Keep the storage index, journals, and aggregate reservation ledger unchanged.
+3. Inventory explicit source/document evidence paths, current manifests and
+   their dependencies, existing reservations, and recent work. Preserve run
+   groups with uncertain input/database ownership or incomplete inspection.
+4. Review an exact path list of older unreferenced run groups. Keep a receipt
+   containing their identities, byte/file counts, reason for retirement, and
+   results; never use a broad delete of local/ or assume ignored means obsolete.
+5. Recheck identities, stopped writers, and current evidence bindings immediately
+   before removal. Reject changed or newly referenced candidates. Remove only
+   the reviewed paths, without following symlinks into retained data.
+6. Verify source/reference/database preservation and current evidence bindings
+   afterward. Report actual filesystem free-space changes separately from du;
+   APFS-shared blocks make logical totals unsuitable as savings promises.
+
+For future runs, reuse canonical immutable game/runtime inputs with isolated
+copy-on-write state, and retain the bounded observations and changed files
+needed to support a finding. A full Wine prefix is retained only for an explicit
+reproduction or analysis need. Summaries do not replace raw evidence still
+required to validate a current claim. Record retention and regeneration details
+at the standard experiment entry point.
 
 ## Lossless compaction
 

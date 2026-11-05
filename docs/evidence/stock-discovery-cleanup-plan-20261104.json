@@ -1,0 +1,129 @@
+{
+  "schema": 1,
+  "scope": "Read-only design; no new ABI execution or observer/harness edits. Original v2 report remains frozen.",
+  "subject": {
+    "name": "StreetLegal_Redline.bak.exe",
+    "digest": {
+      "sha256": "7d77466a8c1a34d16a59d9ccf2e8059664dff1bfb421338074a461a932e8edde"
+    },
+    "local_path": "/Users/nicolas/Documents/github/sl-remastered/ref/raw/StreetLegal_Redline.bak.exe",
+    "format": "pe",
+    "architecture": "x86"
+  },
+  "epilogues": [
+    {
+      "procedure": "0x004a5190",
+      "evidence_id": "ev_17c5ee6221a2a574b2547dcc12429e05e57f4bf62f7c0b6d60005c3eed0064a5",
+      "analysis_profile_digest": "e1ad533d4cc0333c2136fe0894217de2d61feea098240326e78633f9e4ddcbf9",
+      "returns": [
+        "0x4a51b1: RET 0x4",
+        "0x4a54ac: RET 0x4"
+      ]
+    },
+    {
+      "procedure": "0x004a2540",
+      "evidence_id": "ev_58e12849547dd2f8702d325bd8aded8e4cd2ed4a0ba11e08c9084eec9cd68c9a",
+      "analysis_profile_digest": "e1ad533d4cc0333c2136fe0894217de2d61feea098240326e78633f9e4ddcbf9",
+      "returns": [
+        "0x4a2714: RET"
+      ]
+    },
+    {
+      "procedure": "0x004b3c40",
+      "evidence_id": "ev_c5b706da1d346f91e6220cbcce0b1cc1ca75e4af728aeee0fc890dafed8f5506",
+      "analysis_profile_digest": "e1ad533d4cc0333c2136fe0894217de2d61feea098240326e78633f9e4ddcbf9",
+      "returns": [
+        "0x4b3c63: RET 0x4",
+        "0x4b3c7c: RET 0x4",
+        "0x4b3d9a: RET 0x4",
+        "0x4b3dae: RET 0x4",
+        "0x4b3ece: RET 0x4"
+      ]
+    },
+    {
+      "procedure": "0x004b4250",
+      "evidence_id": "ev_a0d9aac9f135ff5344bedbbbac11eddc57d495ab47d8aa904fc710018a656231",
+      "analysis_profile_digest": "e1ad533d4cc0333c2136fe0894217de2d61feea098240326e78633f9e4ddcbf9",
+      "returns": [
+        "0x4b5a14: RET"
+      ]
+    },
+    {
+      "procedure": "0x0049ec00",
+      "evidence_id": "ev_2c3484501e0cc1be5ba331b39f23e73f7014f99e256898f9205305e98346c6ff",
+      "analysis_profile_digest": "e1ad533d4cc0333c2136fe0894217de2d61feea098240326e78633f9e4ddcbf9",
+      "returns": [
+        "0x49ec19: RET",
+        "0x49ec2e: RET",
+        "0x49f4c1: RET"
+      ]
+    },
+    {
+      "procedure": "0x0049b830",
+      "evidence_id": "ev_16ea2c9ff96e51790ee4945de227f509384c651a159952141565fbaca5d1b117",
+      "analysis_profile_digest": "e1ad533d4cc0333c2136fe0894217de2d61feea098240326e78633f9e4ddcbf9",
+      "returns": [
+        "0x49b8ab: RET 0x30",
+        "0x49b967: RET 0x30",
+        "0x49ba21: RET 0x30",
+        "0x49bac4: RET 0x30",
+        "0x49bd91: RET 0x30"
+      ]
+    },
+    {
+      "procedure": "0x0049b0b0",
+      "evidence_id": "ev_b04b9aa26743c00748a2584a8fee140085f086bc990827027390030a332c0608",
+      "analysis_profile_digest": "e1ad533d4cc0333c2136fe0894217de2d61feea098240326e78633f9e4ddcbf9",
+      "returns": [
+        "0x49b21f: RET 0x10"
+      ]
+    },
+    {
+      "procedure": "0x0049a050",
+      "evidence_id": "ev_aedd522b75645bf8ae3e957e1bed05231bca53f99823c334308013a8ead07c42",
+      "analysis_profile_digest": "e1ad533d4cc0333c2136fe0894217de2d61feea098240326e78633f9e4ddcbf9",
+      "returns": [
+        "0x49a73e: RET 0x4"
+      ]
+    }
+  ],
+  "observed_cleanup_bytes": [
+    4,
+    0,
+    4,
+    0,
+    0,
+    48,
+    16,
+    4
+  ],
+  "interpretation": "Stack argument capture count is not a cleanup convention. In particular CANDIDATES captures one argument but every observed return is RET with no immediate.",
+  "proposed_control": {
+    "cases": 384,
+    "matrix": "8 hooks × 4 entry rounding modes × 4 EFLAGS patterns × 3 callee behaviors",
+    "behaviors": [
+      "Pass-through callee state",
+      "Changed EAX/EDX/ECX and EFLAGS",
+      "Changed CW/MXCSR, x87 stack and SSE state plus result registers"
+    ],
+    "cleanup": "Each hook uses its independently observed RET immediate. Baseline and observed routes call the identical owned callee target. Caller landing records actual ESP before restoring harness frame; independently verify arena+4+cleanup, parameter words and stack canaries.",
+    "saved_fp": "Assert entry and return saved fields separately against distinct expected states; do not assume a callee preserves CW/MXCSR.",
+    "negative": "Immutable exact missing-FXRSTOR mutation remains required, baseline/repeat stable and observed must differ.",
+    "caps": "384 cases, 4MiB child, unchanged pool,90-second container/120-second outer; no launch authorized by this report."
+  },
+  "candidate": {
+    "path": "local/verify/issue53-production-entry-20261102-v2",
+    "identity": "16777233:77322889",
+    "maximum_bytes": 8388608,
+    "logical_bytes": 82605,
+    "remaining_bytes": 8306003,
+    "entries": 20,
+    "proposed_child_bytes": 4194304,
+    "admission_granted": false
+  },
+  "limits": [
+    "REA listing returns describe analyzed function bodies; they do not qualify exceptions, tail paths, unwinding, nested calls, concurrency or startup publication.",
+    "No ninth498dd0 hook, game graph or resource identity is qualified.",
+    "Candidate capacity is sampled and requires fresh adapter admission/preservation checks before any launch."
+  ]
+}

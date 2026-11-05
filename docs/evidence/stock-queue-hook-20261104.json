@@ -1,0 +1,884 @@
+{
+  "schema": 1,
+  "scope": "Static instruction boundary and incoming-reference inspection for a possible future 00498dd0 passive observer hook; no hook installed and no execution observed.",
+  "target_sha256": "7d77466a8c1a34d16a59d9ccf2e8059664dff1bfb421338074a461a932e8edde",
+  "assembly_evidence_id": "ev_837db17afb0c37cb775ae87ff9bf10a6fda4f4ba714cde36dd24f83fa8b36e15",
+  "bytes": {
+    "evidence_id": "ev_e6b371164466aeb9c2f9714e7c605af248ced6850a4a8c486485419a1efa5cde",
+    "subject": {
+      "name": "StreetLegal_Redline.bak.exe",
+      "digest": {
+        "sha256": "7d77466a8c1a34d16a59d9ccf2e8059664dff1bfb421338074a461a932e8edde"
+      },
+      "local_path": "/Users/nicolas/Documents/github/sl-remastered/ref/raw/StreetLegal_Redline.bak.exe",
+      "format": "pe",
+      "architecture": "x86"
+    },
+    "provider": {
+      "id": "ghidra",
+      "name": "Ghidra",
+      "version": "12.1.4"
+    },
+    "analysis_profile": {
+      "provider": {
+        "id": "ghidra",
+        "name": "Ghidra",
+        "version": "12.1.4"
+      },
+      "parameters": {
+        "target_kind": "executable",
+        "target_format": "pe",
+        "executable_role": "application",
+        "managed": false,
+        "native_aot_metadata": {
+          "contract_revision": "rtr-9.1-x64-pe-read-only-v7",
+          "source_bytes": 134217728,
+          "work_units": 67108864,
+          "working_memory_bytes": 67108864,
+          "report_bytes": 4194304
+        },
+        "architecture": "x86",
+        "available_architectures": [
+          "x86"
+        ],
+        "import_mode": "ephemeral-source-immutable",
+        "pdb_observations": "program-info-v5",
+        "annotation_policy": "atomic-function-entry-metadata-v1",
+        "load_image_observations": "source-mappings-entry-context-v2",
+        "function_body_evidence": "complete-inclusive-ranges-v1",
+        "function_references": "complete-body-and-entry-reference-manager-v2",
+        "call_relationship_coverage": "function-body-call-coverage-v5",
+        "function_dossier_coverage": "observed-facets-and-call-relationships-v1",
+        "string_inventory_evidence": "defined-data-coverage-v1",
+        "location_resolution": "explicit-address-exact-entry-symbol-first-v3",
+        "procedure_file_offset_resolution": "address-first-unique-target-source-mapping-v2",
+        "instruction_flow_evidence": "decoded-return-pcode-v1",
+        "instruction_references": "exact-address-incoming-without-synthetic-entry-v2",
+        "function_boundary_observations": "ghidra-function-boundary-limitations-v4",
+        "no_return_repair": "returning-imports-decoded-return-v2",
+        "process_launch": "inspected-jvm-launch-support-v1",
+        "jump_table_evidence": "typed-case-default-blocks-v1",
+        "decompiler_jump_loads": true,
+        "loader": "auto-from-header",
+        "language_id": "auto-from-header",
+        "compiler_spec_id": "auto-default",
+        "analyzer_preset": "ghidra-default",
+        "function_coordinate_context": {
+          "kind": "native-function-coordinate-context-v1",
+          "selected_image": null,
+          "mapping_sha256": "55a7964dc0bcdf067484a281c658e6ca8457a49405e0ea9dbd080366ee4c3198"
+        }
+      },
+      "digest": "e1ad533d4cc0333c2136fe0894217de2d61feea098240326e78633f9e4ddcbf9"
+    },
+    "predicate_type": "rea.analysis",
+    "operation": "read_bytes",
+    "parameters": {
+      "address": "0x00498dd0",
+      "length": 16
+    },
+    "raw_result": null,
+    "normalized_result": {
+      "address": "0x498dd0",
+      "requested_bytes": 16,
+      "returned_bytes": 16,
+      "bytes_hex": "a13837640055578b7804f7df1bff23f8",
+      "complete": true
+    },
+    "confidence": "observed",
+    "authority": "shipped-artifact",
+    "environment": null,
+    "limitations": [
+      "The session serves operations only after Ghidra reports default auto-analysis complete; incomplete analysis does not expose partial results.",
+      "The imported Program and temporary project are ephemeral and deleted on close. Annotation operations edit session database metadata; original executable bytes are never written.",
+      "Cancelling an active Ghidra request terminates its ephemeral database and discards session annotations. The selected target remains open; the next provider query imports the original artifact again.",
+      "Default-space addresses use lowercase 0x-prefixed hexadecimal; other address spaces use <percent-encoded-space>:0x<hex>.",
+      "Bytes reflect Ghidra's initialized memory, including loader fixups. Reads stop at an unmapped or uninitialized byte and report completeness explicitly.",
+      "macOS sessions require a matching executable Ghidra native decompiler; REA checks for it but does not build native components or change Gatekeeper quarantine state."
+    ],
+    "relationship_coverage": null,
+    "locations": [],
+    "evidence_links": []
+  },
+  "instructions": [
+    {
+      "evidence_id": "ev_dfc1ddceaec13d81675801dca0f2376b7f372d47779284e72faf85c6f92148e7",
+      "subject": {
+        "name": "StreetLegal_Redline.bak.exe",
+        "digest": {
+          "sha256": "7d77466a8c1a34d16a59d9ccf2e8059664dff1bfb421338074a461a932e8edde"
+        },
+        "local_path": "/Users/nicolas/Documents/github/sl-remastered/ref/raw/StreetLegal_Redline.bak.exe",
+        "format": "pe",
+        "architecture": "x86"
+      },
+      "provider": {
+        "id": "ghidra",
+        "name": "Ghidra",
+        "version": "12.1.4"
+      },
+      "analysis_profile": {
+        "provider": {
+          "id": "ghidra",
+          "name": "Ghidra",
+          "version": "12.1.4"
+        },
+        "parameters": {
+          "target_kind": "executable",
+          "target_format": "pe",
+          "executable_role": "application",
+          "managed": false,
+          "native_aot_metadata": {
+            "contract_revision": "rtr-9.1-x64-pe-read-only-v7",
+            "source_bytes": 134217728,
+            "work_units": 67108864,
+            "working_memory_bytes": 67108864,
+            "report_bytes": 4194304
+          },
+          "architecture": "x86",
+          "available_architectures": [
+            "x86"
+          ],
+          "import_mode": "ephemeral-source-immutable",
+          "pdb_observations": "program-info-v5",
+          "annotation_policy": "atomic-function-entry-metadata-v1",
+          "load_image_observations": "source-mappings-entry-context-v2",
+          "function_body_evidence": "complete-inclusive-ranges-v1",
+          "function_references": "complete-body-and-entry-reference-manager-v2",
+          "call_relationship_coverage": "function-body-call-coverage-v5",
+          "function_dossier_coverage": "observed-facets-and-call-relationships-v1",
+          "string_inventory_evidence": "defined-data-coverage-v1",
+          "location_resolution": "explicit-address-exact-entry-symbol-first-v3",
+          "procedure_file_offset_resolution": "address-first-unique-target-source-mapping-v2",
+          "instruction_flow_evidence": "decoded-return-pcode-v1",
+          "instruction_references": "exact-address-incoming-without-synthetic-entry-v2",
+          "function_boundary_observations": "ghidra-function-boundary-limitations-v4",
+          "no_return_repair": "returning-imports-decoded-return-v2",
+          "process_launch": "inspected-jvm-launch-support-v1",
+          "jump_table_evidence": "typed-case-default-blocks-v1",
+          "decompiler_jump_loads": true,
+          "loader": "auto-from-header",
+          "language_id": "auto-from-header",
+          "compiler_spec_id": "auto-default",
+          "analyzer_preset": "ghidra-default",
+          "function_coordinate_context": {
+            "kind": "native-function-coordinate-context-v1",
+            "selected_image": null,
+            "mapping_sha256": "55a7964dc0bcdf067484a281c658e6ca8457a49405e0ea9dbd080366ee4c3198"
+          }
+        },
+        "digest": "e1ad533d4cc0333c2136fe0894217de2d61feea098240326e78633f9e4ddcbf9"
+      },
+      "predicate_type": "rea.analysis",
+      "operation": "inspect_native_instruction",
+      "parameters": {
+        "address": "0x00498dd0"
+      },
+      "raw_result": null,
+      "normalized_result": {
+        "address": "0x498dd0",
+        "status": "decoded",
+        "procedure": "0x498dd0",
+        "architecture": "x86:LE:32:default",
+        "mode": "default",
+        "bytes": "a138376400",
+        "length": 5,
+        "mnemonic": "MOV",
+        "raw_disassembly": "MOV EAX,[0x00643738]",
+        "operands": [
+          {
+            "index": 0,
+            "raw": "EAX",
+            "provider_type": 512,
+            "components": [
+              {
+                "kind": "register",
+                "text": "EAX",
+                "value": "EAX",
+                "bit_width": 32
+              }
+            ],
+            "memory_addressing": "unavailable"
+          },
+          {
+            "index": 1,
+            "raw": "[0x00643738]",
+            "provider_type": 8320,
+            "components": [
+              {
+                "kind": "address",
+                "text": "00643738",
+                "value": "0x643738",
+                "bit_width": null
+              }
+            ],
+            "memory_addressing": "unavailable"
+          }
+        ],
+        "flow": {
+          "kind": "fallthrough",
+          "conditional": false,
+          "computed": false,
+          "direct_destinations": [],
+          "classification_evidence": [
+            {
+              "source": "ghidra-listing-flow-type",
+              "value": "FALL_THROUGH"
+            }
+          ]
+        },
+        "references": [
+          {
+            "target_address": "0x643738",
+            "type": "READ",
+            "call": false,
+            "jump": false,
+            "indirect": false,
+            "computed": false,
+            "operand_index": 1,
+            "source_address": "0x498dd0",
+            "data": true,
+            "read": true,
+            "write": false,
+            "primary": true,
+            "provenance": "ghidra-reference-manager",
+            "source": "default"
+          }
+        ],
+        "incoming_references": [
+          {
+            "target_address": "0x498dd0",
+            "type": "UNCONDITIONAL_CALL",
+            "call": true,
+            "jump": false,
+            "indirect": false,
+            "computed": false,
+            "operand_index": 0,
+            "source_address": "0x4a53d2",
+            "data": false,
+            "read": false,
+            "write": false,
+            "primary": true,
+            "provenance": "ghidra-reference-manager",
+            "source": "default"
+          }
+        ],
+        "limitations": [
+          "Operand components are Ghidra Listing decoder tokens; effective memory base/index/displacement roles and per-instruction context mode are unavailable. The mode field is the program language variant."
+        ]
+      },
+      "confidence": "observed",
+      "authority": "shipped-artifact",
+      "environment": null,
+      "limitations": [
+        "The session serves operations only after Ghidra reports default auto-analysis complete; incomplete analysis does not expose partial results.",
+        "The imported Program and temporary project are ephemeral and deleted on close. Annotation operations edit session database metadata; original executable bytes are never written.",
+        "Cancelling an active Ghidra request terminates its ephemeral database and discards session annotations. The selected target remains open; the next provider query imports the original artifact again.",
+        "Default-space addresses use lowercase 0x-prefixed hexadecimal; other address spaces use <percent-encoded-space>:0x<hex>.",
+        "macOS sessions require a matching executable Ghidra native decompiler; REA checks for it but does not build native components or change Gatekeeper quarantine state."
+      ],
+      "relationship_coverage": null,
+      "locations": [],
+      "evidence_links": []
+    },
+    {
+      "evidence_id": "ev_ebadb74f0c24d2ac1f104769dd156a5a3589bf851364509dcf625f31e878be5e",
+      "subject": {
+        "name": "StreetLegal_Redline.bak.exe",
+        "digest": {
+          "sha256": "7d77466a8c1a34d16a59d9ccf2e8059664dff1bfb421338074a461a932e8edde"
+        },
+        "local_path": "/Users/nicolas/Documents/github/sl-remastered/ref/raw/StreetLegal_Redline.bak.exe",
+        "format": "pe",
+        "architecture": "x86"
+      },
+      "provider": {
+        "id": "ghidra",
+        "name": "Ghidra",
+        "version": "12.1.4"
+      },
+      "analysis_profile": {
+        "provider": {
+          "id": "ghidra",
+          "name": "Ghidra",
+          "version": "12.1.4"
+        },
+        "parameters": {
+          "target_kind": "executable",
+          "target_format": "pe",
+          "executable_role": "application",
+          "managed": false,
+          "native_aot_metadata": {
+            "contract_revision": "rtr-9.1-x64-pe-read-only-v7",
+            "source_bytes": 134217728,
+            "work_units": 67108864,
+            "working_memory_bytes": 67108864,
+            "report_bytes": 4194304
+          },
+          "architecture": "x86",
+          "available_architectures": [
+            "x86"
+          ],
+          "import_mode": "ephemeral-source-immutable",
+          "pdb_observations": "program-info-v5",
+          "annotation_policy": "atomic-function-entry-metadata-v1",
+          "load_image_observations": "source-mappings-entry-context-v2",
+          "function_body_evidence": "complete-inclusive-ranges-v1",
+          "function_references": "complete-body-and-entry-reference-manager-v2",
+          "call_relationship_coverage": "function-body-call-coverage-v5",
+          "function_dossier_coverage": "observed-facets-and-call-relationships-v1",
+          "string_inventory_evidence": "defined-data-coverage-v1",
+          "location_resolution": "explicit-address-exact-entry-symbol-first-v3",
+          "procedure_file_offset_resolution": "address-first-unique-target-source-mapping-v2",
+          "instruction_flow_evidence": "decoded-return-pcode-v1",
+          "instruction_references": "exact-address-incoming-without-synthetic-entry-v2",
+          "function_boundary_observations": "ghidra-function-boundary-limitations-v4",
+          "no_return_repair": "returning-imports-decoded-return-v2",
+          "process_launch": "inspected-jvm-launch-support-v1",
+          "jump_table_evidence": "typed-case-default-blocks-v1",
+          "decompiler_jump_loads": true,
+          "loader": "auto-from-header",
+          "language_id": "auto-from-header",
+          "compiler_spec_id": "auto-default",
+          "analyzer_preset": "ghidra-default",
+          "function_coordinate_context": {
+            "kind": "native-function-coordinate-context-v1",
+            "selected_image": null,
+            "mapping_sha256": "55a7964dc0bcdf067484a281c658e6ca8457a49405e0ea9dbd080366ee4c3198"
+          }
+        },
+        "digest": "e1ad533d4cc0333c2136fe0894217de2d61feea098240326e78633f9e4ddcbf9"
+      },
+      "predicate_type": "rea.analysis",
+      "operation": "inspect_native_instruction",
+      "parameters": {
+        "address": "0x00498dd1"
+      },
+      "raw_result": null,
+      "normalized_result": {
+        "address": "0x498dd1",
+        "status": "not-instruction-boundary",
+        "procedure": "0x498dd0",
+        "architecture": "x86:LE:32:default",
+        "mode": "default",
+        "bytes": null,
+        "length": null,
+        "mnemonic": null,
+        "raw_disassembly": null,
+        "operands": [],
+        "flow": {
+          "kind": "unavailable",
+          "conditional": false,
+          "computed": false,
+          "direct_destinations": [],
+          "classification_evidence": []
+        },
+        "references": [],
+        "incoming_references": [],
+        "limitations": [
+          "Operand components are Ghidra Listing decoder tokens; effective memory base/index/displacement roles and per-instruction context mode are unavailable. The mode field is the program language variant."
+        ]
+      },
+      "confidence": "observed",
+      "authority": "shipped-artifact",
+      "environment": null,
+      "limitations": [
+        "The session serves operations only after Ghidra reports default auto-analysis complete; incomplete analysis does not expose partial results.",
+        "The imported Program and temporary project are ephemeral and deleted on close. Annotation operations edit session database metadata; original executable bytes are never written.",
+        "Cancelling an active Ghidra request terminates its ephemeral database and discards session annotations. The selected target remains open; the next provider query imports the original artifact again.",
+        "Default-space addresses use lowercase 0x-prefixed hexadecimal; other address spaces use <percent-encoded-space>:0x<hex>.",
+        "macOS sessions require a matching executable Ghidra native decompiler; REA checks for it but does not build native components or change Gatekeeper quarantine state."
+      ],
+      "relationship_coverage": null,
+      "locations": [],
+      "evidence_links": []
+    },
+    {
+      "evidence_id": "ev_c65277e5728be700f3086f14af7c61a7d1aeab75b361982ac31c191a02e86864",
+      "subject": {
+        "name": "StreetLegal_Redline.bak.exe",
+        "digest": {
+          "sha256": "7d77466a8c1a34d16a59d9ccf2e8059664dff1bfb421338074a461a932e8edde"
+        },
+        "local_path": "/Users/nicolas/Documents/github/sl-remastered/ref/raw/StreetLegal_Redline.bak.exe",
+        "format": "pe",
+        "architecture": "x86"
+      },
+      "provider": {
+        "id": "ghidra",
+        "name": "Ghidra",
+        "version": "12.1.4"
+      },
+      "analysis_profile": {
+        "provider": {
+          "id": "ghidra",
+          "name": "Ghidra",
+          "version": "12.1.4"
+        },
+        "parameters": {
+          "target_kind": "executable",
+          "target_format": "pe",
+          "executable_role": "application",
+          "managed": false,
+          "native_aot_metadata": {
+            "contract_revision": "rtr-9.1-x64-pe-read-only-v7",
+            "source_bytes": 134217728,
+            "work_units": 67108864,
+            "working_memory_bytes": 67108864,
+            "report_bytes": 4194304
+          },
+          "architecture": "x86",
+          "available_architectures": [
+            "x86"
+          ],
+          "import_mode": "ephemeral-source-immutable",
+          "pdb_observations": "program-info-v5",
+          "annotation_policy": "atomic-function-entry-metadata-v1",
+          "load_image_observations": "source-mappings-entry-context-v2",
+          "function_body_evidence": "complete-inclusive-ranges-v1",
+          "function_references": "complete-body-and-entry-reference-manager-v2",
+          "call_relationship_coverage": "function-body-call-coverage-v5",
+          "function_dossier_coverage": "observed-facets-and-call-relationships-v1",
+          "string_inventory_evidence": "defined-data-coverage-v1",
+          "location_resolution": "explicit-address-exact-entry-symbol-first-v3",
+          "procedure_file_offset_resolution": "address-first-unique-target-source-mapping-v2",
+          "instruction_flow_evidence": "decoded-return-pcode-v1",
+          "instruction_references": "exact-address-incoming-without-synthetic-entry-v2",
+          "function_boundary_observations": "ghidra-function-boundary-limitations-v4",
+          "no_return_repair": "returning-imports-decoded-return-v2",
+          "process_launch": "inspected-jvm-launch-support-v1",
+          "jump_table_evidence": "typed-case-default-blocks-v1",
+          "decompiler_jump_loads": true,
+          "loader": "auto-from-header",
+          "language_id": "auto-from-header",
+          "compiler_spec_id": "auto-default",
+          "analyzer_preset": "ghidra-default",
+          "function_coordinate_context": {
+            "kind": "native-function-coordinate-context-v1",
+            "selected_image": null,
+            "mapping_sha256": "55a7964dc0bcdf067484a281c658e6ca8457a49405e0ea9dbd080366ee4c3198"
+          }
+        },
+        "digest": "e1ad533d4cc0333c2136fe0894217de2d61feea098240326e78633f9e4ddcbf9"
+      },
+      "predicate_type": "rea.analysis",
+      "operation": "inspect_native_instruction",
+      "parameters": {
+        "address": "0x00498dd2"
+      },
+      "raw_result": null,
+      "normalized_result": {
+        "address": "0x498dd2",
+        "status": "not-instruction-boundary",
+        "procedure": "0x498dd0",
+        "architecture": "x86:LE:32:default",
+        "mode": "default",
+        "bytes": null,
+        "length": null,
+        "mnemonic": null,
+        "raw_disassembly": null,
+        "operands": [],
+        "flow": {
+          "kind": "unavailable",
+          "conditional": false,
+          "computed": false,
+          "direct_destinations": [],
+          "classification_evidence": []
+        },
+        "references": [],
+        "incoming_references": [],
+        "limitations": [
+          "Operand components are Ghidra Listing decoder tokens; effective memory base/index/displacement roles and per-instruction context mode are unavailable. The mode field is the program language variant."
+        ]
+      },
+      "confidence": "observed",
+      "authority": "shipped-artifact",
+      "environment": null,
+      "limitations": [
+        "The session serves operations only after Ghidra reports default auto-analysis complete; incomplete analysis does not expose partial results.",
+        "The imported Program and temporary project are ephemeral and deleted on close. Annotation operations edit session database metadata; original executable bytes are never written.",
+        "Cancelling an active Ghidra request terminates its ephemeral database and discards session annotations. The selected target remains open; the next provider query imports the original artifact again.",
+        "Default-space addresses use lowercase 0x-prefixed hexadecimal; other address spaces use <percent-encoded-space>:0x<hex>.",
+        "macOS sessions require a matching executable Ghidra native decompiler; REA checks for it but does not build native components or change Gatekeeper quarantine state."
+      ],
+      "relationship_coverage": null,
+      "locations": [],
+      "evidence_links": []
+    },
+    {
+      "evidence_id": "ev_5afd575ecf9d97c029f039b4343141864881b8a5c06a2b5f587647e104763973",
+      "subject": {
+        "name": "StreetLegal_Redline.bak.exe",
+        "digest": {
+          "sha256": "7d77466a8c1a34d16a59d9ccf2e8059664dff1bfb421338074a461a932e8edde"
+        },
+        "local_path": "/Users/nicolas/Documents/github/sl-remastered/ref/raw/StreetLegal_Redline.bak.exe",
+        "format": "pe",
+        "architecture": "x86"
+      },
+      "provider": {
+        "id": "ghidra",
+        "name": "Ghidra",
+        "version": "12.1.4"
+      },
+      "analysis_profile": {
+        "provider": {
+          "id": "ghidra",
+          "name": "Ghidra",
+          "version": "12.1.4"
+        },
+        "parameters": {
+          "target_kind": "executable",
+          "target_format": "pe",
+          "executable_role": "application",
+          "managed": false,
+          "native_aot_metadata": {
+            "contract_revision": "rtr-9.1-x64-pe-read-only-v7",
+            "source_bytes": 134217728,
+            "work_units": 67108864,
+            "working_memory_bytes": 67108864,
+            "report_bytes": 4194304
+          },
+          "architecture": "x86",
+          "available_architectures": [
+            "x86"
+          ],
+          "import_mode": "ephemeral-source-immutable",
+          "pdb_observations": "program-info-v5",
+          "annotation_policy": "atomic-function-entry-metadata-v1",
+          "load_image_observations": "source-mappings-entry-context-v2",
+          "function_body_evidence": "complete-inclusive-ranges-v1",
+          "function_references": "complete-body-and-entry-reference-manager-v2",
+          "call_relationship_coverage": "function-body-call-coverage-v5",
+          "function_dossier_coverage": "observed-facets-and-call-relationships-v1",
+          "string_inventory_evidence": "defined-data-coverage-v1",
+          "location_resolution": "explicit-address-exact-entry-symbol-first-v3",
+          "procedure_file_offset_resolution": "address-first-unique-target-source-mapping-v2",
+          "instruction_flow_evidence": "decoded-return-pcode-v1",
+          "instruction_references": "exact-address-incoming-without-synthetic-entry-v2",
+          "function_boundary_observations": "ghidra-function-boundary-limitations-v4",
+          "no_return_repair": "returning-imports-decoded-return-v2",
+          "process_launch": "inspected-jvm-launch-support-v1",
+          "jump_table_evidence": "typed-case-default-blocks-v1",
+          "decompiler_jump_loads": true,
+          "loader": "auto-from-header",
+          "language_id": "auto-from-header",
+          "compiler_spec_id": "auto-default",
+          "analyzer_preset": "ghidra-default",
+          "function_coordinate_context": {
+            "kind": "native-function-coordinate-context-v1",
+            "selected_image": null,
+            "mapping_sha256": "55a7964dc0bcdf067484a281c658e6ca8457a49405e0ea9dbd080366ee4c3198"
+          }
+        },
+        "digest": "e1ad533d4cc0333c2136fe0894217de2d61feea098240326e78633f9e4ddcbf9"
+      },
+      "predicate_type": "rea.analysis",
+      "operation": "inspect_native_instruction",
+      "parameters": {
+        "address": "0x00498dd3"
+      },
+      "raw_result": null,
+      "normalized_result": {
+        "address": "0x498dd3",
+        "status": "not-instruction-boundary",
+        "procedure": "0x498dd0",
+        "architecture": "x86:LE:32:default",
+        "mode": "default",
+        "bytes": null,
+        "length": null,
+        "mnemonic": null,
+        "raw_disassembly": null,
+        "operands": [],
+        "flow": {
+          "kind": "unavailable",
+          "conditional": false,
+          "computed": false,
+          "direct_destinations": [],
+          "classification_evidence": []
+        },
+        "references": [],
+        "incoming_references": [],
+        "limitations": [
+          "Operand components are Ghidra Listing decoder tokens; effective memory base/index/displacement roles and per-instruction context mode are unavailable. The mode field is the program language variant."
+        ]
+      },
+      "confidence": "observed",
+      "authority": "shipped-artifact",
+      "environment": null,
+      "limitations": [
+        "The session serves operations only after Ghidra reports default auto-analysis complete; incomplete analysis does not expose partial results.",
+        "The imported Program and temporary project are ephemeral and deleted on close. Annotation operations edit session database metadata; original executable bytes are never written.",
+        "Cancelling an active Ghidra request terminates its ephemeral database and discards session annotations. The selected target remains open; the next provider query imports the original artifact again.",
+        "Default-space addresses use lowercase 0x-prefixed hexadecimal; other address spaces use <percent-encoded-space>:0x<hex>.",
+        "macOS sessions require a matching executable Ghidra native decompiler; REA checks for it but does not build native components or change Gatekeeper quarantine state."
+      ],
+      "relationship_coverage": null,
+      "locations": [],
+      "evidence_links": []
+    },
+    {
+      "evidence_id": "ev_9ea42d0e593ba7b9057b01cdfab7d72107e7972f25420e21b460a88540dd317f",
+      "subject": {
+        "name": "StreetLegal_Redline.bak.exe",
+        "digest": {
+          "sha256": "7d77466a8c1a34d16a59d9ccf2e8059664dff1bfb421338074a461a932e8edde"
+        },
+        "local_path": "/Users/nicolas/Documents/github/sl-remastered/ref/raw/StreetLegal_Redline.bak.exe",
+        "format": "pe",
+        "architecture": "x86"
+      },
+      "provider": {
+        "id": "ghidra",
+        "name": "Ghidra",
+        "version": "12.1.4"
+      },
+      "analysis_profile": {
+        "provider": {
+          "id": "ghidra",
+          "name": "Ghidra",
+          "version": "12.1.4"
+        },
+        "parameters": {
+          "target_kind": "executable",
+          "target_format": "pe",
+          "executable_role": "application",
+          "managed": false,
+          "native_aot_metadata": {
+            "contract_revision": "rtr-9.1-x64-pe-read-only-v7",
+            "source_bytes": 134217728,
+            "work_units": 67108864,
+            "working_memory_bytes": 67108864,
+            "report_bytes": 4194304
+          },
+          "architecture": "x86",
+          "available_architectures": [
+            "x86"
+          ],
+          "import_mode": "ephemeral-source-immutable",
+          "pdb_observations": "program-info-v5",
+          "annotation_policy": "atomic-function-entry-metadata-v1",
+          "load_image_observations": "source-mappings-entry-context-v2",
+          "function_body_evidence": "complete-inclusive-ranges-v1",
+          "function_references": "complete-body-and-entry-reference-manager-v2",
+          "call_relationship_coverage": "function-body-call-coverage-v5",
+          "function_dossier_coverage": "observed-facets-and-call-relationships-v1",
+          "string_inventory_evidence": "defined-data-coverage-v1",
+          "location_resolution": "explicit-address-exact-entry-symbol-first-v3",
+          "procedure_file_offset_resolution": "address-first-unique-target-source-mapping-v2",
+          "instruction_flow_evidence": "decoded-return-pcode-v1",
+          "instruction_references": "exact-address-incoming-without-synthetic-entry-v2",
+          "function_boundary_observations": "ghidra-function-boundary-limitations-v4",
+          "no_return_repair": "returning-imports-decoded-return-v2",
+          "process_launch": "inspected-jvm-launch-support-v1",
+          "jump_table_evidence": "typed-case-default-blocks-v1",
+          "decompiler_jump_loads": true,
+          "loader": "auto-from-header",
+          "language_id": "auto-from-header",
+          "compiler_spec_id": "auto-default",
+          "analyzer_preset": "ghidra-default",
+          "function_coordinate_context": {
+            "kind": "native-function-coordinate-context-v1",
+            "selected_image": null,
+            "mapping_sha256": "55a7964dc0bcdf067484a281c658e6ca8457a49405e0ea9dbd080366ee4c3198"
+          }
+        },
+        "digest": "e1ad533d4cc0333c2136fe0894217de2d61feea098240326e78633f9e4ddcbf9"
+      },
+      "predicate_type": "rea.analysis",
+      "operation": "inspect_native_instruction",
+      "parameters": {
+        "address": "0x00498dd4"
+      },
+      "raw_result": null,
+      "normalized_result": {
+        "address": "0x498dd4",
+        "status": "not-instruction-boundary",
+        "procedure": "0x498dd0",
+        "architecture": "x86:LE:32:default",
+        "mode": "default",
+        "bytes": null,
+        "length": null,
+        "mnemonic": null,
+        "raw_disassembly": null,
+        "operands": [],
+        "flow": {
+          "kind": "unavailable",
+          "conditional": false,
+          "computed": false,
+          "direct_destinations": [],
+          "classification_evidence": []
+        },
+        "references": [],
+        "incoming_references": [],
+        "limitations": [
+          "Operand components are Ghidra Listing decoder tokens; effective memory base/index/displacement roles and per-instruction context mode are unavailable. The mode field is the program language variant."
+        ]
+      },
+      "confidence": "observed",
+      "authority": "shipped-artifact",
+      "environment": null,
+      "limitations": [
+        "The session serves operations only after Ghidra reports default auto-analysis complete; incomplete analysis does not expose partial results.",
+        "The imported Program and temporary project are ephemeral and deleted on close. Annotation operations edit session database metadata; original executable bytes are never written.",
+        "Cancelling an active Ghidra request terminates its ephemeral database and discards session annotations. The selected target remains open; the next provider query imports the original artifact again.",
+        "Default-space addresses use lowercase 0x-prefixed hexadecimal; other address spaces use <percent-encoded-space>:0x<hex>.",
+        "macOS sessions require a matching executable Ghidra native decompiler; REA checks for it but does not build native components or change Gatekeeper quarantine state."
+      ],
+      "relationship_coverage": null,
+      "locations": [],
+      "evidence_links": []
+    },
+    {
+      "evidence_id": "ev_fe687266602d2ae8b6bb33bb10e61a4a33ab1d5de6884d9c0a183cc756e52d2e",
+      "subject": {
+        "name": "StreetLegal_Redline.bak.exe",
+        "digest": {
+          "sha256": "7d77466a8c1a34d16a59d9ccf2e8059664dff1bfb421338074a461a932e8edde"
+        },
+        "local_path": "/Users/nicolas/Documents/github/sl-remastered/ref/raw/StreetLegal_Redline.bak.exe",
+        "format": "pe",
+        "architecture": "x86"
+      },
+      "provider": {
+        "id": "ghidra",
+        "name": "Ghidra",
+        "version": "12.1.4"
+      },
+      "analysis_profile": {
+        "provider": {
+          "id": "ghidra",
+          "name": "Ghidra",
+          "version": "12.1.4"
+        },
+        "parameters": {
+          "target_kind": "executable",
+          "target_format": "pe",
+          "executable_role": "application",
+          "managed": false,
+          "native_aot_metadata": {
+            "contract_revision": "rtr-9.1-x64-pe-read-only-v7",
+            "source_bytes": 134217728,
+            "work_units": 67108864,
+            "working_memory_bytes": 67108864,
+            "report_bytes": 4194304
+          },
+          "architecture": "x86",
+          "available_architectures": [
+            "x86"
+          ],
+          "import_mode": "ephemeral-source-immutable",
+          "pdb_observations": "program-info-v5",
+          "annotation_policy": "atomic-function-entry-metadata-v1",
+          "load_image_observations": "source-mappings-entry-context-v2",
+          "function_body_evidence": "complete-inclusive-ranges-v1",
+          "function_references": "complete-body-and-entry-reference-manager-v2",
+          "call_relationship_coverage": "function-body-call-coverage-v5",
+          "function_dossier_coverage": "observed-facets-and-call-relationships-v1",
+          "string_inventory_evidence": "defined-data-coverage-v1",
+          "location_resolution": "explicit-address-exact-entry-symbol-first-v3",
+          "procedure_file_offset_resolution": "address-first-unique-target-source-mapping-v2",
+          "instruction_flow_evidence": "decoded-return-pcode-v1",
+          "instruction_references": "exact-address-incoming-without-synthetic-entry-v2",
+          "function_boundary_observations": "ghidra-function-boundary-limitations-v4",
+          "no_return_repair": "returning-imports-decoded-return-v2",
+          "process_launch": "inspected-jvm-launch-support-v1",
+          "jump_table_evidence": "typed-case-default-blocks-v1",
+          "decompiler_jump_loads": true,
+          "loader": "auto-from-header",
+          "language_id": "auto-from-header",
+          "compiler_spec_id": "auto-default",
+          "analyzer_preset": "ghidra-default",
+          "function_coordinate_context": {
+            "kind": "native-function-coordinate-context-v1",
+            "selected_image": null,
+            "mapping_sha256": "55a7964dc0bcdf067484a281c658e6ca8457a49405e0ea9dbd080366ee4c3198"
+          }
+        },
+        "digest": "e1ad533d4cc0333c2136fe0894217de2d61feea098240326e78633f9e4ddcbf9"
+      },
+      "predicate_type": "rea.analysis",
+      "operation": "inspect_native_instruction",
+      "parameters": {
+        "address": "0x00498dd5"
+      },
+      "raw_result": null,
+      "normalized_result": {
+        "address": "0x498dd5",
+        "status": "decoded",
+        "procedure": "0x498dd0",
+        "architecture": "x86:LE:32:default",
+        "mode": "default",
+        "bytes": "55",
+        "length": 1,
+        "mnemonic": "PUSH",
+        "raw_disassembly": "PUSH EBP",
+        "operands": [
+          {
+            "index": 0,
+            "raw": "EBP",
+            "provider_type": 512,
+            "components": [
+              {
+                "kind": "register",
+                "text": "EBP",
+                "value": "EBP",
+                "bit_width": 32
+              }
+            ],
+            "memory_addressing": "unavailable"
+          }
+        ],
+        "flow": {
+          "kind": "fallthrough",
+          "conditional": false,
+          "computed": false,
+          "direct_destinations": [],
+          "classification_evidence": [
+            {
+              "source": "ghidra-listing-flow-type",
+              "value": "FALL_THROUGH"
+            }
+          ]
+        },
+        "references": [],
+        "incoming_references": [],
+        "limitations": [
+          "Operand components are Ghidra Listing decoder tokens; effective memory base/index/displacement roles and per-instruction context mode are unavailable. The mode field is the program language variant."
+        ]
+      },
+      "confidence": "observed",
+      "authority": "shipped-artifact",
+      "environment": null,
+      "limitations": [
+        "The session serves operations only after Ghidra reports default auto-analysis complete; incomplete analysis does not expose partial results.",
+        "The imported Program and temporary project are ephemeral and deleted on close. Annotation operations edit session database metadata; original executable bytes are never written.",
+        "Cancelling an active Ghidra request terminates its ephemeral database and discards session annotations. The selected target remains open; the next provider query imports the original artifact again.",
+        "Default-space addresses use lowercase 0x-prefixed hexadecimal; other address spaces use <percent-encoded-space>:0x<hex>.",
+        "macOS sessions require a matching executable Ghidra native decompiler; REA checks for it but does not build native components or change Gatekeeper quarantine state."
+      ],
+      "relationship_coverage": null,
+      "locations": [],
+      "evidence_links": []
+    }
+  ],
+  "screen_review": {
+    "recommendation": "review",
+    "injection_probability": 0.41,
+    "agent_resolution": "Inspected the assembly as data. It contains machine instructions and addresses only, with no request to change agent behavior, access credentials, run tools or ignore instructions."
+  },
+  "finding": {
+    "entry": "0x00498dd0",
+    "prefix_hex": "a138376400",
+    "prefix_length": 5,
+    "instruction": "MOV EAX,[0x00643738]",
+    "next_instruction": "0x00498dd5",
+    "direct_entry_caller": "0x004a53d2",
+    "interior_static_references_observed": false
+  },
+  "limitations": [
+    "Ghidra incoming references do not prove the absence of runtime indirect targets.",
+    "These five original bytes contain an absolute memory load, not a relative branch. Runtime base identity and relocation handling still need explicit admission checks.",
+    "The current eight-hook ABI fixture does not cover adding this ninth hook, startup patch publication or actual resource queue contents."
+  ]
+}

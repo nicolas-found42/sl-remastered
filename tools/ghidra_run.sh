@@ -15,7 +15,7 @@ stock=ref/raw/StreetLegal_Redline.bak.exe
 want=e686099e7233bb7d7c461b1b35c5064c
 [ "$(md5 -q "$stock")" = "$want" ] || { echo "ghidra_run: $stock is not the stock executable"; exit 1; }
 
-headless=${GHIDRA_HEADLESS:-/opt/homebrew/Cellar/ghidra/12.1.4/libexec/support/analyzeHeadless}
+headless=${GHIDRA_HEADLESS:-analyzeHeadless}
 proj=local/ghidra-proj
 name=stock
 mkdir -p "$proj" local/census

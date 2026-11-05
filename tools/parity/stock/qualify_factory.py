@@ -14,6 +14,65 @@ from pathlib import Path
 import subprocess
 
 ROOT=Path(__file__).resolve().parents[3]
+def audit_discovery_states(raw):
+    """Independently decode the fixed384-case owned matrix, without Wine."""
+    if len(raw) != 384 * 576:
+        return False
+    cleanup_bytes = (4, 0, 4, 0, 0, 48, 16, 4)
+    def word(offset, size=4):
+        return int.from_bytes(raw[offset:offset + size], 'little')
+    arena = word(40) - 8  # First hook has observed RET4, plus its return word.
+    for index in range(384):
+        base = index * 576
+        hook, within = divmod(index, 48)
+        mode, within = divmod(within, 12)
+        flag_index, behavior = divmod(within, 3)
+        cw = 0x37f + (mode << 10)
+        mxcsr = 0x1f80 + (mode << 13)
+        flags = (0x202, 0x203, 0x246, 0x697)[flag_index]
+        flags ^= 1 if behavior == 1 else 0x40 if behavior == 2 else 0
+        if behavior == 2:
+            cw ^= 0x400
+            mxcsr ^= 0x2000
+        digest = 0x811c9dc5
+        for argument in range(12):
+            digest = ((digest ^ (0xabc00000 + index * 16 + argument)) * 16777619) & 0xffffffff
+        expected = {0: 0x66666666, 4: 0x55555555, 12: arena + cleanup_bytes[hook],
+                    16: 0x44444444, 20: 0xd3d3d3d3 if behavior else 0x33333333,
+                    24: 0xc2c2c2c2 if behavior else 0x22222222,
+                    28: 0xa1a1a1a1 if behavior else 0x11111111,
+                    36: 0x55667788 if behavior == 2 else 0x55aa55aa,
+                    40: arena + 4 + cleanup_bytes[hook], 44: digest,
+                    72: mxcsr, 568: 0x12345678, 572: 0x9abcdef0}
+        if any(word(base + offset) != value for offset, value in expected.items()):
+            return False
+        if word(base + 32) & 0xcd5 != flags & 0xcd5 or word(base + 564, 2) != cw:
+            return False
+        xmm = bytes([0 if behavior == 2 else 255]) * 16
+        if raw[base + 208:base + 224] != xmm or raw[base + 320:base + 336] != xmm:
+            return False
+        if behavior == 2 and (word(base + 566, 2) >> 11) & 7 != 7:
+            return False
+    return True
+
+
+def qualification_metadata(args):
+    mode = {'lazy': args.lazy, 'refusals': args.setup_failure, 'depth': args.depth,
+            'fault': args.fault, 'memory_prefix': args.memory_prefix,
+            'device_raw': args.device_raw, 'real_construction': args.real_construction,
+            'discovery_abi': args.discovery_abi, 'native_clock': args.native_clock}
+    if args.discovery_abi:
+        scope = ('owned actual discovery entry/return stubs only; no Stock graph, resource identity, '
+                 'game behavior, startup publication, concurrency or exception/unwind qualification')
+    elif args.real_construction:
+        scope = ('actual owned Wine factory/device/coherent private keyboard; no Stock/replay, '
+                 'concurrent publication or unwind qualification')
+    else:
+        scope = ('owned factory mode only; no actual DirectInput/Stock, worker/concurrent publication '
+                 'or exception/unwind qualification')
+    return mode, scope
+
+
 p=argparse.ArgumentParser(description=__doc__)
 p.add_argument('--out',type=Path,required=True)
 p.add_argument('--prefix-seed',type=Path,required=True)
@@ -22,6 +81,8 @@ p.add_argument('--bulk-owned',action='store_true')
 p.add_argument('--real-construction',action='store_true')
 p.add_argument('--device-raw',action='store_true')
 p.add_argument('--memory-prefix',action='store_true')
+p.add_argument('--print-runner',action='store_true',help='print derived runner without admission, writes or execution')
+p.add_argument('--discovery-abi',action='store_true',help='owned actual discovery stub ABI and missing-restoration controls; no Stock')
 p.add_argument('--native-clock',action='store_true',help='add owned return-stub ABI and missing-FX-restoration controls')
 p.add_argument('--native-clock-default-profile',action='store_true',help='qualify the clock stub without a BOX64 SAFEFLAGS override')
 p.add_argument('--native-clock-legacy-fault',action='store_true',help='experimental guard-page AV delivery control; not qualified on the current backend')
@@ -35,6 +96,14 @@ p.add_argument('--depth',action='store_true')
 p.add_argument('--lazy',action='store_true')
 p.add_argument('--fault',choices=('fx','edx','device-fx','device-edx','bulk-bytes'))
 a=p.parse_args()
+if a.discovery_abi:
+    incompatible = [name for name in ('native_clock', 'native_clock_default_profile',
+        'native_clock_legacy_fault', 'control_writer_reference', 'control_writer_reference_sha256',
+        'real_construction', 'device_raw', 'bulk_owned', 'bulk_overflow', 'lazy',
+        'depth', 'setup_failure', 'fault') if getattr(a, name)]
+    if not a.memory_prefix or incompatible:
+        raise SystemExit('--discovery-abi requires --memory-prefix and excludes options: ' +
+                         ', '.join('--' + name.replace('_', '-') for name in incompatible))
 if a.native_clock and not a.memory_prefix:
     raise SystemExit('--native-clock requires the qualified --memory-prefix route')
 if a.native_clock_default_profile and not a.native_clock:
@@ -45,8 +114,8 @@ if bool(a.control_writer_reference)!=bool(a.control_writer_reference_sha256) or 
     raise SystemExit('writer reference/hash require the native-clock owned qualifier')
 if a.control_writer_reference and hashlib.sha256(a.control_writer_reference.read_bytes()).hexdigest()!=a.control_writer_reference_sha256:
     raise SystemExit('writer reference source identity mismatch')
-if bool(a.artifact_budget_root)!=(a.artifact_parent_max_mib is not None) or (a.artifact_budget_root and not a.native_clock):
-    raise SystemExit('prepaid parent/exact maximum require the native-clock console route')
+if bool(a.artifact_budget_root)!=(a.artifact_parent_max_mib is not None) or (a.artifact_budget_root and not (a.native_clock or a.discovery_abi)):
+    raise SystemExit('prepaid parent/exact maximum require the native-clock or discovery console route')
 out=a.out.resolve()
 if out.exists():raise SystemExit('output already exists')
 def replace_once(text, old, new):
@@ -212,6 +281,63 @@ retain_writer writer-fail
 '''
         s=replace_once(s,'run_case factory-owner-first factory-proof.exe owner-first',
                        writer_script+'run_case factory-owner-first factory-proof.exe owner-first')
+if a.discovery_abi:
+    s=replace_once(s,"pool.ArtifactBudget([out], 64 * 1024**2", "pool.ArtifactBudget([out], 4 * 1024**2")
+    s=replace_once(s,"            paths['qualify_input.py'] = Path(__file__).resolve()",
+        "            paths['wine_discovery_test.c'] = ROOT / 'tests/wine_discovery_test.c'\n            paths['discovery_trace.c'] = ROOT / 'tools/wine/capture/discovery_trace.c'\n            paths['discovery_trace.h'] = ROOT / 'tools/wine/capture/discovery_trace.h'\n            paths['qualify_input.py'] = Path(__file__).resolve()")
+    compile_discovery="""                discovery_fault=out/'discovery-fault-source'
+                discovery_fault.mkdir()
+                for filename in ('discovery_trace.c','discovery_trace.h','wine_discovery_test.c'):
+                    shutil.copy2(frozen/filename,discovery_fault/filename)
+                target=discovery_fault/'discovery_trace.c'
+                text=target.read_text()
+                if text.count('fxrstor (%esp)')!=2:raise ValueError('discovery restoration anchors changed')
+                target.write_text(text.replace('fxrstor (%esp)','nop'))
+                save(out/'discovery-fault-manifest.json',manifest(discovery_fault))
+                for target_name,source in (('discovery.exe',frozen),('discovery-no-fx.exe',discovery_fault)):
+                    argv=[compiler,'-O2','-Wall','-Wextra','-msse2','-DDISCOVERY_TRACE_TEST','-I',str(source),str(source/'wine_discovery_test.c'),str(source/'discovery_trace.c'),'-ladvapi32','-o',str(out/target_name)]
+                    save(out/(target_name+'.compile.json'),argv)
+                    subprocess.run(argv,check=True,stdout=log,stderr=subprocess.STDOUT,timeout=30)
+"""
+    s=replace_once(s,"            shutil.copy2(out/'input-owner.dll',out/'unready-owner.dll')",
+                   compile_discovery+"            shutil.copy2(out/'input-owner.dll',out/'unready-owner.dll')")
+    s=replace_once(s,"            for case in (*cases,'factory-owner-first','factory-proxy-first'):",
+                   "            for case in (*cases,'factory-owner-first','factory-proxy-first','discovery','discovery-no-fx'):")
+    script='''retain_discovery() {
+  for snapshot in baseline repeat observed; do
+    gzip -n -c "/tmp/discovery-$snapshot.bin" > "/work/$1/$snapshot.bin.gz" || exit 82
+  done
+}
+run_case discovery discovery.exe accept
+retain_discovery discovery
+run_case discovery-no-fx discovery-no-fx.exe accept
+retain_discovery discovery-no-fx
+'''
+    s=replace_once(s,'run_case factory-owner-first factory-proof.exe owner-first',
+                   script+'run_case factory-owner-first factory-proof.exe owner-first')
+# Discovery is a standalone owned stub test, not an implicit rerun of the
+# unrelated input/factory suite. Preserve the qualified execution boundary.
+if a.discovery_abi:
+    begin=s.index("            names = ")
+    end=s.index("            for name_, path in paths.items():",begin)
+    s=s[:begin]+"            paths = {'wine_discovery_test.c': ROOT/'tests/wine_discovery_test.c',\n                     'discovery_trace.c': ROOT/'tools/wine/capture/discovery_trace.c',\n                     'discovery_trace.h': ROOT/'tools/wine/capture/discovery_trace.h',\n                     'qualify_input.py': Path(__file__).resolve()}\n"+s[end:]
+    begin=s.index("            fault = out / 'fault-source'")
+    end=s.index("            compiler = ",begin)
+    s=s[:begin]+s[end:]
+    begin=s.index("                for variant, source in ")
+    end=s.index("                discovery_fault=",begin)
+    s=s[:begin]+s[end:]
+    begin=s.index("            shutil.copy2(out/'input-owner.dll'")
+    end=s.index("            script = ",begin)
+    s=s[:begin]+"            cases = ('discovery','discovery-no-fx')\n            for case in cases:\n                (out/case).mkdir()\n"+s[end:]
+    s='\n'.join(line for line in s.split('\n') if not
+        (line.startswith('run_case ') and not line.startswith(('run_case discovery ', 'run_case discovery-no-fx '))))
+    begin=s.index("            result['factory_exits'] = ")
+    end=s.index("            result['helper_exits'] = ",begin)
+    s=s[:begin]+s[end:]
+    begin=s.index("            result['execution_finished'] = ")
+    end=s.index("            save(out / 'result.json'",begin)
+    s=s[:begin]+"            result['execution_finished'] = (result.get('container_exit') == 0 and result.get('container_removed') and\n                result.get('seed_unchanged') and result.get('producer_unchanged') and\n                result.get('helper_exits') == {'discovery':'0','discovery-no-fx':'1'})\n"+s[end:]
 # Retain execution output even if extra cases fail: parent auditor must check them.
 if a.artifact_budget_root:
     # Reuse the existing composite guard without a nested retention row. Execute
@@ -220,14 +346,18 @@ if a.artifact_budget_root:
     parent=a.artifact_budget_root.resolve(strict=True)
     s=replace_once(s,'def run(out, seed, image_name):',
                    'def run(out, seed, image_name):\n    global _prepaid_budget')
-    s=replace_once(s,"    out.mkdir(parents=True, exist_ok=False)\n    artifact_budget = pool.ArtifactBudget([out], 8 * 1024**2, link_policy='count', retained=True)",
+    s=replace_once(s,"    out.mkdir(parents=True, exist_ok=False)\n    artifact_budget = pool.ArtifactBudget([out], "+str(4 if a.discovery_abi else 8)+" * 1024**2, link_policy='count', retained=True)",
                    '    artifact_budget = None')
+    child_mib=4 if a.discovery_abi else 8
     admission="""        spec_=importlib.util.spec_from_file_location('owned_console_prepaid',ROOT/'tools/parity/prepaid_budget.py')
         prepaid=importlib.util.module_from_spec(spec_);spec_.loader.exec_module(prepaid)
-        artifact_budget=prepaid.LeaseBudgetAdapter.admit(pool.ArtifactLimit,Path(PARENT),out,ROOT/'local/storage-index',PARENT_MAX,child_max=8*1024**2)
+        artifact_budget=prepaid.LeaseBudgetAdapter.admit(pool.ArtifactLimit,Path(PARENT),out,ROOT/'local/storage-index',PARENT_MAX,child_max=CHILD_MIB*1024**2)
         _prepaid_budget=artifact_budget
-""".replace('PARENT_MAX',str(a.artifact_parent_max_mib*1024**2)).replace('PARENT',repr(str(parent)))
+""".replace('CHILD_MIB',str(child_mib)).replace('PARENT_MAX',str(a.artifact_parent_max_mib*1024**2)).replace('PARENT',repr(str(parent)))
     s=replace_once(s,"        result['admission'] = lease.description",admission+"        result['admission'] = lease.description")
+if a.print_runner:
+    print(s)
+    raise SystemExit(0)
 out.parent.mkdir(parents=True,exist_ok=True)
 runner_parent=a.runner_parent.resolve(strict=True) if a.runner_parent else out.parent
 if not runner_parent.is_dir() or runner_parent==ROOT/'ref' or ROOT/'ref' in runner_parent.parents:
@@ -263,6 +393,19 @@ if a.control_writer_reference:
                       [row['result'] for row in events]==list(range(0x12340000,0x12340000+2000)) and
                       status['entered']==status['returned']==2000 and status['phases']==4000 and
                       all(status[key]==0 for key in ('active','pending','dropped','gaps','accepting')))
+if a.discovery_abi:
+    for case,expected in (('discovery',0),('discovery-no-fx',1)):
+        report=json.loads((out/case/'helper.log').read_text())
+        snapshots=[gzip.decompress((out/case/(name+'.bin.gz')).read_bytes())
+                   for name in ('baseline','repeat','observed')]
+        checks[case]=((out/case/'exit.txt').read_text().strip()==str(expected) and
+                      report['cases']==384 and report['unstable']==0 and
+                      report['reserved']==384 and report['pending']==report['dropped']==report['stack_limits']==0 and
+                      len(snapshots[0])==384*576 and snapshots[0]==snapshots[1] and
+                      audit_discovery_states(snapshots[0]) and audit_discovery_states(snapshots[1]) and
+                      (audit_discovery_states(snapshots[2]) if expected==0 else not audit_discovery_states(snapshots[2])) and
+                      (snapshots[0]==snapshots[2] and report['failures']==report['saved_failures']==report['expectation_failures']==0
+                       if expected==0 else snapshots[0]!=snapshots[2] and report['failures']>0))
 if a.native_clock:
     for case,expected in (('native-clock',0),('native-clock-no-fx',1)):
         report=json.loads((out/case/'helper.log').read_text())
@@ -288,7 +431,7 @@ if a.native_clock:
         legacy=json.loads((out/'native-clock-legacy-oob/helper.log').read_text())
         checks['native-clock-legacy-oob']=((out/'native-clock-legacy-oob/exit.txt').read_text().strip()=='91' and
                                           legacy=={'scope':'owned_descriptor_guard_page','legacy_descriptor_oob':True})
-for case in ('factory-owner-first','factory-proxy-first'):
+for case in (() if a.discovery_abi else ('factory-owner-first','factory-proxy-first')):
     if a.setup_failure:
         folders=[out/case]
         if a.setup_failure=='all':folders += [out/(case+'-'+mode) for mode in ('missing-owner','unready-owner','missing-system','long-system','missing-module','missing-factory','missing-env','long-env','exact-env','long-log-path')]
@@ -320,14 +463,14 @@ if a.bulk_owned:
     checks['bulk_schema_audit']=audit.returncode==0
 result=json.loads((out/'result.json').read_text())
 result['factory_raw_checks']=checks
-result['factory_mode']={'lazy':a.lazy,'refusals':a.setup_failure,'depth':a.depth,'fault':a.fault,'memory_prefix':a.memory_prefix,'device_raw':a.device_raw,'real_construction':a.real_construction}
-result['factory_fault_lineage']={'intervention':a.fault,'original_proxy_sha256':hashlib.sha256((ROOT/'tools/parity/stock/stock_input_proxy.c').read_bytes()).hexdigest(),'original_input_sha256':hashlib.sha256((ROOT/'tools/parity/stock/input_observer.inc').read_bytes()).hexdigest(),'frozen_input_sha256':hashlib.sha256((out/'source/input_observer.inc').read_bytes()).hexdigest(),'frozen_proxy_sha256':hashlib.sha256((out/'source/stock_input_proxy.c').read_bytes()).hexdigest()}
-result['scope']='actual owned Wine factory/device/coherent private keyboard; no Stock/replay, concurrent publication or unwind qualification' if a.real_construction else 'owned factory mode only; no actual DirectInput/Stock, worker/concurrent publication or exception/unwind qualification'
+result['factory_mode'], result['scope'] = qualification_metadata(a)
+result['factory_fault_lineage']={} if a.discovery_abi else {'intervention':a.fault,'original_proxy_sha256':hashlib.sha256((ROOT/'tools/parity/stock/stock_input_proxy.c').read_bytes()).hexdigest(),'original_input_sha256':hashlib.sha256((ROOT/'tools/parity/stock/input_observer.inc').read_bytes()).hexdigest(),'frozen_input_sha256':hashlib.sha256((out/'source/input_observer.inc').read_bytes()).hexdigest(),'frozen_proxy_sha256':hashlib.sha256((out/'source/stock_input_proxy.c').read_bytes()).hexdigest()}
+
 result['functional_execution_finished']=result.get('execution_finished',False)
 result['execution_finished']=result['functional_execution_finished'] and all(checks.values())
 result['factory_transparency_qualified']=False  # entry/seam controls do not qualify lazy setup, concurrency or unwind
 (out/'result.json').write_text(json.dumps(result,indent=2)+'\n')
-(out/'factory-checks.json').write_text(json.dumps({'cases':checks,'qualified':False,'scope':'owned factory bounded mode only; actual DirectInput/Stock, worker/concurrency/unwind pending'},indent=2)+'\n')
+(out/'factory-checks.json').write_text(json.dumps({'cases':checks,'qualified':False,'mode':result['factory_mode'],'scope':result['scope']},indent=2)+'\n')
 if prepaid_budget:
     try:
         prepaid_budget.check('final')
