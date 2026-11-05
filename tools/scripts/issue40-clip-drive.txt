@@ -1,0 +1,32 @@
+# Ticket 40 clipping/depth evidence: Free Ride entry, then drive with plain +
+# SDL key edges (both, as in the earlier working drive scripts), long holds
+# because the scripted loop runs a few fps while sim dt stays 0.01.
+0 wait splash 30
+0 keydown Escape
+0 wait menu 30
+0 keyup Escape
+0 clickn 0.65625 0.264583333
+0 wait driving 60
+0 shot @run/c40-ready.bmp
+0.1 keydown Up
+0.1 sdl_keydown Up
+12 shot @run/c40-throttle.bmp
+18 keydown Left
+18 sdl_keydown Left
+28 keyup Left
+28 sdl_keyup Left
+28 shot @run/c40-steered-left.bmp
+32 keydown Right
+32 sdl_keydown Right
+42 keyup Right
+42 sdl_keyup Right
+42 shot @run/c40-side.bmp
+66 keyup Up
+66 sdl_keyup Up
+66.1 keydown Down
+66.1 sdl_keydown Down
+80 keyup Down
+80 sdl_keyup Down
+80 shot @run/c40-stopped.bmp
+84 shot @run/c40-final.bmp
+85 quit

@@ -1,0 +1,13 @@
+# Ticket 40 layer isolation: reach Free Ride, hold throttle briefly, one shot.
+0 wait splash 30
+0 keydown Escape
+0 wait menu 30
+0 keyup Escape
+0 clickn 0.65625 0.264583333
+0 wait driving 60
+0.1 keydown Up
+0.1 sdl_keydown Up
+8 shot @run/c40-layer.bmp
+8.1 keyup Up
+8.1 sdl_keyup Up
+9 quit
