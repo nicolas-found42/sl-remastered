@@ -175,3 +175,20 @@ Typed `op1` save operations join begin/end, parent, FileState lifetime scope and
 handle without storing filenames or contents. Logging setup/write failure is
 best effort and does not grant authority to interrupt normal application work.
 Save-store and path-containment failures remain real application errors.
+
+### 2026-11-04 branch integration checkpoint
+
+The staged physics/observability checkpoint and subsequent Stock discovery work
+were committed separately; both remain unfinished as described in their bound
+records. The staged fast lint passed for each checkpoint. `dev.py gate` configured
+and built, then CTest passed 130 of 131 tests; `object_world_step_unit` failed
+at `object_world_step_test.cpp:240` (`speed < 0.3f`, observed 0.468). Because the
+gate stops there, the checks after CTest in `tools/check.sh` were not executed.
+Deep staged clang-tidy and a post-merge full gate were not run in this checkpoint.
+
+The collisions, Career, display, clipping, GroundRef, and music branch histories
+were merged, preserving later implementations and an alternate Career script.
+The SFX and startup remote branches remain unmerged: their older implementations
+conflict with later extracted application/audio and video code. The SFX branch's
+real-device test requires the private-audio capture workflow before execution.
+Their remote commits remain available for a deliberate reconciliation.
